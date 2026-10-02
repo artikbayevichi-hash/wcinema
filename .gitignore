@@ -1,0 +1,40 @@
+# ============================================================================
+# Maxfiy fayllar - Git'ga KIRMASIN
+# ============================================================================
+
+# Bot token va DB paroli shu yerda
+.env
+
+# Yuklangan videolar (ularni repo'ga yuklash kerak emas)
+/uploads/
+
+# Lokal sozlamalar / xatolar
+*.log
+.DS_Store
+Thumbs.db
+
+# Build va vendor (dependencylar - composer install bilan olinadi)
+# DIQQAT: faqat ildizdagi (/) vendor va build. assets/vendor/ esa
+# brauzer uchun kerakli (ffmpeg-core.wasm, mediabunny) - ular repo'da qolishi SHART.
+/build/
+/vendor/
+
+# Storage fayllari (kesh, loglar, sessionlar - MadelineProto sessiyasi ham shu yerda)
+/storage/
+
+# Tmp papkalar
+/tmp-*/
+
+# DB zaxira nusxalari (maxfiy ma'lumot: parol hashlari, sessiyalar)
+*-backup-*.sql
+
+# Test videolari (og'ir, kerak emas)
+/test-mkv/
+
+# Bot va tunnel'ning ishlash paytidagi vaqtinchalik fayllar
+/tg-url.txt
+/bot_states.json
+/bot_offset.txt
+
+# Agent/IDE lokal papkalari
+/.kilo/

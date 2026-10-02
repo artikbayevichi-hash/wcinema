@@ -1,0 +1,14 @@
+{
+    "name": "tele_uzdub/site",
+    "description": "W CINEMA — Telegram kinokanal sayti (Telegram'dan video olish uchun MadelineProto)",
+    "type": "project",
+    "require": {
+        "danog/madelineproto": "*"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "allow-plugins": {
+            "danog/madelineproto": true
+        }
+    }
+}

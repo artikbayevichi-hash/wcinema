@@ -1,0 +1,129 @@
+# ============================================================================
+#  W CINEMA — Apache sozlamalari
+# ============================================================================
+#
+#  Nima uchun bu fayl kerak?
+#
+#  Saytning eng og'ir narsasi — 5.3 MB GramJS (Telegram MTProto klienti).
+#  U har sahifada kerak bo'lmaydi, lekin Telegram filmi ochilganda SHART.
+#
+#  Eski holatda shu faylda hech qanday Cache-Control sarlavhasi yo'q edi,
+#  ya'ni brauzer har tashrifda 5.3 MB ni qayta yuklaydi. Bu:
+#    * birinchi ochilishni juda sekinlashtiradi (ayiqa sekin internetda
+#      bir necha daqiqa),
+#    * "yuklar ostida ham ishlashi" talabini buzadi.
+#
+#  Bu fayl quyidagilarni beradi:
+#    1) O'zgarmas kod (JS/CSS) — 1 YIL kesh + immutable
+#    2) Siqilgan (gzip) — 5.3 MB -> ~1.2 MB
+#    3) PHP va HTML — har doim tekshiriladi (kontent yangilanishi kerak)
+#    4) Service Worker skripti — HECH QACHON keshlanmaydi
+#       (aksi holda eski SW kodi ishlatiladi va tuzatishlar jim qoladi)
+# ============================================================================
+
+# --------------------------------------------------------------- asosiy qoidalar
+Options -Indexes
+DirectoryIndex index.php index.html
+
+AddDefaultCharset UTF-8
+AddType application/javascript .js
+AddType text/css .css
+
+# ------------------------------------------------------------------- SIQISH
+#
+# GramJS asosan matndan iborat (JS kodi), shuning uchun gzip uni ~4 barobar
+# kichiklashtiradi. Bu eng katta tezlik yutug'imiz: 5.3 MB -> ~1.2 MB.
+#
+# DIQQAT: `AddOutputFilterByType` moduli **mod_filter** dan keladi, u XAMPP da
+# o'chirilgan (`#LoadModule filter_module`). Shuning uchun u ishlamaydi va
+# Apache xato ham bermaydi — jimgina o'tib ketadi. Biz `SetOutputFilter`
+# ishlatamiz: u mod_deflate'ning o'z direktivasi va mod_filter kerak qilmaydi.
+<IfModule mod_deflate.c>
+  # Allaqachon siqilgan formatlar — yana siqish foyda keltirmaydi, faqat
+  # CPU sarflaydi. Rasm/ovoz/video bularga kiradi.
+  SetEnvIf Request_URI "\.(?i:gz|zip|br|jpg|jpeg|gif|png|webp|avif|ico|svgz|mp4|m4v|webm|mkv|avi|mov|mp3|woff2?)$" no-gzip dont-vary
+
+  # Eski brauzerlar gzip so'rasa ham noto'g'ri javob qaytaradi (bo'sh fayl).
+  BrowserMatch ^Mozilla/4\.[678] no-gzip
+  BrowserMatch \bMSIE\s(7|8) no-gzip
+
+  # Faqat MATN fayllarini siqamiz — rasmlar, shriftlar va videolar tegilmaydi.
+  <FilesMatch "\.(?i:html?|css|js|mjs|json|svg|txt|xml|map)$">
+    SetOutputFilter DEFLATE
+  </FilesMatch>
+</IfModule>
+
+# ------------------------------------------------------------- KESHLASH
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # --- O'zgarmas kod --------------------------------------------------------
+  #
+  # Bu saytdagi JS/CSS har doim `?v=<filemtime>` bilan chaqiriladi
+  # (index.php da avtomatik qo'yiladi). Ya'ni fayl o'zgarganda manzil ham
+  # o'zgaradi -> eski kesh ishlatilmaydi. Shu sababli bir yil keshlash
+  # XATO BO'LMAYDI.
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/javascript     "access plus 1 year"
+  ExpiresByType application/x-javascript "access plus 1 year"
+  ExpiresByType text/css             "access plus 1 year"
+
+  # --- Rasmlar -------------------------------------------------------------
+  ExpiresByType image/jpeg      "access plus 1 week"
+  ExpiresByType image/png       "access plus 1 week"
+  ExpiresByType image/webp      "access plus 1 week"
+  ExpiresByType image/gif       "access plus 1 week"
+  ExpiresByType image/svg+xml   "access plus 1 week"
+
+  # --- Shriftlar -----------------------------------------------------------
+  ExpiresByType font/woff2      "access plus 1 year"
+  ExpiresByType font/woff       "access plus 1 year"
+  ExpiresByType font/ttf        "access plus 1 year"
+</IfModule>
+
+# `immutable` — brauzer "mendi keshni tegmang" deb tushunadi va shuning uchun
+# fayl o'zgargan bo'lsa ham qayta yuklamaydi. Yuqoridagi ?v= mexanizmi
+# buni xavfsiz qiladi.
+<IfModule mod_headers.c>
+  # JS/CSS va ularning SIQILGAN nusxalari. `?v=<filemtime>` mexanizmi
+  # shuning uchun bir yillik kesh xavfsiz (fayl o'zgarsa manzil ham o'zgaradi).
+  <FilesMatch "\.(js|css|js\.gz|css\.gz)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  <FilesMatch "\.(jpg|jpeg|png|webp|gif|svg|woff2?)$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+
+  # --- Service Worker: HECH QACHON KESHLANMASIN --------------------------
+  #
+  # Bu eng muhim qoida. SW skripti keshlansa, brauzer eski kodni beradi va
+  # sizning tuzatishingiz (bo'lak hajmi, Range mantiqi, parallel o'qish)
+  # umuman ishga tushmaydi — holat esa "kod yangi, xato eskidek" bo'lib
+  # qoladi, demak xatoni tuzatib bo'lmaydi.
+  # (DIQQAT: bu yerda `ExpiresActive`/`ExpiresDefault` ishlatib bo'lmaydi —
+  #  ular faqat server konfiguratsiyasida ishlaydi va .htaccess da "Invalid
+  #  command" xatosi beradi. mod_headers orqali to'g'ridan-to'g'ri
+  #  Cache-Control qo'yish yetarli.)
+  <FilesMatch "tg-cdn-worker\.js$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  # --- PHP/HTML: har doim yangilanishni tekshirish ------------------------
+  <FilesMatch "\.(php|html)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # Xavfsizlik sarlavhalari
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ------------------------------------------------------------------ TELEGRAM
+#
+# GramJS brauzerdan to'g'ridan-to'g'ri Telegram CDN ga ulanadi
+# (wss://venus.web.telegram.org). Bu sayt serveri orqali EMAS — shuning
+# uchun hech qanday proxy/solve qoidalari kerak emas.
+# (Maxfiy Telegram CDN rasmlari <img> orqali o'qiлadi — CORS kerak emas.)

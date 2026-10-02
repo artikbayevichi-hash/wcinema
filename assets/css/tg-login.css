@@ -1,0 +1,440 @@
+/* ============================================================================
+   W CINEMA — TELEGRAM LOGIN (web.telegram.org/k uslubida)
+   ============================================================================
+   Alohida fayl (tg-login.php faqat shu sahifada yuklaydi). Barcha klasslar
+   `.tgl-` prefiksida — sayt uslublariga tegmaydi.
+
+   Ranglar Telegram Web K (v2) default mavzularidan olingan:
+     Day   : primary #3390ec · surface #ffffff · bg #f4f4f5 · text #000 · text2 #707579
+     Night : primary #8774E1 · surface #212121 · bg #181818 · text #fff · text2 #aaaaaa
+   Standart mavzu — Night (sayt to'q). Yuqori o'ng burchakdagi tugma almashtiradi.
+   ========================================================================== */
+
+/* Standart: Night (Web K night palitrasi) */
+body.tgl-page {
+  --tgl-primary:      #8774E1;
+  --tgl-primary-rgb:  135, 116, 225;
+  --tgl-surface:      #212121;
+  --tgl-bg:           #181818;
+  --tgl-text:         #ffffff;
+  --tgl-text2:        #aaaaaa;
+  --tgl-border:       #2a2a2a;
+  --tgl-danger:       #ff595a;
+  --tgl-light:        rgba(var(--tgl-primary-rgb), .14);
+  --tgl-light-filled: rgba(var(--tgl-primary-rgb), .16);
+
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--tgl-bg);
+  color: var(--tgl-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Day (Web K day palitrasi) — <html class="tgl-day"> */
+html.tgl-day body.tgl-page {
+  --tgl-primary:      #3390ec;
+  --tgl-primary-rgb:  51, 144, 236;
+  --tgl-surface:      #ffffff;
+  --tgl-bg:           #f4f4f5;
+  --tgl-text:         #000000;
+  --tgl-text2:        #707579;
+  --tgl-border:       #dfe1e5;
+  --tgl-danger:       #df3f40;
+  --tgl-light:        rgba(var(--tgl-primary-rgb), .12);
+  --tgl-light-filled: rgba(var(--tgl-primary-rgb), .12);
+}
+
+#tgLogin [hidden],
+.tgl-root [hidden] { display: none !important; }
+
+/* ---- animatsion fon ------------------------------------------------------- */
+.tgl-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 820px at 50% -20%, #1b1b30 0%, #131320 55%, #0c0c12 100%);
+  pointer-events: none;
+}
+html.tgl-day .tgl-bg {
+  background:
+    radial-gradient(1200px 820px at 50% -20%, #dfeaff 0%, #eef2f7 55%, #f4f4f5 100%);
+}
+.tgl-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: .5;
+  will-change: transform;
+}
+.tgl-blob.b1 { width: 560px; height: 560px; background: #4f8cff; top: -160px; left: -120px; animation: tglFloat1 20s ease-in-out infinite; }
+.tgl-blob.b2 { width: 500px; height: 500px; background: #8774E1; bottom: -180px; right: -100px; animation: tglFloat2 26s ease-in-out infinite; }
+.tgl-blob.b3 { width: 420px; height: 420px; background: #2aabee; top: 42%; left: 58%; animation: tglFloat3 30s ease-in-out infinite; }
+
+html.tgl-day .tgl-blob { opacity: .5; filter: blur(90px); }
+html.tgl-day .tgl-blob.b1 { background: #8fc2ff; }
+html.tgl-day .tgl-blob.b2 { background: #b7a8ff; }
+html.tgl-day .tgl-blob.b3 { background: #9fdcff; }
+
+@keyframes tglFloat1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(70px, 50px) scale(1.12); }
+}
+@keyframes tglFloat2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-60px, -40px) scale(1.1); }
+}
+@keyframes tglFloat3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-50px, 60px) scale(1.14); }
+}
+
+/* ---- mavzu tugmasi (Web K: o'ng yuqori burchak) --------------------------- */
+.tgl-theme {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 10;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--tgl-text);
+  background: var(--tgl-light);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background .2s, transform .15s;
+}
+.tgl-theme:hover { background: rgba(var(--tgl-primary-rgb), .24); }
+.tgl-theme:active { transform: scale(.94); }
+
+/* ---- sahifa qobig'i ------------------------------------------------------- */
+.tgl-scroll {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  box-sizing: border-box;
+}
+.tgl-cards {
+  width: min(24.5rem, 100%);   /* Web K: 392px */
+  margin: 0 auto;
+}
+
+/* ---- karta ---------------------------------------------------------------- */
+.tgl-card {
+  background: var(--tgl-surface);
+  border-radius: 2rem;          /* Web K: 32px */
+  padding: 1rem;
+  box-sizing: border-box;
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .38);
+  animation: tglCardIn .32s cubic-bezier(.4, 0, .2, 1);
+}
+html.tgl-day .tgl-card { box-shadow: 0 18px 50px rgba(30, 50, 80, .16); }
+@keyframes tglCardIn {
+  from { opacity: 0; transform: translateY(14px) scale(.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---- sarlavha ------------------------------------------------------------- */
+.tgl-head { text-align: center; }
+.tgl-sticker {
+  width: 120px;
+  height: 120px;
+  margin: .125rem auto .5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.tgl-logo-svg { width: 100%; height: 100%; fill: var(--tgl-primary); display: block; }
+.tgl-title {
+  margin: .25rem 0;
+  padding: 0 1rem;
+  font-size: 1.5rem;            /* 24px */
+  line-height: 2rem;
+  font-weight: 700;
+  color: var(--tgl-text);
+}
+.tgl-subtitle {
+  margin: .125rem 0 0;
+  padding: 0 1rem;
+  font-size: .875rem;           /* 14px */
+  line-height: 1.125rem;
+  color: var(--tgl-text2);
+}
+
+/* ---- input maydoni -------------------------------------------------------- */
+.tgl-input-wrapper {
+  display: grid;
+  grid-template-columns: 100%;
+  gap: 1.5rem;
+  width: 100%;
+  margin: 2rem auto 0;
+}
+.tgl-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 3rem;                 /* 48px */
+  padding: 0 1rem;
+  border: 1px solid var(--tgl-border);
+  border-radius: 16px;
+  background: var(--tgl-surface);
+  box-sizing: border-box;
+  text-align: left;
+  transition: border-color .2s;
+  overflow: hidden;
+}
+.tgl-field:focus-within { border-color: var(--tgl-primary); }
+.tgl-field-country {
+  cursor: pointer;
+  font: inherit;
+  color: var(--tgl-text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.tgl-field-country:hover { border-color: var(--tgl-primary); }
+.tgl-field-phone { cursor: text; }
+
+.tgl-num,
+.tgl-code,
+.tgl-pwd-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--tgl-text);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 3rem;
+}
+.tgl-num::placeholder,
+.tgl-code::placeholder,
+.tgl-pwd-input::placeholder { color: var(--tgl-text2); opacity: .8; }
+.tgl-code { letter-spacing: .18rem; }
+
+.tgl-dial {
+  flex: 0 0 auto;
+  margin-inline-end: .5rem;
+  font-size: 1rem;
+  color: var(--tgl-text);
+}
+.tgl-flag { flex: 0 0 auto; margin-inline-end: .625rem; font-size: 1.25rem; line-height: 1; }
+.tgl-cname {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 1rem;
+  color: var(--tgl-text);
+}
+.tgl-arrow {
+  flex: 0 0 auto;
+  width: .5rem;
+  height: .5rem;
+  margin-inline-start: .75rem;
+  border: solid var(--tgl-text2);
+  border-width: 0 2px 2px 0;
+  padding: 3px;
+  transform: rotate(45deg) translateY(-2px);
+}
+
+/* ---- tugmalar ------------------------------------------------------------- */
+.tgl-btn {
+  display: block;
+  width: 100%;
+  height: 3rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 16px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: filter .15s, opacity .15s, transform .12s;
+}
+.tgl-btn:active { transform: translateY(1px); }
+.tgl-btn-primary { background: var(--tgl-primary); color: #fff; }
+.tgl-btn-primary:hover { filter: brightness(1.08); }
+.tgl-btn-primary:disabled { opacity: .5; pointer-events: none; }
+.tgl-btn-transparent {
+  margin-top: .5rem;
+  background: transparent;
+  color: var(--tgl-primary);
+}
+.tgl-btn-transparent:hover { background: var(--tgl-light); }
+
+/* ---- QR sahifasi ---------------------------------------------------------- */
+.tgl-sticker-qr {
+  width: 240px;
+  height: 240px;
+  max-width: 100%;
+  margin: .125rem auto 1rem;
+  padding: 1rem;
+  border-radius: 16px;
+  background: var(--tgl-light-filled);
+  box-sizing: border-box;
+}
+.tgl-qr {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.tgl-qr canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.tgl-qrlist {
+  list-style: none;
+  margin: 1.5rem auto 1rem;
+  padding: 0 1rem;
+  max-width: 480px;
+  text-align: left;
+}
+.tgl-qrlist li {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  margin-top: .625rem;
+  font-size: .9375rem;
+  line-height: 1.4;
+  color: var(--tgl-text);
+}
+.tgl-mark {
+  flex: 0 0 auto;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-top: .05rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--tgl-light);
+  color: var(--tgl-primary);
+  font-size: .8125rem;
+  font-weight: 700;
+}
+
+/* ---- holat / xato --------------------------------------------------------- */
+.tgl-msgs { margin-top: 1rem; }
+.tgl-status {
+  font-size: .8125rem;
+  line-height: 1.45;
+  color: var(--tgl-text2);
+}
+.tgl-status:empty { display: none; }
+.tgl-err {
+  margin: .75rem 0 0;
+  padding: .625rem .75rem;
+  border-radius: 12px;
+  background: rgba(255, 89, 90, .12);
+  color: var(--tgl-danger);
+  font-size: .8125rem;
+  line-height: 1.45;
+}
+
+/* ---- mamlakat tanlagichi (Web K: to'liq ekranli varaq) -------------------- */
+.tgl-cc-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--tgl-bg);
+  animation: tglFadeIn .18s ease;
+}
+@keyframes tglFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.tgl-cc-box {
+  width: min(24.5rem, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tgl-cc-search {
+  flex: 0 0 auto;
+  height: 3.5rem;
+  padding: 0 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--tgl-border);
+  background: transparent;
+  color: var(--tgl-text);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+.tgl-cc-search::placeholder { color: var(--tgl-text2); }
+.tgl-cc-list { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.tgl-cc-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .875rem 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--tgl-border);
+  background: transparent;
+  color: var(--tgl-text);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+.tgl-cc-item:hover { background: rgba(var(--tgl-primary-rgb), .08); }
+.tgl-cc-item .tgl-flag { font-size: 1.35rem; }
+.tgl-cc-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tgl-cc-dial { color: var(--tgl-text2); font-size: .875rem; }
+.tgl-cc-empty { padding: 2rem 1rem; text-align: center; color: var(--tgl-text2); font-size: .9375rem; }
+
+/* ---- noscript ------------------------------------------------------------- */
+.tgl-noscript {
+  max-width: 24.5rem;
+  margin: 40px auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 89, 90, .12);
+  color: #ff9a9a;
+  text-align: center;
+  font-size: .875rem;
+}
+
+/* ---- telefon o'lchamlari -------------------------------------------------- */
+@media (max-width: 420px) {
+  .tgl-scroll { padding: 20px 12px; }
+  .tgl-card { border-radius: 1.5rem; }
+  .tgl-sticker-qr { width: 220px; height: 220px; }
+  .tgl-title { font-size: 1.375rem; line-height: 1.75rem; }
+  .tgl-theme { top: 16px; right: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tgl-blob { animation: none !important; }
+  .tgl-card { animation: none !important; }
+}
