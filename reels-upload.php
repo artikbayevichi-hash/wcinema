@@ -1,19 +1,14 @@
 <?php
 // ============================================================================
-// reels-upload.php - reelsni Telegram kanal orqali joylash
+// reels-upload.php - reelsni sayt orqali yuklash
 // ============================================================================
-// DIQQAT: bu sahifada FAYL TANLASH YO'Q. Video serverga yuklanmaydi.
-//
 // Oqim:
-//   1) Foydalanuvchi sarlavha/izoh yozadi va (ixtiyoriy) qaysi filmdan
-//      olinganini nom yoki ID bo'yicha qidirib tanlaydi.
-//   2) "Telegram orqali yuborish" bosiladi -> api/reel-intent.php token
-//      yaratadi va botga deep-link qaytaradi.
-//   3) Foydalanuvchi botga o'tib videoni yuboradi. Bot uni REELS kanaliga
-//      joylaydi. Sayt faqat havolani saqlaydi.
-//
-// Shunday qilib butun og'irlik Telegram'da qoladi - serverda video
-// fayli ham, poster ham saqlanmaydi.
+//   1) Foydalanuvchi videoni saytda tanlaydi, sarlavha/izoh yozadi va
+//      (ixtiyoriy) qaysi filmdan olinganini nom yoki ID bo'yicha qidiradi.
+//   2) "Yuklash" bosiladi -> api/reel-upload.php faylni qabul qiladi va
+//      to'g'ridan-to'g'ri Telegram kanalga (REELS_CHANNEL) joylaydi.
+//   3) Fayl serverda SAQLANMAYDI - Telegram'ga uzatilgach darhol o'chiriladi.
+//      Tomoshabinlar videoni Telegram'dan ko'radi, sayt faqat havolani saqlaydi.
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
@@ -22,7 +17,7 @@ $userId = $user ? (int) $user['id'] : null;
 $stats  = $userId ? $reels->authorStats($userId) : null;
 
 $channelReady = (REELS_CHANNEL !== '');
-$botName      = TELEGRAM_BOT_USERNAME;
+$maxMb        = (int) REEL_MAX_UPLOAD_MB;
 ?>
 <!DOCTYPE html>
 <html lang="uz">
@@ -35,9 +30,7 @@ $botName      = TELEGRAM_BOT_USERNAME;
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/reels.css">
     <link rel="stylesheet" href="assets/css/instagram.css">
-    <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. Oddiy
-         tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani
-         sekinlashtiradi. Shu uchun shartli yuklanadi. -->
+    <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. -->
     <script>
     (function () {
       if (!/Telegram/i.test(navigator.userAgent)
@@ -107,6 +100,14 @@ $botName      = TELEGRAM_BOT_USERNAME;
 
 <form class="up-card" id="upForm" onsubmit="return false;">
 
+    <!-- ============================ Video fayl ============================ -->
+    <div class="up-drop" id="upDrop">
+        <div class="up-drop-icon">🎬</div>
+        <div class="up-drop-text">Videoni tanlang yoki shu yerga tashlang</div>
+        <div class="up-drop-hint">MP4 · WEBM · MOV — <?php echo $maxMb; ?> MB gacha</div>
+        <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
+    </div>
+
     <!-- ============================ Maydonlar ============================ -->
     <label class="up-label">
         Sarlavha
@@ -133,14 +134,18 @@ $botName      = TELEGRAM_BOT_USERNAME;
         <input type="hidden" id="upContentId" value="">
     </label>
 
+    <div class="up-progress" id="upProgress" hidden>
+        <div class="up-progress-bar"><span id="upBar"></span></div>
+        <div class="up-progress-text" id="upProgText"></div>
+    </div>
+
     <div class="up-msg" id="upMsg" hidden></div>
 
-    <button class="up-btn" id="upSubmit" type="submit">📨 Telegram orqali yuborish</button>
+    <button class="up-btn" id="upSubmit" type="submit">📤 Yuklash va kanalga joylash</button>
 
     <p class="up-note">
-        Video <b>Telegram</b>ga yuklanadi (serverga emas). Tugmani bosing —
-        <b>@<?php echo htmlspecialchars($botName); ?></b> boti ochiladi,
-        videoni yuboring. Reel avtomatik kanalga joylanadi va shu yerda paydo bo'ladi.
+        Video <b>serverda saqlanmaydi</b> — to'g'ridan-to'g'ri
+        <b>Telegram kanalga</b> joylanadi va saytda o'sha yerdan o'ynaydi.
     </p>
 </form>
 
@@ -166,30 +171,68 @@ $botName      = TELEGRAM_BOT_USERNAME;
 
 <script>
 (function () {
-    const form    = document.getElementById('upForm');
+    const form = document.getElementById('upForm');
     if (!form) return;                       // kanal sozlanmagan
 
+    const drop    = document.getElementById('upDrop');
+    const fileEl  = document.getElementById('upFile');
+    const title   = document.getElementById('upTitle');
+    const desc    = document.getElementById('upDesc');
     const search  = document.getElementById('srcSearch');
     const results = document.getElementById('srcResults');
     const chip    = document.getElementById('srcChip');
     const cidEl   = document.getElementById('upContentId');
-    const title   = document.getElementById('upTitle');
-    const desc    = document.getElementById('upDesc');
     const msg     = document.getElementById('upMsg');
     const submit  = document.getElementById('upSubmit');
+    const prog    = document.getElementById('upProgress');
+    const bar     = document.getElementById('upBar');
+    const progTxt = document.getElementById('upProgText');
 
     const esc = (s) => String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 
+    let file = null;
+
     function showMsg(t, kind) {
         msg.hidden = false;
         msg.textContent = t;
         msg.className = 'up-msg ' + (kind || '');
     }
+    function fmtMb(bytes) { return (Number(bytes || 0) / 1048576).toFixed(1) + ' MB'; }
 
-    // ---------------------------------------------------- qidiruv
+    // ---------------------------------------------------- fayl tanlash
+    function setFile(f) {
+        if (!f) return;
+        const okType = /^video\//.test(f.type) || /\.(mp4|webm|mov)$/i.test(f.name);
+        if (!okType) { showMsg('❌ Faqat MP4 / WEBM / MOV video qabul qilinadi', 'err'); return; }
+        if (f.size > <?php echo $maxMb; ?> * 1048576) {
+            showMsg('❌ Fayl <?php echo $maxMb; ?> MB dan katta', 'err');
+            return;
+        }
+        file = f;
+        drop.classList.add('has');
+        drop.querySelector('.up-drop-icon').textContent = '🎬';
+        drop.querySelector('.up-drop-text').textContent = f.name;
+        drop.querySelector('.up-drop-hint').textContent = fmtMb(f.size) + ' · yuborishga tayyor';
+        msg.hidden = true;
+    }
+
+    drop.addEventListener('click', () => fileEl.click());
+    fileEl.addEventListener('change', function () { setFile(this.files && this.files[0]); });
+    ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => {
+        e.preventDefault(); drop.classList.add('over');
+    }));
+    ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => {
+        e.preventDefault(); drop.classList.remove('over');
+    }));
+    drop.addEventListener('drop', (e) => {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        setFile(f);
+    });
+
+    // ---------------------------------------------------- kontent qidiruvi
     let timer = null;
     let picked = null;
 
@@ -199,7 +242,6 @@ $botName      = TELEGRAM_BOT_USERNAME;
         chip.hidden = true;
         chip.innerHTML = '';
     }
-
     function pick(item) {
         picked = item;
         cidEl.value = item.id;
@@ -215,7 +257,6 @@ $botName      = TELEGRAM_BOT_USERNAME;
             search.focus();
         });
     }
-
     async function doSearch(q) {
         results.hidden = false;
         results.innerHTML = '<div class="empty">Qidirilmoqda…</div>';
@@ -245,7 +286,6 @@ $botName      = TELEGRAM_BOT_USERNAME;
             results.innerHTML = '<div class="empty">Qidiruvda xatolik</div>';
         }
     }
-
     if (search) {
         search.addEventListener('input', () => {
             clearTimeout(timer);
@@ -254,21 +294,20 @@ $botName      = TELEGRAM_BOT_USERNAME;
             timer = setTimeout(() => doSearch(q), 250);
         });
         search.addEventListener('focus', () => {
-            if (search.value.trim().length >= 1 && (!picked)) doSearch(search.value.trim());
+            if (search.value.trim().length >= 1 && !picked) doSearch(search.value.trim());
         });
     }
     document.addEventListener('click', (e) => {
         if (results && !e.target.closest('#srcPick')) results.hidden = true;
     });
 
-    // ---------------------------------------------------- yuborish
-    form.addEventListener('submit', async function (ev) {
+    // ---------------------------------------------------- yuklash
+    form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        submit.disabled = true;
-        submit.textContent = '⏳ Tayyorlanmoqda…';
-        showMsg('Reel tayyorlanmoqda…', '');
+        if (!file) { showMsg('❌ Avval video tanlang', 'err'); return; }
 
         const fd = new FormData();
+        fd.append('video', file);
         fd.append('title', title ? title.value : '');
         fd.append('description', desc ? desc.value : '');
         fd.append('content_id', cidEl.value || '');
@@ -277,21 +316,46 @@ $botName      = TELEGRAM_BOT_USERNAME;
             if (me) fd.append('tg_me', me);
         } catch (e) {}
 
-        try {
-            const res = await fetch('api/reel-intent.php', { method: 'POST', body: fd });
-            const d = await res.json();
-            if (!res.ok || !d.success || !d.bot_link) {
-                throw new Error(d.message || ('Xato ' + res.status));
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'api/reel-upload.php');
+
+        submit.disabled = true;
+        submit.textContent = '⏳ Yuklanmoqda…';
+        prog.hidden = false;
+        bar.style.width = '0%';
+        progTxt.textContent = fmtMb(file.size);
+        showMsg('Video Telegram kanalga yuborilmoqda…', '');
+
+        xhr.upload.onprogress = function (e) {
+            if (!e.lengthComputable) return;
+            const p = Math.min(100, e.loaded / e.total * 100);
+            bar.style.width = p.toFixed(0) + '%';
+            progTxt.textContent = p.toFixed(0) + '% · '
+                + fmtMb(e.loaded) + ' / ' + fmtMb(e.total);
+        };
+
+        xhr.onload = function () {
+            let d = {};
+            try { d = JSON.parse(xhr.responseText); } catch (e) {}
+            if (xhr.status >= 200 && xhr.status < 300 && d.success) {
+                bar.style.width = '100%';
+                progTxt.textContent = '100%';
+                showMsg('✅ ' + (d.message || 'Joylandi!'), 'ok');
+                submit.textContent = '✅ Yuborildi';
+                setTimeout(() => { location.href = 'reels.php'; }, 1400);
+            } else {
+                submit.disabled = false;
+                submit.textContent = '📤 Yuklash va kanalga joylash';
+                showMsg('❌ ' + (d.message || ('Xato ' + xhr.status)), 'err');
             }
-            showMsg('✅ ' + (d.message || 'Botga o‘tasiz…'), 'ok');
-            submit.textContent = '✅ Telegram ochilmoqda…';
-            // Botni ochamiz - foydalanuvchi videoni shu yerda yuboradi.
-            setTimeout(() => { location.href = d.bot_link; }, 700);
-        } catch (e) {
+        };
+        xhr.onerror = function () {
             submit.disabled = false;
-            submit.textContent = '📨 Telegram orqali yuborish';
-            showMsg('❌ ' + e.message, 'err');
-        }
+            submit.textContent = '📤 Yuklash va kanalga joylash';
+            showMsg('❌ Ulanish xatosi. Internetni tekshirib, qayta urinib ko‘ring.', 'err');
+        };
+
+        xhr.send(fd);
     });
 })();
 </script>

@@ -19,6 +19,11 @@ class TelegramBot {
         return $this->lastError;
     }
 
+    /** Katta fayl yuklash uchun cURL kutish vaqtini o'zgartirish (soniya). */
+    public function setTimeout($seconds) {
+        $this->curlTimeout = max(5, (int) $seconds);
+    }
+
     /**
      * API bazaviy manzili. Token bilan.
      * DIQQAT: fayl havolasi yasash uchun ishlatiladi - URL'ni
@@ -223,6 +228,45 @@ class TelegramBot {
         }
 
         return $this->request('sendVideo', $data);
+    }
+
+    /**
+     * Hujjat (document) sifatida yuborish.
+     *
+     * sendVideo ba'zi konteynerlarni (.mkv/.mov) qabul qilmasa — shu zaxira
+     * ishlatiladi. Fayl baribir Telegram serverida qoladi, bizda saqlanmaydi.
+     *
+     * @param string $chatId
+     * @param string|CURLFile $document
+     * @param array  $options caption, parse_mode, disable_notification
+     * @return array|null
+     */
+    public function sendDocument($chatId, $document, $options = []) {
+        $data = [
+            'chat_id'  => $chatId,
+            'document' => $this->prepareFileArgument($document),
+        ];
+        if (!empty($options['caption'])) {
+            $data['caption'] = mb_substr($options['caption'], 0, 1024);
+        }
+        if (!empty($options['parse_mode'])) {
+            $data['parse_mode'] = $options['parse_mode'];
+        }
+        if (!empty($options['disable_notification'])) {
+            $data['disable_notification'] = 'true';
+        }
+        return $this->request('sendDocument', $data);
+    }
+
+    /**
+     * Xabarni o'chirish (masalan, bot chatiga kelgan vaqtinchalik videoni
+     * kanalga ko'chirgach tozalash uchun).
+     */
+    public function deleteMessage($chatId, $messageId) {
+        return $this->request('deleteMessage', [
+            'chat_id'    => $chatId,
+            'message_id' => (int) $messageId,
+        ]);
     }
 
     /**

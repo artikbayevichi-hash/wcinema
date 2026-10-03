@@ -30,7 +30,7 @@ Branding: **W CINEMA** (`SITE_NAME`).
 
 | Tur | Tavsif | Manba |
 |---|---|---|
-| `upload` | MP4 fayl yuklanadi (`uploads/reels/`, tasodifiy nom) | `reels-upload.php` |
+| `upload` | Video saytda tanlanadi → Telegram kanalga joylanadi (`REELS_CHANNEL`), serverda saqlanmaydi | `reels-upload.php` |
 | `clip` | Katalogdagi **qismdan vaqt kesiladi** — fayl ko'chirilmaydi | `openTrimmer()` (app.js) |
 
 **Clip cheklovlari:** faqat seek qilinadigan manbalar ishlaydi
@@ -44,14 +44,16 @@ Rad etilgan reel stream `403` qaytaradi; muallif va admin o'z ko'rallarini
 ko'ra oladi.
 
 **Endpointlar:** `api/reels.php` (feed/like/view/delete/mine),
-`api/reel-create.php` (clip), `api/reel-intent.php` (Telegram kanalga
-yuborish), `api/reel-moderate.php` (admin), `api/reel-authors.php`
-(reklamachilar).
+`api/reel-create.php` (clip), `api/reel-upload.php` (saytdan yuklab Telegram
+kanalga joylash), `api/reel-intent.php` (zaxira: botga qo'lda yuborish),
+`api/reel-moderate.php` (admin), `api/reel-authors.php` (reklamachilar).
 
-**Muhim:** endi serverga video/rasm FAYLI yuklanmaydi. Foydalanuvchi reelsni
-Telegram botga yuboradi, bot uni `REELS_CHANNEL` kanaliga joylaydi, sayt esa
-faqat kanal postini (`t.me/...`) o'qiydi. `api/reel-upload.php` va
-`api/content-upload.php` ataylab o'chirilgan (410).
+**Muhim:** foydalanuvchi videoni **saytda** tanlaydi; `api/reel-upload.php`
+uni **to'g'ridan-to'g'ri Telegram kanalga** (`REELS_CHANNEL`) joylaydi va
+serverdagi vaqtinchalik faylni darhol o'chiradi — saytda fayl SAQLANMAYDI.
+Tomoshabinlar videoni Telegram'dan ko'radi (`t.me/...`), shu bois sayt
+serveriga og'irlik tushmaydi. `api/content-upload.php` (admin poster fayli)
+ataylab o'chirilgan (410) — poster faqat URL bilan saqlanadi.
 
 Limitlar: `REEL_MAX_UPLOAD_MB` (50), `REEL_MIN/MAX_LENGTH` (3–90 s), hajm
 `min(post_max_size, upload_max_filesize, REEL_MAX_UPLOAD_MB)` = amaliy chegara

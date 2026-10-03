@@ -401,22 +401,108 @@ class Reels {
     }
 
     /**
-     * Yuklangan fayldan reel yaratish — O'CHIRILGAN.
+     * Yuklangan videoni to'g'ridan-to'g'ri Telegram kanalga joylash.
      *
-     * Ilgari foydalanuvchi MP4 ni serverga yuklardi. Endi bu yo'l yopiq:
-     * reels Telegram kanal orqali joylanadi (createIntent). Metod eski
-     * chaqiruvlar uchun qoldirilgan va har doim rad etadi — shu bilan
-     * serverga tasodifan ham fayl yozilmaydi.
+     * Oqim: brauzer -> sayt (PHP vaqtinchalik fayl) -> Telegram kanal.
+     * Fayl SERVERDA SAQLANMAYDI: Telegram'ga uzatilgach darhol o'chiriladi
+     * (PHP ham so'rov oxirida o'zi tozalaydi). Tomoshabinlar videoni
+     * Telegram'dan ko'radi — sayt faqat havolani saqlaydi.
      *
-     * @param array $file  $_FILES['video']
-     * @param int   $userId
+     * @param int    $userId
+     * @param array  $file        $_FILES['video']
      * @param string $title
      * @param string $description
+     * @param int    $contentId   Ixtiyoriy - reel qaysi filmdan olingan
      */
-    public function createUpload($userId, array $file, $title = '', $description = '') {
+    public function createUpload($userId, array $file, $title = '', $description = '', $contentId = 0) {
+        $err = $this->checkUpload($file);
+        if ($err !== null) {
+            return ['success' => false, 'message' => $err];
+        }
+        if (REELS_CHANNEL === '') {
+            return ['success' => false,
+                    'message' => 'Reels kanali sozlanmagan (REELS_CHANNEL). Administratorga murojaat qiling.'];
+        }
+
+        // Ixtiyoriy kontent bog'lanishi
+        $contentId = (int) $contentId;
+        if ($contentId > 0 && !(new Catalog())->getContent($contentId)) {
+            $contentId = 0;
+        }
+
+        $title = mb_substr(trim(strip_tags((string) $title)), 0, 200);
+        if ($title === '') {
+            $title = mb_substr(pathinfo((string) $file['name'], PATHINFO_FILENAME), 0, 200) ?: 'Reels';
+        }
+        $description = mb_substr(trim(strip_tags((string) $description)), 0, 500) ?: null;
+
+        $caption = $title;
+        if ($description) {
+            $caption .= "\n\n" . $description;
+        }
+
+        $ext  = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        $mime = $ext === 'webm' ? 'video/webm'
+              : ($ext === 'mov' ? 'video/quicktime'
+              : ($ext === 'mkv' ? 'video/x-matroska' : 'video/mp4'));
+
+        $tg = new TelegramBot();
+        $tg->setTimeout(600);   // katta fayl sekin yuklanishi mumkin
+
+        // 1) sendVideo — kanalda inline oqim uchun eng yaxshi variant.
+        $res = $tg->sendVideo(REELS_CHANNEL, new CURLFile($file['tmp_name'], $mime, $file['name']), [
+            'caption'            => $caption,
+            'supports_streaming' => true,
+        ]);
+        // 2) Zaxira: sendDocument (mkv/mov ba'zan video deb qabul qilinmaydi).
+        if (!$res || empty($res['result']['message_id'])) {
+            $res = $tg->sendDocument(REELS_CHANNEL, new CURLFile($file['tmp_name'], $mime, $file['name']), [
+                'caption' => $caption,
+            ]);
+        }
+
+        // Vaqtinchalik faylni darhol o'chiramiz — diskda qolmasin.
+        @unlink($file['tmp_name']);
+
+        if (!$res || empty($res['result']['message_id'])) {
+            $last = $tg->getLastError();
+            return ['success' => false, 'message' =>
+                'Kanalga joylab bo‘lmadi. Bot kanalda admin emas yoki post huquqi yo‘q.'
+                . ($last ? ' (' . $last . ')' : '')];
+        }
+
+        $post = (int) $res['result']['message_id'];
+        $link = (REELS_CHANNEL[0] === '@')
+            ? 'https://t.me/' . substr(REELS_CHANNEL, 1) . '/' . $post
+            : null;
+
+        $id = $this->db()->insert('reels', [
+            'user_id'      => (int) $userId,
+            'content_id'   => $contentId > 0 ? $contentId : null,
+            'episode_id'   => null,
+            'kind'         => 'upload',
+            'title'        => $title,
+            'description'  => $description,
+            'video_type'   => 'telegram',
+            'video_url'    => $link,
+            'channel_post' => $post,
+            'poster'       => null,
+            'start_time'   => 0,
+            'end_time'     => 0,
+            'status'       => REELS_REQUIRE_APPROVAL ? 0 : 1,
+        ]);
+        if (!$id) {
+            return ['success' => false, 'message' => 'Kanalga joylandi, lekin bazaga yozilmadi'];
+        }
+
         return [
-            'success' => false,
-            'message' => 'Fayl yuklash o‘chirilgan. Reels endi Telegram kanali orqali joylanadi.',
+            'success' => true,
+            'id'      => $id,
+            'status'  => REELS_REQUIRE_APPROVAL ? 0 : 1,
+            'link'    => $link,
+            'message' => REELS_REQUIRE_APPROVAL
+                ? 'Yuborildi! Admin tasdiqlashidan keyin ko‘rinadi'
+                : 'Yuborildi! Reels oqimda paydo bo‘ldi',
         ];
     }
 
