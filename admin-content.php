@@ -190,14 +190,8 @@ if (!$auth->isAdmin()) {
                 <div><label>Davlat</label><input id="f_country" maxlength="100" placeholder="AQSh"></div>
                 <div><label>Til</label><input id="f_language" maxlength="50" placeholder="O'zbekcha (tarjima)"></div>
             </div>
-            <div><label>Poster (URL yoki uploads/... yo'l)</label>
-                <div style="display:flex;gap:8px;align-items:center">
-                    <input id="f_poster" maxlength="500" placeholder="uploads/posters/poster.jpg · t.me post ham ishlaydi">
-                    <label class="adm-btn mini" style="cursor:pointer;white-space:nowrap;flex-shrink:0" title="Rasmni kompyuterdan yuklash">
-                        ⬆️ Rasm
-                        <input type="file" id="posterFile" accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.png,.webp,.gif" hidden>
-                    </label>
-                </div>
+            <div><label>Poster (Telegram post yoki rasm URL)</label>
+                <input id="f_poster" maxlength="500" placeholder="https://t.me/kanal/123 · yoki rasm URL">
                 <p class="adm-hint" id="posterHint"></p>
             </div>
             <div><label>Tavsif</label>
@@ -580,33 +574,12 @@ async function deleteEp(id) {
 }
 
 // ============================================================ POSTER
-$('posterFile').addEventListener('change', function () {
-    const f = this.files && this.files[0];
-    if (!f) return;
-    const fd = new FormData();
-    fd.append('image', f);
-    $('posterHint').textContent = 'Yuklanmoqda: ' + f.name + '...';
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'api/content-upload.php');
-    xhr.onload = function () {
-        try {
-            const d = JSON.parse(xhr.responseText);
-            if (!d.success) throw new Error(d.message || 'Yuklashda xatolik');
-            $('f_poster').value = d.url;
-            updatePosterHint();
-        } catch (err) {
-            $('posterHint').textContent = '❌ ' + err.message;
-        }
-        this.value = '';
-    };
-    xhr.onerror = () => { $('posterHint').textContent = '❌ Ulanish xatosi'; this.value = ''; };
-    xhr.send(fd);
-});
-
+// Fayl yuklash OLIB TASHLANDI - poster Telegram havolasidan olinadi.
+// Saqlashda api/content-admin.php t.me post rasmini avtomatik yuklab oladi.
 function updatePosterHint() {
     const v = $('f_poster').value.trim();
     $('posterHint').textContent = /t\.me/i.test(v)
-        ? '⚠ t.me post — saqlashda rasmi avtomatik serverga yuklab olinadi (post ochiq bo\'lishi kerak).'
+        ? '✓ t.me post — rasm ko‘rsatish paytida Telegram CDN dan olinadi (serverga yuklanmaydi).'
         : '';
 }
 $('f_poster').addEventListener('input', updatePosterHint);

@@ -157,7 +157,7 @@ class Reels {
                 'kind'       => $r['kind'],
                 'title'      => $r['title'] ?: ($r['content_title'] ?? 'Reels'),
                 'description'=> $r['description'],
-                'poster'     => $r['poster'],
+                'poster'     => $r['poster'] ?: ($pb['poster'] ?? null),
                 'status'     => (int) $r['status'],
                 // Rad etish sababi - faqat muallif va admin uchun ko'rsatiladi
                 'reject_reason' => $r['reject_reason'] ?? null,
@@ -211,11 +211,27 @@ class Reels {
     private function playback($r) {
         $start = (int) $r['start_time'];
 
-        // --- upload: fayl bizning serverimizda
+        // --- upload: Telegram kanalidagi video (yoki eski server fayli)
         if ($r['kind'] === 'upload') {
             if (empty($r['video_url'])) {
-                return ['type' => 'none', 'url' => null, 'warning' => 'Video fayli topilmadi'];
+                return ['type' => 'none', 'url' => null, 'warning' => 'Video hali kanalga joylanmagan'];
             }
+
+            // Telegram kanal posti -> nol yuk oqimi. Sayt serveri videoni
+            // umuman uzatmaydi: brauzer videoni to'g'ridan-to'g'ri Telegram
+            // CDN'dan oladi (kichik klip) yoki TgStream orqali kanal
+            // postidan o'qiydi (katta video). Ikkalasi ham serverga yuk
+            // tushirmaydi.
+            $host = strtolower((string) parse_url((string) $r['video_url'], PHP_URL_HOST));
+            if (preg_match('#(^|\.)(t\.me|telegram\.me)$#', $host)) {
+                $pb = (new Catalog())->playbackFromUrl((string) $r['video_url']);
+                if (empty($pb['poster']) && !empty($r['poster'])) {
+                    $pb['poster'] = $r['poster'];
+                }
+                return $pb;
+            }
+
+            // Eski (migratsiyadan oldin yuklangan) server fayli
             return [
                 'type'  => 'file',
                 'url'   => 'api/stream.php?reel=' . (int) $r['id'],
@@ -385,7 +401,12 @@ class Reels {
     }
 
     /**
-     * Yuklangan fayldan reel yaratish.
+     * Yuklangan fayldan reel yaratish — O'CHIRILGAN.
+     *
+     * Ilgari foydalanuvchi MP4 ni serverga yuklardi. Endi bu yo'l yopiq:
+     * reels Telegram kanal orqali joylanadi (createIntent). Metod eski
+     * chaqiruvlar uchun qoldirilgan va har doim rad etadi — shu bilan
+     * serverga tasodifan ham fayl yozilmaydi.
      *
      * @param array $file  $_FILES['video']
      * @param int   $userId
@@ -393,63 +414,78 @@ class Reels {
      * @param string $description
      */
     public function createUpload($userId, array $file, $title = '', $description = '') {
-        $err = $this->checkUpload($file);
-        if ($err !== null) {
-            return ['success' => false, 'message' => $err];
+        return [
+            'success' => false,
+            'message' => 'Fayl yuklash o‘chirilgan. Reels endi Telegram kanali orqali joylanadi.',
+        ];
+    }
+
+    /**
+     * Telegram kanal orqali reel yuklashni boshlash.
+     *
+     * Fayl SERVERGA yozilmaydi. Bu yerda faqat "kutilayotgan" reel yozuvi
+     * yaratiladi va bir martalik token qaytariladi. Foydalanuvchi botga
+     * start=reel_<token> bilan o'tib videoni yuboradi; bot videoni
+     * REELS_CHANNEL kanaliga joylaydi va shu qatorni to'ldiradi.
+     *
+     * @param int    $userId
+     * @param int    $contentId   Ixtiyoriy - reel qaysi filmdan olingan
+     * @param string $title
+     * @param string $description
+     */
+    public function createIntent($userId, $contentId = 0, $title = '', $description = '') {
+        if (REELS_CHANNEL === '') {
+            return ['success' => false,
+                    'message' => 'Reels kanali sozlanmagan. Administrator REELS_CHANNEL ni sozlashi kerak.'];
         }
 
-        // --- papkani tayyorlash
-        if (!is_dir(REELS_DIR) && !@mkdir(REELS_DIR, 0775, true) && !is_dir(REELS_DIR)) {
-            return ['success' => false, 'message' => 'Papka yaratib bo‘lmadi'];
+        // content_id IXTIYORIY. Faqat haqiqiy kontent bo'lsa saqlanadi,
+        // aks holda bo'sh qoldiriladi (foydalanuvchi "belgilamay qo'yadi").
+        $contentId = (int) $contentId;
+        if ($contentId > 0) {
+            $item = (new Catalog())->getContent($contentId);
+            if (!$item) {
+                $contentId = 0;
+            } elseif ($title === '') {
+                $title = $item['title'] ?? '';
+            }
         }
 
-        // --- fayl nomi
-        // Asl nom ISHLATILMAYDI. Sababi: foydalanuvchi nomi bilan kelgan
-        // fayl serverga "chisel" yozilishi mumkin (../../etc/passwd.mp4) yoki
-        // bo'sh joy/ruscha harflar bilan brauzerda buziladi. Shu sababli
-        // tasodifiy nom beriladi va asl nom faqat ma'lumot sifatida saqlanadi.
-        $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        $safe = bin2hex(random_bytes(16)) . '.' . $ext;
-        $dest = REELS_DIR . '/' . $safe;
-
-        if (!move_uploaded_file($file['tmp_name'], $dest)) {
-            return ['success' => false, 'message' => 'Faylni saqlab bo‘lmadi'];
-        }
-        @chmod($dest, 0644);
-
+        $title = mb_substr(trim(strip_tags((string) $title)), 0, 200);
         if ($title === '') {
-            $title = pathinfo($file['name'], PATHINFO_FILENAME);
+            $title = 'Reels';
         }
+
+        $token = bin2hex(random_bytes(16));
 
         $data = [
-            'user_id'     => (int) $userId,
-            'content_id'  => null,
-            'episode_id'  => null,
-            'kind'        => 'upload',
-            'title'       => mb_substr(trim(strip_tags($title)), 0, 200) ?: 'Reels',
-            'description' => mb_substr(trim(strip_tags($description)), 0, 500) ?: null,
-            'video_type'  => 'file',
-            'video_url'   => 'uploads/reels/' . $safe,
-            'poster'      => null,
-            'start_time'  => 0,
-            'end_time'    => 0,
-            'status'      => REELS_REQUIRE_APPROVAL ? 0 : 1,
+            'user_id'      => (int) $userId,
+            'content_id'   => $contentId > 0 ? $contentId : null,
+            'episode_id'   => null,
+            'kind'         => 'upload',
+            'title'        => $title,
+            'description'  => mb_substr(trim(strip_tags((string) $description)), 0, 500) ?: null,
+            'video_type'   => 'telegram',
+            'video_url'    => null,
+            'ingest_token' => $token,
+            'poster'       => null,
+            'start_time'   => 0,
+            'end_time'     => 0,
+            'status'       => 0,   // bot videoni kanalga joylagach 1 bo'ladi
         ];
 
         $id = $this->db()->insert('reels', $data);
         if (!$id) {
-            // Bazaga yozilmadi - fayl yerga tushib qolmasligi kerak
-            @unlink($dest);
-            return ['success' => false, 'message' => 'Bazaga saqlab bo‘lmadi'];
+            return ['success' => false, 'message' => 'Saqlab bo‘lmadi'];
         }
 
         return [
-            'success' => true,
-            'id'      => $id,
-            'message' => REELS_REQUIRE_APPROVAL
-                ? 'Yuklandi! Admin tasdiqlashidan keyin paydo bo‘ladi'
-                : 'Yayinlandi!',
-            'status'  => (int) $data['status'],
+            'success'  => true,
+            'id'       => $id,
+            'token'    => $token,
+            'bot_link' => REELS_BOT_LINK . $token,
+            'message'  => 'Endi Telegram ochiladi — botga videoni yuboring. '
+                        . 'Reel avtomatik kanalga tushadi.',
         ];
     }
 

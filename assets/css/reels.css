@@ -70,7 +70,15 @@
 }
 
 .reels-slide video,
-.reels-slide iframe {
+.reels-slide iframe,
+.reels-slide .reels-tg {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    border: 0; display: block; background: #000;
+}
+.reels-slide .reels-tg video,
+.reels-slide .reels-tg iframe,
+.reels-slide .reels-tg canvas {
     width: 100%; height: 100%;
     object-fit: contain;
     border: 0; display: block; background: #000;

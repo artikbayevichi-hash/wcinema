@@ -372,6 +372,23 @@ define('REEL_EFFECTIVE_MAX_UPLOAD_MB',
 $_reqAppr = strtolower(trim((string) env_value('REELS_REQUIRE_APPROVAL', '1')));
 define('REELS_REQUIRE_APPROVAL', in_array($_reqAppr, ['1', 'true', 'yes', 'on'], true));
 
+// Reels qaysi Telegram kanalda saqlanadi.
+//
+// Foydalanuvchi reelni botga yuboradi, bot uni shu kanalga joylaydi.
+// Sayt serveriga video FAYLI umuman yozilmaydi: video Telegram serverida
+// qoladi, sayt faqat havolani saqlaydi. Shu sabab disk to'lmaydi va
+// tomosha trafigi Telegram hisobidan ketadi.
+//
+// Qiymat: ommaviy kanal @username'i (masalan @wcinema_reels) yoki
+// -100... ko'rinishidagi chat id. Bo'sh bo'lsa reels yuklash o'chiriladi.
+// MUHIM: bot bu kanalda ADMIN bo'lishi va "Post Messages" huquqi bo'lishi shart.
+define('REELS_CHANNEL', trim((string) env_value('REELS_CHANNEL', '')));
+
+// Reels yuklash uchun bot deep-link manzili bazasi.
+// Foydalanuvchi saytda "yuborish"ni bosgach Telegram botga start=reel_<token>
+// bilan o'tadi va videoni yuboradi.
+define('REELS_BOT_LINK', 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=reel_');
+
 // ---------------------------------------------------------------------------
 // Adminlar
 // ---------------------------------------------------------------------------

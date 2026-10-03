@@ -173,18 +173,10 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         'total_episodes' => max(0, inputInt('total_episodes')),
     ];
 
-    // Poster bo'sh bo'lsa — video URL (t.me post) dan avtomatik olamiz.
-    // Shu bilan admin faqat Telegram havolasini kiritadi, rasm o'zi olinadi.
-    $posterFromUrl = static function ($url) {
-        $url = trim((string) $url);
-        if ($url === '') {
-            return null;
-        }
-        if (!preg_match('#(^|\.)(t\.me|telegram\.me)$#i', (string) parse_url($url, PHP_URL_HOST))) {
-            return null;
-        }
-        return (new TgResolve())->downloadImage($url);
-    };
+    // Poster bo'sh bo'lsa — video URL (t.me post) ni poster manzili qilib
+    // qo'yamiz. Rasm SERVERGA YUKLAB OLINMAYDI: ko'rsatish paytida
+    // Catalog::posterSrc() uni api/tg-resolve.php?mode=img ga o'giradi,
+    // u esa CDN rasmiga 302 qaytaradi. Shu bilan diskka rasm yozilmaydi.
     if (empty($fields['poster'])) {
         $srcUrl = trim(input('first_episode_url', '', 1000));
         if ($srcUrl === '' && $action === 'update_content') {
@@ -201,21 +193,10 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
                 }
             }
         }
-        $autoPoster = $posterFromUrl($srcUrl);
-        if ($autoPoster) {
-            $fields['poster'] = $autoPoster;
-        }
-    }
-
-    // t.me post havolasi poster bo'lsa — rasmini serverga yuklab olib,
-    // doimiy ko'rinadigan qilamiz (vazifasi muvaffaqiyatsiz bo'lsa, asl
-    // manzil qoladi va ko'rsatish paytida api/tg-resolve.php hal qiladi).
-    if (!empty($fields['poster'])
-        && preg_match('#(^|\.)(t\.me|telegram\.me)$#i',
-            (string) parse_url($fields['poster'], PHP_URL_HOST))) {
-        $local = (new TgResolve())->downloadImage($fields['poster']);
-        if ($local) {
-            $fields['poster'] = $local;
+        if ($srcUrl !== ''
+            && preg_match('#(^|\.)(t\.me|telegram\.me)$#i',
+                (string) parse_url($srcUrl, PHP_URL_HOST))) {
+            $fields['poster'] = $srcUrl;
         }
     }
 

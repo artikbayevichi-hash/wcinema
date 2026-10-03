@@ -247,6 +247,14 @@ if (!empty($menuRes['ok'])) {
 
 echo "Bot polling boshlandi...\n";
 
+// Reels kanalini tekshirish (bot u yerda admin bo'lishi shart).
+if (REELS_CHANNEL !== '') {
+    $chk = apiRequest($apiUrl . 'getChat', ['chat_id' => REELS_CHANNEL], 15);
+    echo !empty($chk['ok'])
+        ? "Reels kanali: " . REELS_CHANNEL . "\n"
+        : "Reels kanali XATO (" . REELS_CHANNEL . "): " . json_encode($chk) . "\n";
+}
+
 while (true) {
     // Yangi xabarlarni olish (30 soniya long-poll, curl 70 soniyada uziladi)
     $result = apiRequest($apiUrl . 'getUpdates', ['offset' => $offset, 'timeout' => 30], 70);
@@ -383,8 +391,112 @@ while (true) {
                     continue;
                 }
 
+                // ------------------------------------------------------------
+                // REELS: saytdan "yuborish" -> botga o'tish
+                // ------------------------------------------------------------
+                // Sayt api/reel-intent.php orqali token yaratadi va
+                // foydalanuvchini shu yerga yo'naltiradi. Biz tokenni
+                // eslab qolamiz, keyin kelgan videoni REELS_CHANNEL
+                // kanaliga joylaymiz (serverga fayl yozmasdan).
+                if (preg_match('#^(?:/start )?reel_([a-f0-9]{32})$#', $text, $rm)) {
+                    $token = $rm[1];
+                    $row = $db->fetchOne(
+                        "SELECT id FROM reels WHERE ingest_token = ? AND video_url IS NULL LIMIT 1",
+                        [$token]
+                    );
+                    if ($row) {
+                        if (!isset($states[$userId]) || !is_array($states[$userId])) {
+                            $states[$userId] = [];
+                        }
+                        $states[$userId]['reel_token'] = $token;
+                        $states[$userId]['chat_id'] = $chatId;
+                        saveStates($states);
+
+                        sendMessage($chatId,
+                            "🎬 Reel uchun video tayyor.\n\n"
+                            . "Endi <b>videoni yuboring</b> (yoki forward qiling). "
+                            . "Qabul qilingach reel avtomatik kanalga joylanadi.");
+                    } else {
+                        sendMessage($chatId,
+                            "❌ Reel havolasi topilmadi yoki eskirgan.\n\n"
+                            . "Saytga qaytib, Reels sahifasidan qaytadan yuboring.");
+                    }
+                    continue;
+                }
+
+                // Kelgan video (reel kutilyapti) -> kanalga forward
+                if (!empty($states[$userId]['reel_token'])
+                    && (isset($message['video']) || isset($message['document']) || isset($message['animation']))) {
+
+                    if (REELS_CHANNEL === '') {
+                        sendMessage($chatId, "❌ Reels kanali sozlanmagan. Administratorga murojaat qiling.");
+                        continue;
+                    }
+
+                    $token = (string) $states[$userId]['reel_token'];
+                    $row = $db->fetchOne(
+                        "SELECT id FROM reels WHERE ingest_token = ? AND video_url IS NULL LIMIT 1",
+                        [$token]
+                    );
+
+                    if (!$row) {
+                        unset($states[$userId]['reel_token']);
+                        saveStates($states);
+                        sendMessage($chatId, "❌ Reel topilmadi yoki allaqachon joylangan. Saytdan qaytadan yuboring.");
+                        continue;
+                    }
+
+                    // Videoni kanalga ko'chiramiz. Fayl qayta yuklanmaydi:
+                    // Telegram ichida nusxa ko'chadi, sayt trafigi sarflanmaydi.
+                    // Avval copyMessage (foydalanuvchi ismi kanalda ko'rinmaydi),
+                    // ishlamasa forwardMessage.
+                    $fwd = apiRequest($apiUrl . 'copyMessage', [
+                        'chat_id'      => REELS_CHANNEL,
+                        'from_chat_id' => $chatId,
+                        'message_id'   => (int) $message['message_id'],
+                    ], 30);
+                    if (empty($fwd['ok'])) {
+                        $fwd = apiRequest($apiUrl . 'forwardMessage', [
+                            'chat_id'      => REELS_CHANNEL,
+                            'from_chat_id' => $chatId,
+                            'message_id'   => (int) $message['message_id'],
+                        ], 30);
+                    }
+
+                    if (empty($fwd['ok']) || empty($fwd['result']['message_id'])) {
+                        error_log("bot: reel forward xato: " . json_encode($fwd));
+                        sendMessage($chatId,
+                            "❌ Videoni kanalga joylab bo'lmadi.\n\n"
+                            . "Sabab: bot kanalda admin emas yoki post huquqi yo'q. "
+                            . "Administrator botni <b>" . htmlspecialchars(REELS_CHANNEL, ENT_QUOTES) . "</b> "
+                            . "kanaliga admin qilib qo'shishi kerak.");
+                        continue;
+                    }
+
+                    $post     = (int) $fwd['result']['message_id'];
+                    $chanUser = (REELS_CHANNEL[0] === '@') ? substr(REELS_CHANNEL, 1) : null;
+                    $link     = $chanUser ? 'https://t.me/' . $chanUser . '/' . $post : null;
+
+                    $db->update('reels', [
+                        'video_url'    => $link,
+                        'channel_post' => $post,
+                        'ingest_token' => null,
+                        'status'       => REELS_REQUIRE_APPROVAL ? 0 : 1,
+                    ], 'id = ?', [(int) $row['id']]);
+
+                    unset($states[$userId]['reel_token']);
+                    saveStates($states);
+
+                    sendMessage($chatId,
+                        "✅ Reel kanalga joylandi!" . ($link ? "\n\n" . $link : '')
+                        . "\n\nSaytda ko'rish uchun Reels bo'limiga qayting.", [
+                            [['text' => '🎬 Reelsni ochish', 'url' => SITE_URL . '/reels.php']],
+                        ]);
+                    continue;
+                }
+
                 // Ro'yxatdan o'tish jarayoni
-                if (isset($states[$userId])) {
+                if (isset($states[$userId]['step'])) {
                     $state = $states[$userId];
 
                     // Ism

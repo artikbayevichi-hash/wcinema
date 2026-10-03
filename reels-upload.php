@@ -1,21 +1,28 @@
 <?php
 // ============================================================================
-// reels-upload.php - qisqa video yuklash
+// reels-upload.php - reelsni Telegram kanal orqali joylash
 // ============================================================================
-// Yuklangan reel avtomatik "kutilmoqda" (status 0) holatiga tushadi va
-// admin tasdiqlashidan keyin oqimda ko'rinadi.
+// DIQQAT: bu sahifada FAYL TANLASH YO'Q. Video serverga yuklanmaydi.
 //
-// DIQQAT: bu sahifa kirish talab qiladi. Mehmon uchun "Telegram orqali
-// kiring" ko'rsatiladi (404 emas) - chunki Telegram Mini App ichida
-// foydalanuvchi har doim login bo'lishi kerak.
+// Oqim:
+//   1) Foydalanuvchi sarlavha/izoh yozadi va (ixtiyoriy) qaysi filmdan
+//      olinganini nom yoki ID bo'yicha qidirib tanlaydi.
+//   2) "Telegram orqali yuborish" bosiladi -> api/reel-intent.php token
+//      yaratadi va botga deep-link qaytaradi.
+//   3) Foydalanuvchi botga o'tib videoni yuboradi. Bot uni REELS kanaliga
+//      joylaydi. Sayt faqat havolani saqlaydi.
+//
+// Shunday qilib butun og'irlik Telegram'da qoladi - serverda video
+// fayli ham, poster ham saqlanmaydi.
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $user   = $auth->getCurrentUser();
 $userId = $user ? (int) $user['id'] : null;
 $stats  = $userId ? $reels->authorStats($userId) : null;
-// Haqiqiy chegakichisi (config va php.ini dan)
-$maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
+
+$channelReady = (REELS_CHANNEL !== '');
+$botName      = TELEGRAM_BOT_USERNAME;
 ?>
 <!DOCTYPE html>
 <html lang="uz">
@@ -30,7 +37,7 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
     <link rel="stylesheet" href="assets/css/instagram.css">
     <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. Oddiy
          tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani
-         sekinlashtiradi. Shuning uchun shartli yuklanadi. -->
+         sekinlashtiradi. Shu uchun shartli yuklanadi. -->
     <script>
     (function () {
       if (!/Telegram/i.test(navigator.userAgent)
@@ -40,6 +47,38 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
       document.head.appendChild(s);          // async EMAS: app.js dan oldin
     })();
     </script>
+    <style>
+        .src-pick { position: relative; }
+        .src-results {
+            position: absolute; z-index: 40; left: 0; right: 0;
+            top: calc(100% + 4px);
+            background: #12151d; border: 1px solid #262b38; border-radius: 10px;
+            max-height: 290px; overflow: auto;
+            box-shadow: 0 12px 30px rgba(0,0,0,.55);
+        }
+        .src-results button {
+            display: flex; gap: 10px; align-items: center;
+            width: 100%; padding: 8px 10px; background: none; border: 0;
+            color: #e7ebf3; text-align: left; cursor: pointer;
+        }
+        .src-results button:hover { background: #1c2130; }
+        .src-results img {
+            width: 34px; height: 48px; object-fit: cover;
+            border-radius: 6px; background: #0b0d13; flex-shrink: 0;
+        }
+        .src-results .t { font-size: 13px; font-weight: 600; }
+        .src-results .s { font-size: 11px; color: #8b95a8; }
+        .src-results .empty { padding: 12px; color: #8b95a8; font-size: 12.5px; }
+        .src-chip {
+            display: inline-flex; align-items: center; gap: 8px;
+            margin-top: 8px; padding: 6px 11px; border-radius: 999px;
+            background: #1c2130; font-size: 13px;
+        }
+        .src-chip button {
+            background: none; border: 0; color: #ff9a9a;
+            cursor: pointer; font-size: 15px; line-height: 1;
+        }
+    </style>
 </head>
 <body class="up-body ig-shell">
 
@@ -48,62 +87,64 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
 
 <header class="up-top">
     <a class="reels-back" href="reels.php" aria-label="Orqaga">←</a>
-    <div class="up-title">Reels yuklash</div>
+    <div class="up-title">Reels joylash</div>
     <span style="width:34px"></span>
 </header>
 
-<?php
-// Reels yuklash endi BARCHA foydalanuvchilar uchun ochiq. Sayt MTProto
-// orqali ishlaganda serverda PHP sessiyasi bo'lmaydi; shu sabab brauzer
-// o'z Telegram identifikatorini (`wc_tg_me_v1` -> `tg_me`) yuboradi va
-// server foydalanuvchini shundan topadi/yaratadi (Auth::ensureUserFromClient).
-// Yuklangan reel baribir moderatsiyadan (status 0) o'tadi.
-?> 
+<?php if (!$channelReady): ?>
+<!-- ================= Reels kanali sozlanmagan ================= -->
+<div class="up-card">
+    <div class="up-drop" style="cursor:default">
+        <div class="up-drop-icon">🔧</div>
+        <div class="up-drop-text">Reels kanali hali sozlanmagan</div>
+        <div class="up-drop-hint">
+            Administrator <code>.env</code> faylida <code>REELS_CHANNEL</code> ni
+            ko'rsatishi va botni kanalga admin qilib qo'shishi kerak.
+        </div>
+    </div>
+</div>
+<?php else: ?>
 
-<form class="up-card" id="upForm" enctype="multipart/form-data">
-
-    <!-- ============================ Fayl tanlash ============================ -->
-    <label class="up-drop" id="upDrop">
-        <input type="file" name="video" id="upFile" accept="video/mp4,video/webm,video/quicktime" hidden>
-        <div class="up-drop-icon" id="upDropIcon">🎬</div>
-        <div class="up-drop-text" id="upDropText">Video tanlang yoki shu yerga tashlang</div>
-        <div class="up-drop-hint">MP4 / WebM / MOV · ko'pi bilan <?php echo $maxMb; ?> MB</div>
-    </label>
-
-    <!-- Video ichidan kadr ko'rsatish -->
-    <video id="upPreview" class="up-preview" hidden playsinline muted loop></video>
+<form class="up-card" id="upForm" onsubmit="return false;">
 
     <!-- ============================ Maydonlar ============================ -->
     <label class="up-label">
         Sarlavha
-        <input type="text" name="title" id="upTitle" maxlength="200"
+        <input type="text" id="upTitle" maxlength="200"
                placeholder="Masalan: Anime finali — hayajonli" autocomplete="off">
     </label>
 
     <label class="up-label">
         Izoh <span style="color:var(--muted)">(ixtiyoriy)</span>
-        <textarea name="description" id="upDesc" rows="3" maxlength="500"
+        <textarea id="upDesc" rows="3" maxlength="500"
                   placeholder="Qisqa izoh…"></textarea>
     </label>
 
-    <div class="up-progress" id="upProgress" hidden>
-        <div class="up-progress-bar"><span id="upProgressFill"></span></div>
-        <div class="up-progress-text" id="upProgressText">Yuklanmoqda…</div>
-    </div>
+    <!-- ==================== Qaysi filmdan? (ixtiyoriy) ==================== -->
+    <label class="up-label">
+        Qaysi filmdan? <span style="color:var(--muted)">(ixtiyoriy)</span>
+        <div class="src-pick" id="srcPick">
+            <input type="text" id="srcSearch"
+                   placeholder="Kino / anime / multfilm nomi yoki ID…"
+                   autocomplete="off">
+            <div class="src-results" id="srcResults" hidden></div>
+        </div>
+        <div class="src-chip" id="srcChip" hidden></div>
+        <input type="hidden" id="upContentId" value="">
+    </label>
 
     <div class="up-msg" id="upMsg" hidden></div>
 
-    <button class="up-btn" id="upSubmit" type="submit">Yuborish</button>
+    <button class="up-btn" id="upSubmit" type="submit">📨 Telegram orqali yuborish</button>
 
     <p class="up-note">
-        <?php if (REELS_REQUIRE_APPROVAL): ?>
-        ⏳ Yuborilgan reel avval admin tomonidan ko'rib chiqiladi.
-        Tasdiqlangandan keyin u oqimda ko'rinadi.
-        <?php else: ?>
-        Reel darhol oqimda ko'rinadi.
-        <?php endif; ?>
+        Video <b>Telegram</b>ga yuklanadi (serverga emas). Tugmani bosing —
+        <b>@<?php echo htmlspecialchars($botName); ?></b> boti ochiladi,
+        videoni yuboring. Reel avtomatik kanalga joylanadi va shu yerda paydo bo'ladi.
     </p>
 </form>
+
+<?php endif; ?>
 
 <!-- ============================ Mening statistika ============================ -->
 <?php if ($stats && $stats['total'] > 0): ?>
@@ -124,23 +165,23 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
 <?php endif; ?>
 
 <script>
-// --- fayl tanlangach ko'rsatish + hajm tekshiruvi
 (function () {
-    const file    = document.getElementById('upFile');
-    const drop    = document.getElementById('upDrop');
-    const preview = document.getElementById('upPreview');
-    const icon    = document.getElementById('upDropIcon');
-    const text    = document.getElementById('upDropText');
     const form    = document.getElementById('upForm');
-    const msg     = document.getElementById('upMsg');
-    const prog    = document.getElementById('upProgress');
-    const fill    = document.getElementById('upProgressFill');
-    const ptext   = document.getElementById('upProgressText');
-    const submit  = document.getElementById('upSubmit');
-    const title   = document.getElementById('upTitle');
+    if (!form) return;                       // kanal sozlanmagan
 
-    const MAX = <?php echo $maxMb; ?>;
-    const MAXLEN = <?php echo (int) REEL_MAX_LENGTH; ?>;
+    const search  = document.getElementById('srcSearch');
+    const results = document.getElementById('srcResults');
+    const chip    = document.getElementById('srcChip');
+    const cidEl   = document.getElementById('upContentId');
+    const title   = document.getElementById('upTitle');
+    const desc    = document.getElementById('upDesc');
+    const msg     = document.getElementById('upMsg');
+    const submit  = document.getElementById('upSubmit');
+
+    const esc = (s) => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
     function showMsg(t, kind) {
         msg.hidden = false;
@@ -148,99 +189,109 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
         msg.className = 'up-msg ' + (kind || '');
     }
 
-    function setFile(f) {
-        if (!f) return;
-        if (f.size > MAX * 1024 * 1024) {
-            showMsg('Fayl katta: ' + (f.size / 1048576).toFixed(1) + ' MB (max ' + MAX + ' MB)', 'err');
-            file.value = '';
-            return;
-        }
-        msg.hidden = true;
-        text.textContent = f.name;
-        icon.textContent = '✅';
-        drop.classList.add('has');
+    // ---------------------------------------------------- qidiruv
+    let timer = null;
+    let picked = null;
 
-        if (preview.src) URL.revokeObjectURL(preview.src);
-        preview.src = URL.createObjectURL(f);
-        preview.hidden = false;
+    function clearPick() {
+        picked = null;
+        cidEl.value = '';
+        chip.hidden = true;
+        chip.innerHTML = '';
+    }
 
-        // Sarlavhani fayl nomidan to'ldiramiz (agar bo'sa)
-        if (!title.value) {
-            title.value = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').slice(0, 200);
+    function pick(item) {
+        picked = item;
+        cidEl.value = item.id;
+        results.hidden = true;
+        if (title && !title.value.trim()) title.value = item.title || '';
+        chip.hidden = false;
+        chip.innerHTML = '📺 ' + esc(item.title)
+            + (item.category ? ' · ' + esc(item.category) : '')
+            + ' <button type="button" title="Olib tashlash">✕</button>';
+        chip.querySelector('button').addEventListener('click', () => {
+            clearPick();
+            search.value = '';
+            search.focus();
+        });
+    }
+
+    async function doSearch(q) {
+        results.hidden = false;
+        results.innerHTML = '<div class="empty">Qidirilmoqda…</div>';
+        try {
+            const res = await fetch('api/catalog.php?q=' + encodeURIComponent(q) + '&per_page=8', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin'
+            });
+            const d = await res.json();
+            const items = (d && d.items) || [];
+            if (!items.length) {
+                results.innerHTML = '<div class="empty">Topilmadi — bo‘sh qoldirsangiz ham bo‘ladi</div>';
+                return;
+            }
+            results.innerHTML = items.map((it, i) => `
+                <button type="button" data-i="${i}">
+                    ${it.poster ? `<img src="${esc(it.poster)}" alt="">` : '<img alt="">'}
+                    <span>
+                        <span class="t">${esc(it.title)}</span>
+                        <span class="s">#${it.id}${it.category ? ' · ' + esc(it.category) : ''}${it.year ? ' · ' + it.year : ''}</span>
+                    </span>
+                </button>`).join('');
+            results.querySelectorAll('button[data-i]').forEach((b) => {
+                b.addEventListener('click', () => pick(items[Number(b.dataset.i)]));
+            });
+        } catch (e) {
+            results.innerHTML = '<div class="empty">Qidiruvda xatolik</div>';
         }
     }
 
-    file.addEventListener('change', () => setFile(file.files[0]));
-
-    ['dragenter', 'dragover'].forEach(e => drop.addEventListener(e, ev => {
-        ev.preventDefault(); drop.classList.add('over');
-    }));
-    ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => {
-        ev.preventDefault(); drop.classList.remove('over');
-    }));
-    drop.addEventListener('drop', ev => {
-        const f = ev.dataTransfer?.files?.[0];
-        if (f) { file.files = ev.dataTransfer.files; setFile(f); }
+    if (search) {
+        search.addEventListener('input', () => {
+            clearTimeout(timer);
+            const q = search.value.trim();
+            if (q.length < 1) { results.hidden = true; return; }
+            timer = setTimeout(() => doSearch(q), 250);
+        });
+        search.addEventListener('focus', () => {
+            if (search.value.trim().length >= 1 && (!picked)) doSearch(search.value.trim());
+        });
+    }
+    document.addEventListener('click', (e) => {
+        if (results && !e.target.closest('#srcPick')) results.hidden = true;
     });
 
-    // --- uzunlikni tekshirish (video o'qilgach)
-    preview.addEventListener('loadedmetadata', () => {
-        const d = preview.duration;
-        if (isFinite(d) && d > MAXLEN) {
-            showMsg('Video ' + d.toFixed(0) + ' soniya, lekin ko‘pi bilan ' + MAXLEN + ' soniya', 'err');
-        }
-    });
-
-    // --- yuborish
-    form.addEventListener('submit', function (ev) {
+    // ---------------------------------------------------- yuborish
+    form.addEventListener('submit', async function (ev) {
         ev.preventDefault();
-        if (!file.files[0]) { showMsg('Avval video tanlang', 'err'); return; }
-
         submit.disabled = true;
-        submit.textContent = '⏳ Yuborilmoqda…';
-        prog.hidden = false;
-        fill.style.width = '0%';
+        submit.textContent = '⏳ Tayyorlanmoqda…';
+        showMsg('Reel tayyorlanmoqda…', '');
 
-        // XMLHttpRequest (Fetch API yuklash progress'ini bermaydi)
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', 'api/reel-upload.php');
-        xhr.upload.onprogress = function (e) {
-            if (e.lengthComputable) {
-                const pct = Math.round(e.loaded / e.total * 100);
-                fill.style.width = pct + '%';
-                ptext.textContent = pct + '%';
-            }
-        };
-        xhr.onload = function () {
-            let d = {};
-            try { d = JSON.parse(xhr.responseText); } catch (e) {}
-            submit.disabled = false;
-            submit.textContent = 'Yuborish';
-            if (xhr.status >= 200 && xhr.status < 300 && d.success) {
-                showMsg(d.message || 'Yuborildi!', 'ok');
-                ptext.textContent = 'Tayyor';
-                fill.style.width = '100%';
-                setTimeout(() => { location.href = 'reels.php'; }, 1400);
-            } else {
-                prog.hidden = true;
-                submit.disabled = false;
-                showMsg(d.message || ('Xato ' + xhr.status), 'err');
-            }
-        };
-        xhr.onerror = function () {
-            prog.hidden = true;
-            submit.disabled = false;
-            submit.textContent = 'Yuborish';
-            showMsg('Tarmoq uzildi', 'err');
-        };
-        // Telegram identifikatorini ham yuboramiz — server foydalanuvchini
-        // shundan topadi/yaratadi (PHP sessiya bo'lmagani uchun).
-        const fd = new FormData(form);
+        const fd = new FormData();
+        fd.append('title', title ? title.value : '');
+        fd.append('description', desc ? desc.value : '');
+        fd.append('content_id', cidEl.value || '');
         try {
             const me = localStorage.getItem('wc_tg_me_v1');
             if (me) fd.append('tg_me', me);
         } catch (e) {}
-        xhr.send(fd);
+
+        try {
+            const res = await fetch('api/reel-intent.php', { method: 'POST', body: fd });
+            const d = await res.json();
+            if (!res.ok || !d.success || !d.bot_link) {
+                throw new Error(d.message || ('Xato ' + res.status));
+            }
+            showMsg('✅ ' + (d.message || 'Botga o‘tasiz…'), 'ok');
+            submit.textContent = '✅ Telegram ochilmoqda…';
+            // Botni ochamiz - foydalanuvchi videoni shu yerda yuboradi.
+            setTimeout(() => { location.href = d.bot_link; }, 700);
+        } catch (e) {
+            submit.disabled = false;
+            submit.textContent = '📨 Telegram orqali yuborish';
+            showMsg('❌ ' + e.message, 'err');
+        }
     });
 })();
 </script>

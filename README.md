@@ -44,8 +44,14 @@ Rad etilgan reel stream `403` qaytaradi; muallif va admin o'z ko'rallarini
 ko'ra oladi.
 
 **Endpointlar:** `api/reels.php` (feed/like/view/delete/mine),
-`api/reel-create.php` (clip), `api/reel-upload.php` (fayl),
-`api/reel-moderate.php` (admin), `api/reel-authors.php` (reklamachilar).
+`api/reel-create.php` (clip), `api/reel-intent.php` (Telegram kanalga
+yuborish), `api/reel-moderate.php` (admin), `api/reel-authors.php`
+(reklamachilar).
+
+**Muhim:** endi serverga video/rasm FAYLI yuklanmaydi. Foydalanuvchi reelsni
+Telegram botga yuboradi, bot uni `REELS_CHANNEL` kanaliga joylaydi, sayt esa
+faqat kanal postini (`t.me/...`) o'qiydi. `api/reel-upload.php` va
+`api/content-upload.php` ataylab o'chirilgan (410).
 
 Limitlar: `REEL_MAX_UPLOAD_MB` (50), `REEL_MIN/MAX_LENGTH` (3–90 s), hajm
 `min(post_max_size, upload_max_filesize, REEL_MAX_UPLOAD_MB)` = amaliy chegara
@@ -112,16 +118,19 @@ Demo login faqat `localhost` + `ALLOW_DEMO_LOGIN=1` (+ Host tekshiruvi bilan).
 1. **Apache + PHP 8.x + MySQL** (XAMPP). php.ini'da:
    `post_max_size=256M`, `upload_max_filesize=256M`, `max_input_time=300`.
 2. DB import: `database.sql` (asos), `migrate.sql` + `migrate-reels.sql`
-   (yangilanishlar uchun).
+   + `migrate-reels-telegram.sql` (yangilanishlar uchun).
 3. `.env` (repo'ga yozilmaydi, `.gitignore` da):
    ```env
    TELEGRAM_BOT_TOKEN=...
    ADMIN_TELEGRAM_IDS=999111003
    REEL_MAX_UPLOAD_MB=50
    REELS_REQUIRE_APPROVAL=1
+   REELS_CHANNEL=@your_public_reels_channel
    ALLOW_DEMO_LOGIN=1
    APP_DEBUG=1
    ```
+   > `REELS_CHANNEL` — ommaviy Telegram kanal. Bot (`@...`) shu kanalga
+   > **admin** qilib qo'shilishi va **Post Messages** huquqi bo'lishi shart.
 4. Tunnel (Mini App HTTPS talab qiladi): `start-tunnel.bat` →
    BotFather'da `/setmenubutton` ga yangi URL bering.
 5. Telegram'da botga **`/start`** yuboring (428 need_start holatini yo'q qiladi).
@@ -159,10 +168,11 @@ tele_uzdub/
 │   ├── stream.php           # Range video oqimi
 │   ├── telegram-save.php    # Qismni chat'ga (POST) / holat (GET)
 │   ├── content-admin.php    # ★ Kontent CRUD (admin)
-│   ├── content-upload.php   # ★ Video yuklash uploads/videos (admin)
+│   ├── content-upload.php   # O'CHIRILGAN (fayl yuklash yo'q, 410)
 │   ├── reels.php            # Reels feed/action
 │   ├── reel-create.php      # Clip yaratish (episode kesish)
-│   ├── reel-upload.php      # Reels fayl yuklash (413 katta fayl)
+│   ├── reel-intent.php      # Telegram kanalga yuborishni boshlash
+│   ├── reel-upload.php      # O'CHIRILGAN (fayl yuklash yo'q, 410)
 │   ├── reel-moderate.php    # Reels moderatsiya (admin)
 │   └── reel-authors.php     # Reklamachi reytingi
 ├── assets/
@@ -186,6 +196,7 @@ tele_uzdub/
 | `TELEGRAM_MAX_UPLOAD` | Bot API yuklash (50 MB) | 50 MB |
 | `REEL_MAX_UPLOAD_MB` | Reels fayl chegarasi | 50 |
 | `REELS_REQUIRE_APPROVAL` | Tasdiqlashsiz oqimda ko'rinmasin | `1` |
+| `REELS_CHANNEL` | Reels saqlanadigan ommaviy Telegram kanal | `@...` |
 | `CONTENT_MAX_UPLOAD_MB` | Kino video chegarasi | 200 |
 | `REEL_MIN_LENGTH` / `REEL_MAX_LENGTH` | Clip uzunligi | 3 / 90 s |
 

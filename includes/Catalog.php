@@ -83,10 +83,19 @@ class Catalog {
             $params[] = (int) $opt['genre_id'];
         }
         if (!empty($opt['search'])) {
-            $where[] = '(c.title LIKE ? OR c.description LIKE ?)';
             $like = '%' . $opt['search'] . '%';
-            $params[] = $like;
-            $params[] = $like;
+            // Raqamli qidiruv = ID bo'yicha ham (foydalanuvchi "12" deb
+            // yozsa, 12-ID li kontent ham topiladi).
+            if (ctype_digit(trim((string) $opt['search']))) {
+                $where[] = '(c.title LIKE ? OR c.description LIKE ? OR c.id = ?)';
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = (int) $opt['search'];
+            } else {
+                $where[] = '(c.title LIKE ? OR c.description LIKE ?)';
+                $params[] = $like;
+                $params[] = $like;
+            }
         }
         if (isset($opt['is_series'])) {
             $where[] = 'c.is_series = ?';
@@ -123,10 +132,17 @@ class Catalog {
             $params[] = (int) $opt['genre_id'];
         }
         if (!empty($opt['search'])) {
-            $where[] = '(c.title LIKE ? OR c.description LIKE ?)';
             $like = '%' . $opt['search'] . '%';
-            $params[] = $like;
-            $params[] = $like;
+            if (ctype_digit(trim((string) $opt['search']))) {
+                $where[] = '(c.title LIKE ? OR c.description LIKE ? OR c.id = ?)';
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = (int) $opt['search'];
+            } else {
+                $where[] = '(c.title LIKE ? OR c.description LIKE ?)';
+                $params[] = $like;
+                $params[] = $like;
+            }
         }
 
         $row = $this->db()->fetchOne(

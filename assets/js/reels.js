@@ -73,6 +73,16 @@
         } else if (pb.type === 'embed') {
             media = `<iframe src="${esc(pb.url)}" allow="autoplay; fullscreen; encrypted-media"
                             allowfullscreen referrerpolicy="origin" title="reel"></iframe>`;
+        } else if (pb.type === 'telegram') {
+            // Telegram kanalidagi post. TgStream videoni to'g'ridan-to'g'ri
+            // Telegram'dan o'qiydi - sayt serveriga yuk tushmaydi. Mount
+            // faqat aktiv slayd uchun qilinadi (bitta oqim).
+            media = `<div class="reels-tg"
+                         data-channel="${esc(pb.channel || '')}"
+                         data-post="${Number(pb.post) || 0}"
+                         data-url="${esc(pb.url || '')}"
+                         data-deep="${esc(pb.deep || '')}"
+                         data-poster="${esc(pb.poster || '')}"></div>`;
         } else {
             media = `<div class="reels-warn">
                         <div style="font-size:40px">🚫</div>
@@ -212,11 +222,27 @@
     }
 
     // ================================================================ oqim
+    function mountTg(i) {
+        const el = state.slideEls[i];
+        if (!el) return;
+        const box = el.querySelector('.reels-tg');
+        if (!box || box.dataset.mounted === '1') return;
+        if (!window.TgStream) return;
+        box.dataset.mounted = '1';
+        window.TgStream.mount(box, {
+            channel: box.dataset.channel || '',
+            post:    Number(box.dataset.post) || 0,
+            url:     box.dataset.url || '',
+            deep:    box.dataset.deep || '',
+            poster:  box.dataset.poster || ''
+        });
+    }
+
     function playAt(i) {
         const el = state.slideEls[i];
         if (!el) return;
         const v = el.querySelector('video');
-        if (!v) return;
+        if (!v) { mountTg(i); return; }
         // Avval to'g'rilash (clip bo'lsa)
         const pb = (state.items[i] || {}).playback || {};
         if (pb.start > 0 && Math.abs(v.currentTime - pb.start) > 2) {
@@ -230,6 +256,12 @@
             if (i === except) return;
             const v = el.querySelector('video');
             if (v && !v.paused) v.pause();
+            const tg = el.querySelector('.reels-tg');
+            if (tg && tg.dataset.mounted === '1' && window.TgStream) {
+                try { window.TgStream.stop(); } catch (e) {}
+                tg.dataset.mounted = '';
+                tg.innerHTML = '';
+            }
         });
     }
 

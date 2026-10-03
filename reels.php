@@ -89,6 +89,14 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
 </div>
 
 <script>
+    // tg-stream.js uchun (Telegram kanalidagi reelslarni o'ynatish).
+    window.APP = window.APP || {
+        base: <?php echo json_encode(rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\')); ?>,
+        tg: {
+            apiId:   <?php echo (int) TG_API_ID; ?>,
+            apiHash: <?php echo json_encode((string) TG_API_HASH); ?>
+        }
+    };
     window.REELS = {
         userId: <?php echo $userId ? (int) $userId : 'null'; ?>,
         userName: <?php echo json_encode($user['first_name'] ?? null); ?>,
@@ -101,6 +109,11 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
         isAdmin: <?php echo $auth->isAdmin() ? 'true' : 'false'; ?>
     };
 </script>
-<script src="assets/js/reels.js"></script>
+<script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
+<script src="assets/js/reels.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/reels.js') ?: 1; ?>"></script>
+<script>
+    // Kanal postidan oqim uchun Service Worker'ni tayyorlaymiz.
+    if (window.TgStream) { try { window.TgStream.init(); } catch (e) {} }
+</script>
 </body>
 </html>
