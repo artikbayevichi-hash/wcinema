@@ -170,7 +170,42 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         'country'      => input('country', '', 100) ?: null,
         'language'     => input('language', '', 50) ?: null,
         'status'       => $status,
+        'total_episodes' => max(0, inputInt('total_episodes')),
     ];
+
+    // Poster bo'sh bo'lsa — video URL (t.me post) dan avtomatik olamiz.
+    // Shu bilan admin faqat Telegram havolasini kiritadi, rasm o'zi olinadi.
+    $posterFromUrl = static function ($url) {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+        if (!preg_match('#(^|\.)(t\.me|telegram\.me)$#i', (string) parse_url($url, PHP_URL_HOST))) {
+            return null;
+        }
+        return (new TgResolve())->downloadImage($url);
+    };
+    if (empty($fields['poster'])) {
+        $srcUrl = trim(input('first_episode_url', '', 1000));
+        if ($srcUrl === '' && $action === 'update_content') {
+            $cid0 = inputInt('id');
+            if ($cid0 > 0) {
+                $ep = $db->fetchOne(
+                    "SELECT video_url FROM episodes
+                      WHERE content_id = ? AND video_url LIKE '%t.me%'
+                      ORDER BY season ASC, episode_number ASC LIMIT 1",
+                    [$cid0]
+                );
+                if ($ep) {
+                    $srcUrl = (string) $ep['video_url'];
+                }
+            }
+        }
+        $autoPoster = $posterFromUrl($srcUrl);
+        if ($autoPoster) {
+            $fields['poster'] = $autoPoster;
+        }
+    }
 
     // t.me post havolasi poster bo'lsa — rasmini serverga yuklab olib,
     // doimiy ko'rinadigan qilamiz (vazifasi muvaffaqiyatsiz bo'lsa, asl
@@ -189,6 +224,21 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         $id = $db->insert('content', $fields);
         if (!$id) {
             fail('Bazaga saqlab bo‘lmadi', 500);
+        }
+        // Kino/Multfilm: nom va video URL shu yerda kiritiladi — 1-qism
+        // sifatida darhol saqlaymiz. Anime/Serial'da esa video keyin
+        // qismlar bo'limida qo'shiladi (bu maydon bo'sh keladi).
+        $firstUrl = trim(input('first_episode_url', '', 1000));
+        if ($firstUrl !== '') {
+            $db->insert('episodes', [
+                'content_id'     => (int) $id,
+                'season'         => 1,
+                'episode_number' => 1,
+                'title'          => '1-qism',
+                'video_type'     => 'direct',
+                'video_url'      => $firstUrl,
+                'duration'       => max(0, inputInt('first_episode_duration')) ?: null,
+            ]);
         }
         contentOk('Kontent yaratildi', ['id' => $id]);
     } else {

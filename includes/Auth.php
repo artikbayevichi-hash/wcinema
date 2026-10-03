@@ -486,11 +486,62 @@ class Auth {
      * kirib, o'zgalar reel'ini tasdiqlab bo'lardi.
      */
     public function isAdmin() {
+        // Admin panel kaliti bilan kirilgan bo'lsa (sessiya bayrog'i).
+        if (!empty($_SESSION['wc_admin_ok'])) {
+            return true;
+        }
         $u = $this->getCurrentUser();
         if (!$u || empty($u['telegram_user_id'])) {
             return false;
         }
         return in_array((string) $u['telegram_user_id'], ADMIN_TELEGRAM_IDS, true);
+    }
+
+    /**
+     * Admin panelga KALIT (parol) orqali kirish.
+     *
+     * Nima uchun kerak: sayt brauzerdagi MTProto orqali ishlaydi va
+     * serverda PHP sessiyasi bo'lmaydi, shuning uchun `isAdmin()` hech
+     * qachon true bo'lmasdi. Endi config'dagi `ADMIN_PANEL_KEY` to'g'ri
+     * kiritilsa, sessiyaga bayroq qo'yiladi (kalit o'zi SAQLANMAYDI).
+     */
+    public function adminKeyLogin($key) {
+        $key = (string) $key;
+        if ($key === '' || !defined('ADMIN_PANEL_KEY') || ADMIN_PANEL_KEY === '') {
+            return false;
+        }
+        if (!hash_equals((string) ADMIN_PANEL_KEY, $key)) {
+            return false;
+        }
+        if (session_status() === PHP_SESSION_ACTIVE && !headers_sent($file, $line)) {
+            session_regenerate_id(true);
+            unset($file, $line);
+        }
+        $_SESSION['wc_admin_ok'] = true;
+        return true;
+    }
+
+    /**
+     * Brauzer yuborgan Telegram ma'lumotlaridan foydalanuvchini
+     * topadi yoki yaratadi (MTProto, server imzoni tekshira olmaydi).
+     *
+     * Bu FAQAT reels yuklash kabi "kontent qo'shish" amallari uchun;
+     * admin huquqini BERMAYDI. Yuklangan narsa baribir moderatsiyadan
+     * (status 0) o'tadi.
+     *
+     * @return int foydalanuvchi ID'si yoki 0
+     */
+    public function ensureUserFromClient(array $tg) {
+        $id = trim((string) ($tg['id'] ?? ''));
+        if ($id === '' || !ctype_digit($id)) {
+            return 0;
+        }
+        return (int) $this->upsertUser([
+            'id'         => $id,
+            'first_name' => $tg['first_name'] ?? $tg['firstName'] ?? 'User',
+            'last_name'  => $tg['last_name']  ?? $tg['lastName']  ?? '',
+            'username'   => $tg['username']   ?? '',
+        ]);
     }
 
     /** Admin bo'lmasa 403 bilan to'xtaydi (API uchun). */

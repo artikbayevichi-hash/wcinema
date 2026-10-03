@@ -45,6 +45,8 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES); ?></title>
@@ -93,45 +95,33 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <!-- Instagram uslubidagi navigatsiya (desktop yon panel / mobil pastki panel) -->
 <?php $NAV_ACTIVE = 'home'; require __DIR__ . '/includes/nav.php'; ?>
 
-<!-- ===================================================== Qidiruv + filtrlar -->
-<div class="filters">
-    <div class="search-box">
-        <input id="searchInput" type="search" placeholder="Kino, anime, multfilm qidiring…" autocomplete="off">
-        <button class="clear-btn" id="searchClear" hidden aria-label="Tozalash">✕</button>
-    </div>
-    <div class="chips" id="catChips"></div>
-    <div class="chips" id="sortChips">
-        <button class="chip active" data-sort="new">🆕 Yangi</button>
-        <button class="chip" data-sort="popular">🔥 Mashhur</button>
-        <button class="chip" data-sort="rating">⭐ Reyting</button>
-        <button class="chip" data-sort="az">🔤 A–Z</button>
-    </div>
-</div>
+<!-- Filtr paneli olib tashlandi: qidiruv chap paneldagi "Qidiruv" tugmasi orqali
+     alohida oynada ochiladi (includes/nav.php #igSearch). -->
 
-<div class="loading" id="loading" hidden><span class="spinner"></span> Yuklanmoqda…</div>
+<div class="loading" id="loading" hidden><span class="spinner"></span></div>
 
 <main>
     <!-- ================================================= Bosh sahifa -->
     <section id="homeView">
         <div class="row" id="continueRow" hidden>
-            <h2 class="row-title">▶️ Davom etish</h2>
+            <h2 class="row-title">Davom etish</h2>
             <div class="grid" id="continueGrid"></div>
         </div>
 
         <div class="row">
-            <h2 class="row-title">🔥 Trending</h2>
+            <h2 class="row-title">Trending</h2>
             <div class="grid" id="trendingGrid"></div>
         </div>
 
         <div class="row">
-            <h2 class="row-title">🆕 Yangi qo‘shilganlar</h2>
+            <h2 class="row-title">Yangi qo‘shilganlar</h2>
             <div class="grid" id="newGrid"></div>
         </div>
 
         <div id="catRows"></div>
 
         <div class="more-wrap">
-            <button class="btn-more" id="goCatalog">📚 Butun katalogni ko‘rish</button>
+            <button class="btn-more" id="goCatalog">Butun katalogni ko‘rish</button>
         </div>
     </section>
 
@@ -145,6 +135,20 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
         </div>
     </section>
 </main>
+
+<!-- "Davom etish" (o'ng pastda) — oxirgi ko'rilgan kontentni davom ettirish.
+     app.js tomonidan mahalliy kutubxona (WCLib) yoki server "continue"
+     ro'yxatidan to'ldiriladi. Yopilsa, o'sha element uchun yashiriladi. -->
+<div class="cont-float" id="continueFloat" hidden>
+    <a class="cont-float-link" id="contFloatLink" href="#">
+        <span class="cont-float-poster" id="contFloatPoster"></span>
+        <span class="cont-float-body">
+            <span class="cont-float-label">Davom etish</span>
+            <span class="cont-float-title" id="contFloatTitle"></span>
+        </span>
+    </a>
+    <button class="cont-float-x" id="contFloatClose" type="button" aria-label="Yopish">&times;</button>
+</div>
 
 <footer class="foot">
     <p><?php echo htmlspecialchars(SITE_NAME); ?> · <?php echo (int) $stats['content']; ?> kontent ·
@@ -198,6 +202,7 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <script src="assets/js/reels.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/reels.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
+<script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
 <script src="assets/js/app.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/app.js') ?: 1; ?>"></script>
 <script>
     // Telegram CDN player — Service Worker'ni DARHOL o'rnatamiz.
@@ -224,6 +229,10 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
                 }
             });
         }
+
+        // Hover-preview uchun Service Worker'ni oldindan tayyorlaymiz
+        // (reload qilmaydi): sichqoncha ustiga kelganda video kutmasin.
+        if (window.TgStream && window.TgStream.warm) window.TgStream.warm();
 
         // "Butun katalogni ko'rish" - app.js ga alohida hodisa beriladi
         var b = document.getElementById('goCatalog');

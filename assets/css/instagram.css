@@ -31,9 +31,21 @@
     color: var(--text); text-decoration: none;
 }
 .ig-logo { font-size: 30px; line-height: 1; }
+img.ig-logo {
+    width: 32px; height: 32px;
+    object-fit: contain;
+    display: block;
+    flex: 0 0 auto;
+}
 .ig-brand-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.ig-nav { display: flex; flex-direction: column; gap: 2px; }
+.ig-nav {
+    display: flex; flex-direction: column; gap: 2px;
+    flex: 1; min-height: 0;
+    overflow: hidden;
+}
+.ig-group { display: flex; flex-direction: column; gap: 2px; }
+.ig-sep { height: 1px; background: var(--line); margin: 8px 6px; flex: 0 0 auto; }
 
 .ig-item {
     display: flex; align-items: center; gap: 14px;
@@ -55,7 +67,35 @@
     font-size: 23px; line-height: 1;
     flex: 0 0 auto;
 }
+/* YouTube uslubidagi kontur ikonka: default oq kontur, ichi bo'sh.
+   Aktiv bandda ichi oq bo'lib to'ladi. */
+.ig-svg {
+    width: 24px; height: 24px;
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: fill .12s ease;
+}
+.ig-item.active .ig-svg { fill: currentColor; }
 .ig-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Kutubxona (ochiladigan bo'lim) */
+.ig-lib-toggle { position: relative; }
+.ig-caret {
+    margin-left: auto; font-size: 11px; color: var(--muted);
+    transition: transform .2s ease; flex: 0 0 auto;
+}
+.ig-lib-toggle.open .ig-caret { transform: rotate(180deg); }
+.ig-sub { display: flex; flex-direction: column; gap: 1px; padding: 1px 0 1px 14px; }
+.ig-sub[hidden] { display: none; }
+.ig-sub .ig-item { padding: 8px 12px; font-size: 14px; }
+.ig-sub .ig-ico { width: 24px; height: 24px; font-size: 19px; }
+.ig-sub .ig-svg { width: 21px; height: 21px; stroke-width: 1.8; }
+
+.ig-item.active { background: var(--card); }
 
 .ig-avatar {
     width: 24px; height: 24px; border-radius: 50%;
@@ -149,32 +189,10 @@
 .ig-toggle { flex: 0 0 auto; }
 
 /* ==========================================================================
-   Yon panelni yig'ish (Instagram uslubi): bosilganda faqat ikonkalar qoladi
+   Yon panel: hover/fokusda ochiladi (YouTube "mini guide" uslubi)
    ========================================================================== */
-.ig-side { transition: width .22s ease; }
-body.ig-shell { transition: padding-left .22s ease; }
-body.ig-collapsed { --ig-side-w: 76px; }
-body.ig-collapsed .ig-side { padding: 12px 10px 10px; }
-
-body.ig-collapsed .ig-brand {
-    justify-content: center;
-    padding: 10px 0 18px;
-    gap: 0;
-}
-body.ig-collapsed .ig-brand-text,
-body.ig-collapsed .ig-txt,
-body.ig-collapsed .ig-side-foot {
-    display: none;
-}
-body.ig-collapsed .ig-item {
-    justify-content: center;
-    padding: 10px;
-    gap: 0;
-}
-body.ig-collapsed .ig-more-menu {
-    left: 50%;
-    transform: translateX(-50%);
-}
+.ig-side { transition: width .2s ease, box-shadow .2s ease; }
+body.ig-shell { transition: padding-left .2s ease; }
 
 /* ==========================================================================
    TELEFON: yuqori panel (brand + bildirishnomalar)
@@ -205,6 +223,7 @@ body.ig-collapsed .ig-more-menu {
     display: flex; align-items: center; justify-content: center;
     font-size: 20px; border-radius: 50%;
 }
+.ig-mobar-btn .ig-svg { width: 23px; height: 23px; }
 
 /* ==========================================================================
    TELEFON: pastki panel (Home | Qidiruv | Reels | ＋ | Profil)
@@ -236,16 +255,52 @@ body.ig-collapsed .ig-more-menu {
     background: var(--accent);
 }
 .ig-tabbar a.ig-tab-create { font-size: 25px; }
+.ig-tabbar .ig-svg { width: 25px; height: 25px; }
+.ig-tabbar a.active .ig-svg { fill: currentColor; }
+.ig-tabbar a.ig-tab-create .ig-svg { width: 28px; height: 28px; stroke-width: 2.1; }
 
 /* ==========================================================================
    Responsive sozlash
    ========================================================================== */
 @media (min-width: 1000px) {
-    .ig-side { display: flex; }
+    /* Yig'ilgan holat: faqat ikonkalar (YouTube mini guide) */
+    .ig-side { display: flex; width: 76px; overflow: visible; }
     .ig-mobar, .ig-tabbar { display: none; }
 
-    /* Tarkib yon paneldan o'ngga siljiydi */
-    body.ig-shell { padding-left: var(--ig-side-w); padding-bottom: 24px; }
+    /* Tarkib yig'ilgan kenglikka moslashadi — ochilganda panel ustidan chiqadi */
+    body.ig-shell { padding-left: 76px; padding-bottom: 24px; }
+
+    .ig-side .ig-brand-text,
+    .ig-side .ig-txt,
+    .ig-side .ig-caret,
+    .ig-side .ig-side-foot,
+    .ig-side .ig-tg-status { display: none; }
+    .ig-side .ig-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+    .ig-side .ig-item { justify-content: center; }
+    .ig-sub { display: none; }
+
+    /* Sichqoncha yoki fokus panelga kirsa — kengayadi */
+    .ig-side:hover,
+    .ig-side:focus-within {
+        width: 244px;
+        box-shadow: 8px 0 28px rgba(0, 0, 0, .45);
+    }
+    .ig-side:hover .ig-brand-text,
+    .ig-side:focus-within .ig-brand-text,
+    .ig-side:hover .ig-txt,
+    .ig-side:focus-within .ig-txt { display: inline; }
+    .ig-side:hover .ig-caret,
+    .ig-side:focus-within .ig-caret { display: inline; }
+    .ig-side:hover .ig-tg-status,
+    .ig-side:focus-within .ig-tg-status { display: flex; }
+    .ig-side:hover .ig-side-foot,
+    .ig-side:focus-within .ig-side-foot { display: flex; }
+    .ig-side:hover .ig-brand,
+    .ig-side:focus-within .ig-brand { justify-content: flex-start; }
+    .ig-side:hover .ig-item,
+    .ig-side:focus-within .ig-item { justify-content: flex-start; }
+    .ig-side:hover .ig-sub:not([hidden]),
+    .ig-side:focus-within .ig-sub:not([hidden]) { display: flex; }
 
     /* Sahifalar: sticky elementlar yon panel ichiga tushmasin */
     body.ig-shell .filters { top: 0; }
@@ -254,9 +309,9 @@ body.ig-collapsed .ig-more-menu {
     body.ig-shell .up-top { top: 0; }
 
     /* Reels to'liq ekran: yon paneldan keyin boshlanadi */
-    body.reels-body.ig-shell { padding-left: var(--ig-side-w); }
-    body.reels-body.ig-shell .reels-top { left: var(--ig-side-w); }
-    body.reels-body.ig-shell .reels-meta { left: calc(var(--ig-side-w) + 14px); }
+    body.reels-body.ig-shell { padding-left: 76px; }
+    body.reels-body.ig-shell .reels-top { left: 76px; }
+    body.reels-body.ig-shell .reels-meta { left: calc(76px + 14px); }
 }
 
 @media (max-width: 999px) {
@@ -363,4 +418,250 @@ body.ig-collapsed .ig-more-menu {
     background: linear-gradient(transparent, rgba(0, 0, 0, .72));
     font-size: 11px; font-weight: 600; color: #fff;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ==========================================================================
+   TV REJIMI (10-foot UI) — <html class="tv">
+   --------------------------------------------------------------------------
+   Katta ekran / televizor uchun: yon panel doim ochiq, katta kartalar,
+   gorizontal qatorlar ("shelflar") va pult uchun fokus ramkasi.
+   ========================================================================== */
+html.tv { font-size: 18px; }
+
+@media (min-width: 1000px) {
+    html.tv .ig-mobar,
+    html.tv .ig-tabbar { display: none !important; }
+
+    /* TV'da yon panel HAR DOIM to'liq ochiq (hover talab qilinmaydi) */
+    html.tv .ig-side { width: 244px !important; box-shadow: none; }
+    html.tv .ig-side .ig-brand-text,
+    html.tv .ig-side .ig-txt,
+    html.tv .ig-side .ig-caret { display: inline !important; }
+    html.tv .ig-side .ig-tg-status { display: flex !important; }
+    html.tv .ig-side .ig-side-foot { display: flex !important; }
+    html.tv .ig-side .ig-item { justify-content: flex-start !important; }
+    html.tv .ig-side .ig-brand { justify-content: flex-start !important; }
+    html.tv .ig-side .ig-sub:not([hidden]) { display: flex !important; }
+    html.tv body.ig-shell { padding-left: 244px; }
+    html.tv body.reels-body.ig-shell .reels-top { left: 244px; }
+    html.tv body.reels-body.ig-shell .reels-meta { left: calc(244px + 14px); }
+}
+
+/* Katta filtrlar va sarlavhalar */
+html.tv .filters { padding: 20px 34px 8px; }
+html.tv .chip { font-size: 16px; padding: 10px 18px; border-radius: 12px; }
+html.tv .row { margin-bottom: 34px; }
+html.tv .row-title { font-size: 24px; padding: 16px 34px 12px; }
+
+/* Gorizontal qatorlar (shelflar) */
+html.tv .row .grid {
+    display: flex; flex-wrap: nowrap;
+    overflow-x: auto; overflow-y: hidden;
+    gap: 22px;
+    padding: 8px 34px 18px;
+    /* Pultda lahzali siljish - fokus doim ko'rinib turadi */
+    scroll-behavior: auto;
+    scrollbar-width: none;
+}
+html.tv .row .grid::-webkit-scrollbar { display: none; }
+html.tv .yt-card { flex: 0 0 360px; max-width: 360px; }
+html.tv .yt-thumb { border-radius: 14px; }
+html.tv .yt-title { font-size: 17px; }
+html.tv .yt-meta,
+html.tv .yt-sub { font-size: 13.5px; }
+html.tv .yt-av { width: 42px; height: 42px; font-size: 21px; }
+
+/* Pult uchun fokus ramkasi */
+html.tv :focus { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 10px; }
+html.tv .yt-card:focus { outline: none; }
+html.tv .yt-card:focus .yt-thumb { box-shadow: 0 0 0 4px var(--accent); }
+html.tv .ig-item:focus { background: var(--card); }
+html.tv .ig-svg { width: 27px; height: 27px; stroke-width: 2; }
+html.tv .ig-ico { width: 30px; height: 30px; }
+
+/* ==========================================================================
+   Alohida qidiruv oynasi — chap paneldagi "Qidiruv" orqali ochiladi
+   ========================================================================== */
+.ig-search {
+    position: fixed; inset: 0; z-index: 300;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+}
+.ig-search[hidden] { display: none; }
+.ig-search-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+.ig-search-ico { color: var(--muted); display: flex; flex: 0 0 auto; }
+.ig-search-ico .ig-svg { width: 22px; height: 22px; }
+.ig-search-bar input {
+    flex: 1; min-width: 0;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 12px 18px;
+    color: var(--text); font-size: 16px; font-family: inherit;
+    outline: none;
+}
+.ig-search-bar input:focus { border-color: var(--accent); }
+.ig-search-close {
+    width: 42px; height: 42px; flex: 0 0 auto;
+    border-radius: 50%; border: none; background: none;
+    color: var(--text); font-size: 22px; cursor: pointer;
+}
+.ig-search-close:hover { background: var(--card); }
+.ig-search-body { flex: 1; overflow: auto; padding: 18px 18px 50px; }
+.ig-search-hint {
+    color: var(--muted); text-align: center;
+    padding: 46px 12px; font-size: 15px;
+}
+.ig-search-grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+.ig-sres {
+    display: block; text-decoration: none; color: var(--text);
+    text-align: left; font-family: inherit; cursor: pointer;
+}
+.ig-sres-thumb {
+    position: relative; aspect-ratio: 16 / 10;
+    border-radius: 12px; overflow: hidden; background: var(--card);
+}
+.ig-sres-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ig-sres-ph {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-weight: 700; font-size: 15px;
+    padding: 8px; text-align: center;
+}
+.ig-sres-title {
+    margin-top: 9px; font-size: 14px; font-weight: 600; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.ig-sres-sub { margin-top: 3px; font-size: 12px; color: var(--muted); }
+.ig-sres:hover .ig-sres-thumb { box-shadow: 0 0 0 2px var(--accent); }
+
+@media (max-width: 999px) {
+    .ig-search-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+}
+
+/* ==========================================================================
+   Sozlamalar oynasi (alohida) — chap paneldagi "Sozlamalar" tugmasi ochadi
+   ========================================================================== */
+.ig-settings {
+    position: fixed; inset: 0; z-index: 320;
+    background: rgba(0, 0, 0, .6);
+    display: flex; justify-content: flex-end;
+}
+.ig-settings[hidden] { display: none; }
+.ig-settings-panel {
+    width: min(420px, 100%);
+    height: 100%;
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    animation: igSetIn .18s ease;
+}
+@keyframes igSetIn {
+    from { transform: translateX(24px); opacity: .4; }
+    to   { transform: translateX(0); opacity: 1; }
+}
+.ig-set-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+.ig-set-title { font-size: 19px; font-weight: 700; }
+.ig-set-close {
+    width: 42px; height: 42px;
+    border-radius: 50%; border: none; background: none;
+    color: var(--text); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.ig-set-close:hover { background: var(--card); }
+.ig-set-close .ig-svg { width: 22px; height: 22px; }
+.ig-set-body { flex: 1; overflow: auto; padding: 8px 8px 40px; }
+.ig-set-group { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.ig-set-group:last-child { border-bottom: none; }
+.ig-set-label {
+    padding: 6px 14px 8px;
+    font-size: 12px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted);
+}
+.ig-set-row {
+    display: flex; align-items: center; gap: 14px;
+    width: 100%;
+    padding: 11px 14px;
+    border: none; background: none;
+    border-radius: 10px;
+    color: var(--text); font-family: inherit; font-size: 15px;
+    text-decoration: none; text-align: left; cursor: pointer;
+}
+.ig-set-row:hover { background: var(--card-2); }
+.ig-set-ico { display: flex; flex: 0 0 auto; color: var(--text); }
+.ig-set-ico .ig-svg { width: 22px; height: 22px; }
+.ig-set-txt { flex: 1; min-width: 0; }
+.ig-set-arrow { color: var(--muted); font-size: 20px; line-height: 1; }
+.ig-set-val { color: var(--muted); font-size: 13px; }
+.ig-set-row.danger { color: #ff6b6b; }
+.ig-set-row.danger .ig-set-ico { color: #ff6b6b; }
+
+@media (max-width: 999px) {
+    .ig-settings-panel { width: 100%; border-left: none; }
+}
+
+/* ==========================================================================
+   "Davom etish" kartochkasi (o'ng pastda) — app.js tomonidan to'ldiriladi
+   ========================================================================== */
+.cont-float {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 60;
+    max-width: 320px;
+}
+.cont-float[hidden] { display: none; }
+.cont-float-link {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px 8px 8px;
+    border-radius: 14px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    color: var(--text); text-decoration: none;
+    transition: transform .12s ease, background .12s ease;
+}
+.cont-float-link:hover { transform: translateY(-2px); background: var(--card-2); }
+.cont-float-poster {
+    width: 56px; height: 42px; border-radius: 9px; overflow: hidden;
+    flex: 0 0 auto; background: var(--card-2);
+    display: flex; align-items: center; justify-content: center;
+}
+.cont-float-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cont-float-ph { font-size: 22px; }
+.cont-float-body { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.cont-float-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted);
+}
+.cont-float-title {
+    font-size: 13.5px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 210px;
+}
+.cont-float-x {
+    position: absolute; top: -8px; left: -8px;
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    cursor: pointer; font-size: 15px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+}
+.cont-float-x:hover { background: var(--card); }
+@media (max-width: 999px) {
+    .cont-float { right: 12px; bottom: calc(var(--ig-tabbar-h) + 12px); max-width: 78vw; }
+    .cont-float-title { max-width: 50vw; }
 }

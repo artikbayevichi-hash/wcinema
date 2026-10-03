@@ -64,6 +64,8 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>W CINEMA</title>
@@ -109,15 +111,19 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 20px;
+            width: 96px;
+            height: 96px;
             margin: 0 auto 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
+            background: transparent;
+        }
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
         }
 
         h1 {
@@ -237,7 +243,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
 </head>
 <body>
     <div class="login-container">
-        <div class="logo">🎬</div>
+        <div class="logo"><img src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1; ?>" alt="W CINEMA"></div>
         <h1>W CINEMA</h1>
         <p>Kino · Anime · Multfilm katalogi</p>
 

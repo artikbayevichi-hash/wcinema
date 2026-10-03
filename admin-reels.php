@@ -10,27 +10,30 @@
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
-// Admin emas - kirishga yo'qolamiz
+// Admin kaliti bilan kirilmagan — kalit formasiga yo'naltiramiz.
 if (!$auth->isAdmin()) {
-    http_response_code(403);
-    $denied = true;
-} else {
-    $denied   = false;
-    $status   = inputInt('status', 0);
-    if (!in_array($status, [0, 1, 2], true)) {
-        $status = 0;
-    }
-    $pending   = $reels->getPending(50, $status);
-    $counts    = [
-        'pending'  => $reels->countPending(0),
-        'approved' => $reels->countPending(1),
-        'rejected' => $reels->countPending(2),
-    ];
+    // To'liq yo'l (base bilan) — admin-login.php tekshirib, shu sahifaga qaytaradi.
+    $here = (string) ($_SERVER['SCRIPT_NAME'] ?? '/admin-reels.php');
+    header('Location: admin-login.php?next=' . rawurlencode($here));
+    exit;
 }
+$denied = false;
+$status = inputInt('status', 0);
+if (!in_array($status, [0, 1, 2], true)) {
+    $status = 0;
+}
+$pending = $reels->getPending(50, $status);
+$counts  = [
+    'pending'  => $reels->countPending(0),
+    'approved' => $reels->countPending(1),
+    'rejected' => $reels->countPending(2),
+];
 ?>
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Moderatsiya — <?php echo htmlspecialchars(SITE_NAME); ?></title>

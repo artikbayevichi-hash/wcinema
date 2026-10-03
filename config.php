@@ -387,6 +387,13 @@ define('ADMIN_TELEGRAM_IDS', array_values(array_filter(array_map(
     explode(',', (string) env_value('ADMIN_TELEGRAM_IDS', ''))
 ))));
 
+// Admin panel uchun KALIT (parol). Sayt MTProto orqali ishlab, serverda PHP
+// sessiya bo'lmaganda admin panelga kirishning yagona ishonchli yo'li.
+// .env ga yoziladi:  ADMIN_PANEL_KEY="uzun-tasodifiy-satr"
+// Bo'sh bo'lsa — kalit bilan kirish o'chirilgan bo'ladi (faqat Telegram ID
+// bo'yicha adminlar ishlaydi).
+define('ADMIN_PANEL_KEY', trim((string) env_value('ADMIN_PANEL_KEY', '')));
+
 // ---------------------------------------------------------------------------
 // 5-QADAM: Videoni saytda oynatish
 // ---------------------------------------------------------------------------
@@ -453,10 +460,24 @@ if (!headers_sent()) {
     ini_set('session.cookie_httponly', 1);
     ini_set('session.cookie_samesite', 'Lax');
 
-    // HTTPS orqali (tunnel yoki production) kirganda Secure flag qo'yiladi
-    if (substr(SITE_URL, 0, 8) === 'https://') {
+    // HTTPS orqali (tunnel yoki production) kirganda Secure flag qo'yiladi.
+    // DIQQAT: faqat SITE_URL ga qarab qo'yilsa, sayt lokal HTTP orqali
+    // ochilganda cookie umuman saqlanmaydi (brauzer Secure cookie'ni HTTP
+    // da yubormaydi) va barcha PHP sessiyalari (admin kaliti ham) ishlamaydi.
+    // Shuning uchun AVVAL joriy so'rov sxemasiga qaraymiz.
+    $__https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')
+        || ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443')
+        || (substr(SITE_URL, 0, 8) === 'https://'
+            && !in_array(strtolower((string) ($_SERVER['HTTP_HOST'] ?? '')), ['localhost', '127.0.0.1'], true)
+            && strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), 'localhost:') !== 0
+            && strpos((string) ($_SERVER['HTTP_HOST'] ?? ''), '127.0.0.1:') !== 0);
+    if ($__https) {
         ini_set('session.cookie_secure', 1);
+    } else {
+        ini_set('session.cookie_secure', 0);
     }
+    unset($__https);
 
     if (session_status() === PHP_SESSION_NONE) {
         session_start();

@@ -32,7 +32,7 @@ const LIVE_CACHE_DIR  = __DIR__ . '/../storage/live_cache';
 // sozlanadi (define chunki konstanta ifodali).
 define('LIVE_CACHE_TTL',    (int) (getenv('LIVE_CACHE_TTL') ?: 21600));     // soniya: 21600 = 6 soat
 define('LIVE_CACHE_MAX_MB', (int) (getenv('LIVE_CACHE_MAX_MB') ?: 20000));  // disk kvotasi (MB)
-const LIVE_START_DL   = 300;         // worker ishga tushishini kutish (sek)
+const LIVE_START_DL   = 90;          // worker ishga tushishini kutish (sek)
 const LIVE_READ_BYTES = 262144;      // har bir o'qish bloki (256 KB)
 
 set_time_limit(0);
@@ -320,6 +320,11 @@ $status = (string) ($meta['status'] ?? '');
 $total  = (int) ($meta['total'] ?? 0);
 $deadline = time() + LIVE_START_DL;
 while ($status === 'starting' || ($status === 'downloading' && $total <= 0)) {
+    // MUHIM: mijoz uzilsa DARHOL chiqamiz. Aks holda bu sikl (ayniqsa
+    // bitta oqimli PHP serverda) butun saytni bloklab qo'yadi.
+    if (connection_aborted()) {
+        exit;
+    }
     if (time() > $deadline) {
         liveSendError('Video manbai uzoq vaqt ochilmadi — qayta urinib ko\'ring.');
     }

@@ -18,6 +18,12 @@ const state = {
     data: null,     // api javobi (user, stats, is_me...)
 };
 
+// Kutubxona (chap panel) havolalari: profile.php?tab=liked / ?tab=saved / ?tab=history
+try {
+    const q = new URLSearchParams(location.search).get('tab');
+    if (q === 'liked' || q === 'saved' || q === 'reels' || q === 'history') state.tab = q;
+} catch (e) {}
+
 const els = {
     title:     $('#pfTitle'),
     avatar:    $('#pfAvatar'),
@@ -37,7 +43,13 @@ const els = {
     modal:     $('#pfModal'),
     editForm:  $('#pfEditForm'),
     editErr:   $('#pfEditErr'),
+    tabs:      $('#pfTabs'),
 };
+
+// Mahalliy rejim: PHP hisobi yo'q, faqat Telegram (MTProto) hisobi bilan
+// kirilgan. Ma'lumot localStorage'dan (wc_tg_me_v1 + WCLib) olinadi.
+const LOCAL = !PROFILE_ME_ID && !PROFILE_VIEW_ID;
+if (LOCAL && (state.tab === 'reels' || state.tab === '')) state.tab = 'saved';
 
 // =======================================================================
 // Kichik yordamchilar
@@ -136,7 +148,7 @@ function renderActions() {
             <button class="pf-btn prim" id="pfEditBtn">✏️ Tahrirlash</button>
             <a class="pf-btn" href="reels-upload.php">＋ Reels yuklash</a>
             ${isAdmin ? `
-            <a class="pf-btn ghost" href="admin-reels.php">🛠 Admin</a>` : ''}
+            <a class="pf-btn ghost" href="admin-content.php">🛠 Admin</a>` : ''}
             <a class="pf-btn ghost" href="logout.php">⏻</a>`;
         $('#pfEditBtn').onclick = openModal;
     } else {
@@ -189,6 +201,7 @@ function savedCell(c) {
 }
 
 async function loadTab(tab, reset) {
+    if (LOCAL) return;   // mahalliy rejimda API chaqirilmaydi
     if (!state.data) {
         // Profil hali yuklanmagan - avval sarlavhani kuting
         return;
@@ -333,9 +346,140 @@ window.addEventListener('scroll', () => {
 });
 
 // =======================================================================
+// MAHALLIY (MTProto) REJIM — localStorage'dagi kutubxona
+// =======================================================================
+function localTgUser() {
+    let m = null;
+    try {
+        const raw = localStorage.getItem('wc_tg_me_v1');
+        if (raw) m = JSON.parse(raw);
+    } catch (e) {}
+    if ((!m || !m.id) && window.TgStream && typeof window.TgStream.me === 'function') {
+        try { m = window.TgStream.me(); } catch (e) {}
+    }
+    return m || {};
+}
+
+// Telegram profil rasmi (TgStream tomonidan data-URL sifatida saqlanadi).
+function localPhoto() {
+    try { return localStorage.getItem('wc_tg_photo_v1') || ''; } catch (e) { return ''; }
+}
+
+function localCell(c) {
+    const poster = c.poster
+        ? `<img loading="lazy" src="${esc(c.poster)}" alt="">`
+        : `<div class="pf-cell-ph">🎬</div>`;
+    const sub = String(c.category || c.year || '').slice(0, 14);
+    return `
+        <a class="pf-cell" href="index.php?c=${encodeURIComponent(c.id)}">
+            <div class="pf-cell-media">
+                ${poster}
+                ${sub ? `<div class="pf-cell-meta">${esc(sub)}</div>` : ''}
+            </div>
+        </a>`;
+}
+
+const LOCAL_TABS = [
+    { k: 'saved',   label: 'Saqlangan' },
+    { k: 'liked',   label: 'Yoqqanlar' },
+    { k: 'history', label: 'Tarix' },
+];
+
+function renderLocalHeader() {
+    const u = localTgUser();
+    const first = u.firstName || '';
+    const full  = [first, u.lastName || ''].filter(Boolean).join(' ') || 'Foydalanuvchi';
+
+    els.title.textContent = u.username ? '@' + u.username : full;
+    document.title = (u.username ? '@' + u.username : full) + ' — ' + SITE_NAME;
+
+    els.avatar.innerHTML = avatarHTML({
+        first_name: first,
+        username: u.username || '',
+        avatar: localPhoto()
+    });
+    els.name.textContent = full;
+    els.username.textContent = u.username ? '@' + u.username : '';
+    els.bio.textContent = '';
+
+    // Statistika — mahalliy kutubxona
+    const c = (window.WCLib ? window.WCLib.counts() : { saved: 0, liked: 0, history: 0 });
+    els.stats.innerHTML =
+        `<div class="pf-stat"><b>${fmt(c.saved)}</b><span>Saqlangan</span></div>` +
+        `<div class="pf-stat"><b>${fmt(c.liked)}</b><span>Yoqqan</span></div>` +
+        `<div class="pf-stat"><b>${fmt(c.history)}</b><span>Tarix</span></div>`;
+
+    els.hlWrap.hidden = true;
+    els.uploadBtn.hidden = true;
+    els.logoutBtn.hidden = true;
+
+    // Amallar: Sozlamalar + Telegram bot
+    els.actions.innerHTML = `
+        <button class="pf-btn prim" id="pfSetBtn">⚙️ Sozlamalar</button>
+        <a class="pf-btn ghost" href="https://t.me/${esc(APP_BOT || 'w_cinema_uz_bot')}" target="_blank" rel="noopener">✈️ Bot</a>`;
+    const sb = $('#pfSetBtn');
+    if (sb) sb.addEventListener('click', () => {
+        const more = document.getElementById('igMoreBtn') || document.getElementById('igMoreBtnM');
+        if (more) more.click();
+    });
+
+    // Yorliqlar (mahalliy)
+    els.tabs.innerHTML = LOCAL_TABS.map((t) =>
+        `<button class="pf-tab${t.k === state.tab ? ' active' : ''}" data-tab="${t.k}">${t.label}</button>`
+    ).join('');
+    els.tabs.querySelectorAll('.pf-tab').forEach((b) => {
+        b.addEventListener('click', () => switchTabLocal(b.dataset.tab));
+    });
+
+    renderLocalTab(state.tab);
+}
+
+function renderLocalTab(tab) {
+    state.tab = tab;
+    state.hasMore = false;
+    state.offset = 0;
+    els.grid.innerHTML = '';
+
+    const items = (window.WCLib ? window.WCLib.list(tab) : []) || [];
+    if (!items.length) {
+        els.empty.textContent = tab === 'liked' ? 'Hali hech narsani yoqtirmagansiz 🤍'
+            : tab === 'history' ? 'Ko\'rish tarixi bo\'sh 🕓'
+            : 'Saqlanganlar bo\'sh — film qo\'shing 🔖';
+        els.empty.hidden = false;
+        return;
+    }
+    els.empty.hidden = true;
+    els.grid.innerHTML = items.map(localCell).join('');
+}
+
+function switchTabLocal(tab) {
+    els.tabs.querySelectorAll('.pf-tab').forEach((b) => {
+        b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    renderLocalTab(tab);
+}
+
+function renderLocal() {
+    renderLocalHeader();
+    // localStorage'da Telegram akkaunt YO'Q bo'lsa yoki profil rasmi hali
+    // yuklanmagan bo'lsa — jim tekshiramiz (verify rasmni ham olib keladi).
+    const u = localTgUser();
+    if ((!u.id || !localPhoto()) && window.TgStream && typeof window.TgStream.verify === 'function') {
+        window.TgStream.verify().then(() => { renderLocalHeader(); }).catch(() => {});
+    }
+}
+
+// Telegram profil rasmi keyinroq yuklansa (TgStream verify), sarlavhani
+// yangilaymiz — avatar o'sha zahoti rasmga almashadi.
+window.addEventListener('wc:tgPhoto', () => {
+    if (LOCAL) renderLocalHeader();
+});
+
+// =======================================================================
 // Yuklash
 // =======================================================================
 async function loadProfile() {
+    if (LOCAL) { renderLocal(); return; }
     const qs = PROFILE_VIEW_ID ? 'user_id=' + PROFILE_VIEW_ID : '';
     const d = await apiGet(API_BASE + (qs ? '?' + qs : ''));
 
@@ -347,6 +491,11 @@ async function loadProfile() {
 
     renderHeader();
     renderActions();
+    // Boshlang'ich yorliqni (query orqali tanlangan bo'lishi mumkin)
+    // belgilaymiz — aks holda "Reels" tugmasi faol ko'rinib qolardi.
+    document.querySelectorAll('.pf-tab').forEach((b) => {
+        b.classList.toggle('active', b.dataset.tab === state.tab);
+    });
     loadTab(state.tab, true);
 }
 

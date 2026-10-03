@@ -417,7 +417,60 @@
 
   function clearSession() {
     try { localStorage.removeItem(CFG.memKey); } catch (e) {}
+    try { localStorage.removeItem('wc_tg_me_v1'); } catch (e) {}
+    try { localStorage.removeItem('wc_tg_photo_v1'); } catch (e) {}
     S.me = null;
+  }
+
+  // Joriy Telegram akkauntni localStorage'ga ham yozamiz — shunda profil
+  // sahifasi qayta ulanmasdan (getMe) ism/username'ni ko'rsata oladi.
+  function saveMe(meObj) {
+    S.me = meObj || null;
+    try {
+      if (meObj) {
+        localStorage.setItem('wc_tg_me_v1', JSON.stringify({
+          id: meObj.id != null ? String(meObj.id) : '',
+          firstName: meObj.firstName || '',
+          lastName: meObj.lastName || '',
+          username: meObj.username || ''
+        }));
+      } else {
+        localStorage.removeItem('wc_tg_me_v1');
+      }
+    } catch (e) {}
+  }
+
+  // Baytlarni data-URL ga o'giradi (profil rasmi uchun).
+  function bytesToDataUrl(bytes, mime) {
+    var u8 = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes || []);
+    var bin = '';
+    var STEP = 8192;
+    for (var i = 0; i < u8.length; i += STEP) {
+      bin += String.fromCharCode.apply(null, u8.subarray(i, i + STEP));
+    }
+    return 'data:' + (mime || 'image/jpeg') + ';base64,' + btoa(bin);
+  }
+
+  // Telegram profil rasmini yuklab, data-URL sifatida saqlaymiz. Profil
+  // sahifasi va chap paneldagi avatar shu qiymatdan foydalanadi (serverga
+  // hech narsa yuborilmaydi; rasm faqat shu brauzerda qoladi).
+  function savePhoto(client, meObj) {
+    try {
+      var ph = meObj && meObj.photo;
+      if (ph && ph.className === 'UserProfilePhotoEmpty') ph = null;
+      if (!client || !ph) {
+        if (meObj) { try { localStorage.removeItem('wc_tg_photo_v1'); } catch (e) {} }
+        return;
+      }
+      client.downloadProfilePhoto(meObj, { isBig: false }).then(function (buf) {
+        if (!buf) return;
+        var u8 = (buf instanceof Uint8Array) ? buf : new Uint8Array(buf);
+        if (!u8.length) return;
+        var url = bytesToDataUrl(u8, 'image/jpeg');
+        try { localStorage.setItem('wc_tg_photo_v1', url); } catch (e) {}
+        try { global.dispatchEvent(new Event('wc:tgPhoto')); } catch (e) {}
+      }).catch(function () { /* rasm olinmasa — harf bilan ko'rsatiladi */ });
+    } catch (e) { /* jim */ }
   }
 
   // Joriy auth oqimini bekor qiladi (QR <-> raqam almashganda). Epoch'ni
@@ -429,7 +482,7 @@
     S.authed = false;
     S.connecting = null;
     S.connectingMode = null;
-    S.me = null;
+    saveMe(null);
   }
 
   // Xatoni foydalanuvchiga tushunarli matn + qaytish kerak bo'lgan formaga
@@ -527,7 +580,7 @@
         if (saved && !allowLogin) {
           return S.client.connect()
             .then(function () { return S.client.getMe(); })
-            .then(function (me) { S.me = me; return S.client; })
+            .then(function (me) { saveMe(me); savePhoto(S.client, me); return S.client; })
             .catch(function (e) {
               var m = (e && (e.errorMessage || e.message)) || String(e);
               if (isAuthError(m)) {
@@ -602,7 +655,7 @@
         // aynan bitta odam bo'yicha sanash uchun. getMe() xato bersa
         // ham davom etamiz (me = null bo'lib qoladi).
         return c.getMe().then(
-          function (me) { S.me = me; return c; },
+          function (me) { saveMe(me); savePhoto(c, me); return c; },
           function () { return c; }
         );
       })
@@ -971,9 +1024,67 @@
   }
 
   /* ---------------------------------------------------------------------------
+   * HOVER-PREVIEW: karta ustiga sichqoncha kelganda videoning boshini
+   * OVOZSIZ o'ynatadi (YouTube/Netflix uslubi). Modal player bilan bir xil
+   * Telegram konnektori + Service Worker'dan foydalanadi, lekin boshqaruv
+   * yoki QR ko'rsatmaydi va xatoda JIM to'xtaydi. Sahifani HECH QACHON
+   * qayta yuklamaydi (aks holda hover saytni sakratib qo'yardi).
+   * ------------------------------------------------------------------------ */
+  function isPreview() { return !!(S.cfg && S.cfg.preview); }
+
+  // Login oqimini ishga tushirmaydigan "jim" view (xuddi verify() kabi).
+  function silentView() {
+    return {
+      qrBox: function () { return null; },
+      pwdForm: function () { return null; },
+      pwdInput: function () { return null; },
+      setState: function () {},
+      needPassword: function () {},
+      askPhone: function () { return Promise.reject(new Error('NO_LOGIN')); },
+      askCode: function () { return Promise.reject(new Error('NO_LOGIN')); }
+    };
+  }
+
+  function mountPreview(node, opts) {
+    stop();
+    S.mount = node;
+    S.cfg = { preview: true, title: opts.title || '' };
+    S.job++;
+    var job = S.job;
+
+    node.classList.add('tgs', 'tgs-preview');
+    // Yuklanayotganda spinner (ostidagi karta posteri ko'rinib turadi).
+    node.innerHTML = '<div class="tgs-pv-load"><i></i></div>';
+
+    // Modal player bilan AYNAN bir xil quvur: SW -> sessiya -> findDoc ->
+    // probe -> (kerak bo'lsa MSE). Farqi: sahifa QAYTA YUKLANMAYDI, QR
+    // ko'rsatilmaydi, xato jim o'tadi, video ovozsiz va boshqaruvsiz.
+    run(node, opts, silentView(), job).catch(function () {
+      // Preview xatosi ko'rsatilmaydi — karta posterida qoladi.
+    });
+  }
+
+  // Preview uchun engil <video> (boshqaruvsiz, ovozsiz, halqali).
+  function renderPreview(node, opts, size, probe) {
+    var url = fileUrl() + '?size=' + size + '&t=' + Date.now()
+      + '&mime=' + encodeURIComponent(mimeOf(probe));
+    node.innerHTML = '<video class="tgs-pv" id="playerVideo" muted playsinline loop '
+      + 'preload="auto"'
+      + (opts.poster ? ' poster="' + esc(opts.poster) + '"' : '')
+      + ' src="' + esc(url) + '"></video>';
+    var v = document.getElementById('playerVideo');
+    if (v) {
+      v.muted = true;
+      var p = v.play();
+      if (p && p.catch) p.catch(function () { /* avtomatik o'ynash bloklangan */ });
+    }
+  }
+
+  /* ---------------------------------------------------------------------------
    * ASOSIY FUNKSIYA: filmni shu joyda o'ynatish
    * ------------------------------------------------------------------------ */
   function mount(node, opts) {
+    if (opts && opts.preview) { mountPreview(node, opts); return; }
     stop();                                  // avvalgi filmni to'xtatamiz
     S.mount = node;
     S.cfg = opts.cfg || {};
@@ -1064,6 +1175,9 @@
   async function run(node, opts, view, job) {
     // --- 1) SW -------------------------------------------------------
     if (!swCtl()) {
+      // Hover-preview paytida sahifani QAYTA YUKLAMAYMIZ — shunchaki
+      // jimgina o'tkazib yuboramiz (keyingi hovergacha SW tayyor bo'ladi).
+      if (isPreview()) return;
       setStatus('Telegram ulagichi tayyorlanmoqda...');
       var ok = await ensureWorker();
       if (!ok) {
@@ -1076,16 +1190,41 @@
     // --- 2) Telegram sessiyasi ---------------------------------------
     // Sayt eshigi (`tg-guard`) allaqachon login talab qiladi; lekin sessiya
     // ochilish paytida bekor qilingan bo'lsa ham shu yerga kelamiz.
-    if (!hasSession()) { goLogin(); return; }
+    if (!hasSession()) { if (!isPreview()) goLogin(); return; }
     var client;
     try {
       client = await ensureSession(view);
     } catch (e) {
       var em = (e && (e.errorMessage || e.message)) || String(e);
+      // Hover-preview: login oqimini boshlamaymiz, jim to'xtaymiz.
+      if (isPreview()) return;
       if (em === 'AUTH_REVOKED' || isAuthError(em)) { goLogin(); return; }
       throw new Error('Telegram ulanish: ' + em);
     }
     if (S.job !== job) return;
+
+    // --- 2b) Preview keshi -------------------------------------------
+    // Bir marta topilgan fayl (doc/loc) va format (probe) keshlanadi.
+    // Takroriy hover bir ZUMDA ochiladi — qayta findDoc/probe qilinmaydi.
+    var pvKey = (isPreview() && opts.channel && opts.post)
+      ? (String(opts.channel) + '/' + Number(opts.post)) : null;
+    if (pvKey) {
+      var pvHit = S.pvCache && S.pvCache[pvKey];
+      if (pvHit && (Date.now() - pvHit.t) < 20 * 60 * 1000) {
+        S.doc = pvHit.doc;
+        S.size = pvHit.size;
+        S.totalRead = 0;
+        S.loc = pvHit.loc;
+        S.probe = pvHit.probe;
+        connect();
+        if (pvHit.probe && pvHit.probe.playable) {
+          renderPreview(node, opts, pvHit.size, pvHit.probe);
+        } else {
+          renderAdaptivePlayer(node, opts, pvHit.size, pvHit.probe, 'Tayyorlanmoqda…');
+        }
+        return;
+      }
+    }
 
     // --- 3) Xabar va videoni topish ----------------------------------
     setStatus('Telegram\'dan yuklanmoqda...');
@@ -1115,11 +1254,19 @@
     S.probe = probe;                            // probeTransport uchun
     if (S.job !== job) return;
 
+    if (pvKey) {
+      S.pvCache = S.pvCache || {};
+      S.pvCache[pvKey] = {
+        t: Date.now(), doc: S.doc, size: size, loc: S.loc, probe: probe
+      };
+    }
+
     if (!probe.playable) {
       // Indeks o'qilib chiqildi va BRAUZER QABUL QILMADI (MKV/HEVC/…).
       // Lekin bu oxirgi javob EMAS: faylni shu yerda, brauzer ichida
       // qayta o'ramiz yoki qayta kodlaymiz (mediabunny). Server hech
       // narsani ko'rmaydi — hammasi foydalanuvchi kompyuterida.
+      // Preview'da ham shu yo'l ishlaydi (boshqaruvsiz, jim).
       renderAdaptivePlayer(node, opts, size, probe,
         'Brauzer bu formatni to‘g‘ridan-to‘g‘ri ochmaydi — '
         + 'shuning uchun qayta tayyorlanmoqda.');
@@ -1127,6 +1274,7 @@
     }
 
     // --- 5) <video> — saytdagi mavjud boshqaruvga ulanadi ------------
+    if (isPreview()) { renderPreview(node, opts, size, probe); return; }
     renderPlayer(node, opts, size, probe);
   }
 
@@ -1434,6 +1582,16 @@
       + '</div>';
 
     var v = document.getElementById('playerVideo');
+    if (isPreview() && v) {
+      v.muted = true; v.loop = true;
+      // Oddiy rejimda avtomatik o'ynashni UDP boshqaradi; preview'da UDP
+      // o'chirilgani uchun o'zimiz ishga tushiramiz (muted — ruxsat).
+      var kick = function () {
+        try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+      };
+      v.addEventListener('loadeddata', kick, { once: true });
+      v.addEventListener('canplay', kick, { once: true });
+    }
     var bar = node.querySelector('[data-prep-bar]');
     var title = node.querySelector('[data-prep-title]');
     var note = node.querySelector('[data-prep-note]');
@@ -1441,7 +1599,7 @@
     // Saytdagi mavjud boshqaruv (play/pause, seek, ovoz, to'liq ekran)
     // shu DOM tuzilmasiga bog'liq — shuning uchun ham xuddi shu
     // strukturani yasadik.
-    try { if (global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
+    try { if (!isPreview() && global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
 
     function setBar(ratio, label, sub) {
       if (bar) bar.style.width = Math.max(2, Math.min(100, ratio * 100)) + '%';
@@ -1489,7 +1647,7 @@
       // Tayyor — tayyorgarlik panelini olib tashlaymiz.
       var p = node.querySelector('[data-prep]');
       if (p) p.parentNode.removeChild(p);
-      try { if (global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
+      try { if (!isPreview() && global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
 
       // Orqaga seek: SourceBuffer bo'shab qolgan bo'lsa, oqim
       // shu vaqtdan qayta quradi.
@@ -1504,6 +1662,8 @@
 
       // "Brauzer umuman o'qiy olmaydi" — oxirgi chora: ffmpeg.wasm.
       if (/^UNSUPPORTED_CODEC/.test(m)) {
+        // Preview'da og'ir ffmpeg.wasm ishga tushirmaymiz — jim qoldiramiz.
+        if (isPreview()) { adaptiveFailed(node, opts, probe, e); return; }
         loadPlayLib().then(function (lib) {
           return lib.openWithFfmpeg({
             video: v, size: size, filename: info.filename, read: read,
@@ -1520,7 +1680,7 @@
           S.playAbort = null;
           var p = node.querySelector('[data-prep]');
           if (p) p.parentNode.removeChild(p);
-          try { if (global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
+          try { if (!isPreview() && global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
         }).catch(function (e2) {
           if (e2 && e2.name === 'AbortError') return;
           adaptiveFailed(node, opts, probe, e2);
@@ -1541,6 +1701,9 @@
       if (S.play && S.play.stop) S.play.stop();
     } catch (x) {}
     S.play = null;
+
+    // Hover-preview: CTA ko'rsatmaymiz — karta posteri qoladi.
+    if (isPreview()) return;
 
     // SABABNI TO'G'RI TASNIFLAYMIZ. Ilgari HAR QANDAY xato "muammo
     // formatda" deb ko'rsatilardi — bu chalg'ituvchi edi. Masalan
@@ -1728,6 +1891,18 @@
     registerWorker().catch(function () { /* film ochilganda qayta uriniladi */ });
   }
 
+  // Hover-preview uchun SW'ni "isitamiz": o'rnatamiz va sahifani
+  // boshqarishini ta'minlaymiz — RELOAD QILMASDAN. Shunda hover paytida
+  // `swCtl()` darhol tayyor bo'ladi va video kutmasdan boshlanadi.
+  function warm() {
+    if (!('serviceWorker' in navigator)) return Promise.resolve(false);
+    return registerWorker().then(function (reg) {
+      if (navigator.serviceWorker.controller) return true;
+      try { if (reg && reg.active) reg.active.postMessage({ type: 'claim' }); } catch (e) {}
+      return waitForController(2500);
+    }).catch(function () { return false; });
+  }
+
   // ======================================================= 8. KIRISH ESHIGI
   //
   //  Foydalanuvchi saytga kirganda BIR marta QR skanerlaydi. Kalit
@@ -1751,13 +1926,30 @@
   // paytida `getMe()` chaqirilib saqlanadi. Maxfiy ma'lumot yo'q —
   // faqat id, ism va username; u ham faqat shu brauzerda qoladi.
   function me() {
-    if (!S.me) return null;
-    return {
-      id: S.me.id != null ? String(S.me.id) : '',
-      firstName: S.me.firstName || '',
-      lastName: S.me.lastName || '',
-      username: S.me.username || ''
-    };
+    if (S.me) {
+      return {
+        id: S.me.id != null ? String(S.me.id) : '',
+        firstName: S.me.firstName || '',
+        lastName: S.me.lastName || '',
+        username: S.me.username || ''
+      };
+    }
+    // Xotirada yo'q (masalan, profil sahifasi qayta ulanmagan) — localStorage'dan.
+    try {
+      var raw = localStorage.getItem('wc_tg_me_v1');
+      if (raw) {
+        var m = JSON.parse(raw);
+        if (m && m.id) {
+          return {
+            id: String(m.id),
+            firstName: m.firstName || '',
+            lastName: m.lastName || '',
+            username: m.username || ''
+          };
+        }
+      }
+    } catch (e) {}
+    return null;
   }
 
   // Eshikning holati: hozir ko'rsatilayotgan tugun va yopish funksiyasi.
@@ -1993,6 +2185,8 @@
     mount: mount,
     stop: stop,
     init: init,
+    // Hover-preview uchun SW'ni oldindan tayyorlash (reload qilmaydi).
+    warm: warm,
     // Kirish eshigi — saytga kirganda chaqiriladi (QR skanerlash).
     authGate: authGate,
     hasSession: hasSession,

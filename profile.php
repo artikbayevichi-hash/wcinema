@@ -18,15 +18,15 @@ require_once __DIR__ . '/includes/bootstrap.php';
 $viewUserId = (int) ($_GET['user_id'] ?? 0);
 $meId       = $user ? (int) $user['id'] : null;
 
-// O'z profilini so'ragan bo'lsa va login qilmagan bo'lsa - login'ga yuboramiz
-if ($viewUserId <= 0 && !$meId) {
-    header('Location: login.php');
-    exit;
-}
+// DIQQAT: endi login qilmagan (faqat MTProto/Telegram) foydalanuvchi ham
+// profilni ko'ra oladi. Bunday holatda ma'lumot brauzerdagi Telegram
+// akkauntidan (wc_tg_me_v1) va mahalliy kutubxonadan (localStorage) olinadi.
 ?>
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Profil — <?php echo htmlspecialchars(SITE_NAME); ?></title>
@@ -134,11 +134,22 @@ if ($viewUserId <= 0 && !$meId) {
 
 <div class="pf-toast" id="pfToast" hidden></div>
 
+<script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
 <script>
+    // tg-stream.js uchun (faqat localStorage'da akkaunt yo'q bo'lsa ulanadi).
+    window.APP = window.APP || {
+        base: <?php echo json_encode(rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\')); ?>,
+        tg: {
+            apiId:   <?php echo (int) TG_API_ID; ?>,
+            apiHash: <?php echo json_encode((string) TG_API_HASH); ?>
+        }
+    };
     const PROFILE_VIEW_ID = <?php echo json_encode($viewUserId); ?>;
     const PROFILE_ME_ID   = <?php echo json_encode($meId); ?>;
     const SITE_NAME       = <?php echo json_encode(SITE_NAME); ?>;
+    const APP_BOT         = <?php echo json_encode((string) TELEGRAM_BOT_USERNAME); ?>;
 </script>
+<script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script src="assets/js/profile.js"></script>
 </body>
 </html>

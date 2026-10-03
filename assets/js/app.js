@@ -164,32 +164,227 @@
             </button>`;
     }
 
+    // ---------------------------------------------------- hover-preview
+    // Karta ustiga sichqoncha kelganda videoning boshini OVOZSIZ o'ynatadi
+    // (YouTube/Netflix uslubi). Serial/anime uchun `content.php` birinchi
+    // qismni tanlaydi — shuning uchun 1-qism o'ynaydi.
+    const pvCache = new Map();               // content id -> { t, p (promise) }
+    let pvTimer = null, pvCard = null, pvEl = null, pvToken = 0;
+
+    function previewStop() {
+        if (pvTimer) { clearTimeout(pvTimer); pvTimer = null; }
+        const wasActive = !!pvEl;
+        if (pvEl) { try { pvEl.remove(); } catch (e) {} pvEl = null; }
+        if (pvCard) { pvCard.classList.remove('pv-on'); pvCard = null; }
+        pvToken++;
+        // Faqat o'zimiz boshlagan oqimni to'xtatamiz — modal playeriga
+        // tasodifan tegib ketmaslik uchun.
+        if (wasActive && window.TgStream) {
+            try { window.TgStream.stop(); } catch (e) {}
+        }
+    }
+
+    async function previewPlayback(id) {
+        const key = String(id);
+        const hit = pvCache.get(key);
+        if (hit && (Date.now() - hit.t) < 300000) return hit.p;
+        const t = Date.now();
+        // Promise'ni keshlaymiz — parallel chaqiriqlar bitta so'rov bo'ladi.
+        const p = api('content.php?id=' + encodeURIComponent(id))
+            .then((d) => (d && d.playback) ? d.playback : null)
+            .catch(() => { pvCache.delete(key); return null; });
+        pvCache.set(key, { t: t, p: p });
+        return p;
+    }
+
+    async function previewStart(card) {
+        const id = card.dataset.id;
+        const thumb = card.querySelector('.yt-thumb');
+        if (!id || !thumb) return;
+        const token = ++pvToken;
+        let pb;
+        try { pb = await previewPlayback(id); } catch (e) { return; }
+        if (token !== pvToken || pvCard !== card || !pb) return;
+
+        const type = pb.type;
+        if (type !== 'telegram' && type !== 'direct' && type !== 'file' && type !== 'hls') return;
+        if (type === 'telegram' && (!window.TgStream || !window.TgStream.hasSession())) return;
+
+        const box = document.createElement('div');
+        box.className = 'card-preview';
+        thumb.appendChild(box);
+        pvEl = box;
+
+        if (type === 'telegram') {
+            const mount = document.createElement('div');
+            mount.className = 'card-preview-tg';
+            box.appendChild(mount);
+            window.TgStream.mount(mount, {
+                channel: pb.channel || '',
+                post: Number(pb.post) || 0,
+                url: pb.url || '',
+                deep: pb.deep || '',
+                poster: pb.poster || '',
+                preview: true
+            });
+        } else {
+            const v = document.createElement('video');
+            v.muted = true; v.loop = true; v.playsInline = true;
+            v.setAttribute('playsinline', '');
+            v.preload = 'metadata';
+            if (pb.poster) v.poster = pb.poster;
+            v.src = pb.url;
+            v.addEventListener('loadeddata', () => { v.play().catch(() => {}); });
+            box.appendChild(v);
+        }
+        card.classList.add('pv-on');
+    }
+
+    function previewHoverStart(e) {
+        const card = (e.target && e.target.closest) ? e.target.closest('.card.yt-card') : null;
+        if (!card || !card.dataset.id || card === pvCard) return;
+        previewStop();
+        pvCard = card;
+        const token = pvToken;
+        // Oqim ma'lumotini DARHOL so'raymiz (keshlanadi) — video tezroq ochiladi.
+        previewPlayback(card.dataset.id).catch(() => {});
+        pvTimer = setTimeout(() => {
+            if (token === pvToken && pvCard === card) previewStart(card);
+        }, 300);
+    }
+
+    function previewHoverEnd(e) {
+        const card = (e.target && e.target.closest) ? e.target.closest('.card.yt-card') : null;
+        if (!card) return;
+        const to = e.relatedTarget;
+        if (to && card.contains(to)) return;         // karta ichida qoldi
+        if (card === pvCard || pvEl) previewStop();
+    }
+
     // ---------------------------------------------------------------- bosh sahifa
     async function loadHome() {
         setLoading(true);
         try {
             const d = await api('home.php');
             renderCategories(d.categories);
-            renderRow('#continueGrid', d.continue, true);
-            $('#continueRow').hidden = !(d.continue && d.continue.length);
-            renderRow('#trendingGrid', d.trending);
-            renderRow('#newGrid', d.new);
 
+            // Ko'rilgan (tarixga tushgan) kontentni aniqlaymiz. Bosh sahifada
+            // ular QAYTA chiqmasligi kerak — o'rniga faqat ko'rilmaganlari
+            // ko'rsatiladi, ko'rilganlari esa "Davom etish" blokiga o'tadi.
+            let watched = [];
+            if (window.WCLib) { try { watched = window.WCLib.list('history') || []; } catch (e) {} }
+            const watchedIds = new Set(watched.map((x) => String(x.id)));
+            const notSeen = (arr) => (arr || []).filter((c) => !watchedIds.has(String(c.id)));
+
+            // "Davom etish": avval server (PHP hisob), bo'lmasa mahalliy tarix.
+            let cont = d.continue || [];
+            if (!cont.length && watched.length) {
+                cont = watched.slice(0, 12).map((x) => ({
+                    id: x.id, title: x.title, poster: x.poster, category: x.category
+                }));
+            }
+            renderRow('#continueGrid', cont, true);
+            if ($('#continueRow')) $('#continueRow').hidden = !(cont && cont.length);
+
+            renderRow('#trendingGrid', notSeen(d.trending));
+            renderRow('#newGrid', notSeen(d.new));
+
+            // Bosh sahifada kino / anime / multfilm ARALASH ko'rsatiladi
+            // (kategoriya bo'yicha alohida qatorlarga bo'linmaydi).
             const catRows = $('#catRows');
             catRows.innerHTML = '';
+            const mixed = [];
             (d.by_category || []).forEach((g) => {
+                (g.items || []).forEach((c) => {
+                    if (!watchedIds.has(String(c.id))) mixed.push(c);
+                });
+            });
+            if (mixed.length) {
                 const sec = document.createElement('div');
                 sec.className = 'row';
                 sec.innerHTML = `
-                    <h2 class="row-title">${esc(g.category.name)}</h2>
-                    <div class="grid">${g.items.map(c => cardHTML(c, { series: true })).join('')}</div>`;
+                    <h2 class="row-title">Barchasi</h2>
+                    <div class="grid">${mixed.map(c => cardHTML(c, { series: true })).join('')}</div>`;
                 catRows.appendChild(sec);
-            });
+            }
+
+            renderContinueFloat(watched, d.continue);
+
+            // URL filtri (index.php?cat=kino) bo'lsa - katalogni ko'rsatamiz
+            if (state.category || state.search) applyUrlFilter();
         } catch (e) {
             toast('Yuklab bo\'lmadi: ' + esc(e.message), 'err');
         } finally {
             setLoading(false);
         }
+    }
+
+    // O'ng pastdagi "Davom etish" kartochkasi. Oxirgi ko'rilgan kontentni
+    // ko'rsatadi va bosilganda uni ochadi. Yopilsa — shu element uchun
+    // sessiya davomida yashiriladi (yangi kontent ko'rilsa yana chiqadi).
+    function renderContinueFloat(watched, serverCont) {
+        const box = $('#continueFloat');
+        if (!box) return;
+
+        let item = null;
+        if (watched && watched.length && watched[0] && watched[0].id) {
+            item = { id: watched[0].id, title: watched[0].title, poster: watched[0].poster, ep: 0 };
+        } else if (serverCont && serverCont.length && serverCont[0] && serverCont[0].id) {
+            const s = serverCont[0];
+            item = { id: s.id, title: s.title, poster: s.poster, ep: s.episode_id || 0 };
+        }
+        if (!item) { box.hidden = true; return; }
+
+        let hiddenId = '';
+        try { hiddenId = sessionStorage.getItem('wc_cont_hide') || ''; } catch (e) {}
+        if (hiddenId === String(item.id)) { box.hidden = true; return; }
+
+        const poster = $('#contFloatPoster');
+        if (poster) {
+            poster.innerHTML = item.poster
+                ? `<img src="${esc(item.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`
+                : '<span class="cont-float-ph">&#127916;</span>';
+        }
+        const t = $('#contFloatTitle');
+        if (t) t.textContent = item.title || 'Davom etish';
+        const link = $('#contFloatLink');
+        if (link) {
+            link.href = base + '/index.php?c=' + encodeURIComponent(item.id)
+                + (item.ep ? '&e=' + encodeURIComponent(item.ep) : '');
+        }
+        box.hidden = false;
+    }
+
+    function wireContinueFloat() {
+        const box = $('#continueFloat');
+        if (!box) return;
+        const x = $('#contFloatClose');
+        if (x) x.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            let id = '';
+            try {
+                const link = $('#contFloatLink');
+                const u = new URL(link.href, location.href);
+                id = u.searchParams.get('c') || '';
+            } catch (er) {}
+            try { if (id) sessionStorage.setItem('wc_cont_hide', id); } catch (er) {}
+            box.hidden = true;
+        });
+    }
+
+    // `?cat=` / `?q=` manzil parametrlarini katalog ko'rinishiga qo'llaydi.
+    function applyUrlFilter() {
+        if (state.category) {
+            const chip = $('#catChips .chip[data-cat="' + String(state.category).replace(/"/g, '\\"') + '"]');
+            if (chip) {
+                $$('#catChips .chip').forEach(b => b.classList.remove('active'));
+                chip.classList.add('active');
+            }
+        }
+        showListView();
+        updateListTitle();
+        loadList(true);
     }
 
     function renderRow(sel, items, isContinue) {
@@ -234,7 +429,7 @@
 
         wrap.innerHTML = cats.map(c =>
             `<button class="chip${c.slug === '' ? ' active' : ''}" data-cat="${esc(c.slug || '')}">`
-            + `${emojiFor(c.slug, c.name)} ${esc(c.name)}`
+            + `${esc(c.name)}`
             + (c.count ? ` <span class="chip-n">${Number(c.count)}</span>` : '')
             + `</button>`
         ).join('');
@@ -294,7 +489,7 @@
         let t = 'Katalog';
         if (state.search) t = `"${state.search}" natijalari`;
         else if (state.category) {
-            t = { kino: '🎬 Kino', anime: '🌸 Anime', multfilm: '🧸 Multfilm' }[state.category] || 'Katalog';
+            t = { kino: 'Kino', anime: 'Animelar', multfilm: 'Multfilmlar', serial: 'Seriallar', dokumental: 'Dokumental' }[state.category] || 'Katalog';
         }
         $('#listTitle').textContent = t;
     }
@@ -304,23 +499,31 @@
         id = parseInt(id, 10) || 0;
         episodeId = parseInt(episodeId, 10) || 0;
         if (!id) return;
+        // Hover-preview oqimini to'xtatamiz (aks holda modal playeri bilan
+        // bir xil Telegram kanalini bo'lishib qolardi).
+        previewStop();
         state.current = null;
         $('#modal').hidden = false;
-        $('#modalBody').innerHTML = '<div class="loading"><span class="spinner"></span> Yuklanmoqda…</div>';
+        $('#modalBody').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
         document.body.style.overflow = 'hidden';
 
         const q = new URLSearchParams({ id: id });
         if (episodeId) q.set('episode', episodeId);
-        // Admin uchun: serverdagi relay bilan TEKSHIRUV (faqat admin,
-        // "preview=1" serverda ham tekshiriladi). Oddiy tomoshabinda
-        // video Telegram'da ochiladi.
-        if (window.APP && window.APP.isAdmin) q.set('preview', '1');
+        // Standart oqim: video BRAUZERDA (Telegram MTProto orqali) o'ynaladi —
+        // admin ham, oddiy tomoshabin ham bir xil ko'radi (saytga yuk tushmaydi).
+        //
+        // Server relay (api/live.php) endi AVTOMATIK yoqilmaydi. Uni faqat
+        // qo'lda, manzilga `?preview=1` qo'shib sinash mumkin (faqat admin).
+        if (window.APP && window.APP.isAdmin && /[?&]preview=1(?:&|$)/.test(location.search)) {
+            q.set('preview', '1');
+        }
 
         try {
             const d = await api('content.php?' + q.toString());
             state.current = d;
             $('#modalBody').innerHTML = renderModal(d);
             wireModal(d);
+            document.dispatchEvent(new CustomEvent('wc:modalOpen'));
         } catch (e) {
             $('#modalBody').innerHTML =
                 `<div class="modal-head"><div class="modal-title">Xato</div></div>
@@ -334,6 +537,7 @@
         $('#modalBody').innerHTML = '';
         document.body.style.overflow = '';
         state.current = null;
+        document.dispatchEvent(new CustomEvent('wc:modalClose'));
         if (location.search) {
             history.replaceState({}, '', location.pathname);
         }
@@ -708,6 +912,20 @@
         const sel = d.selected;
         const pb = d.playback;
 
+        // Mahalliy kutubxona (MTProto hisobi bo'lsa): server hisobi yo'qligi
+        // uchun saqlangan/yoqqan holatni shu brauzerdan olamiz va tarixga
+        // qo'shamiz. Bu faqat login qilmagan (PHP hisobi yo'q) holatda.
+        if (!loggedIn && window.WCLib) {
+            const wb0 = $('#actWatch');
+            if (wb0 && window.WCLib.has('saved', c.id)) {
+                wb0.classList.add('on');
+                wb0.innerHTML = '✓ Kutubxona';
+            }
+            const lb0 = $('#actLike');
+            if (lb0 && window.WCLib.has('liked', c.id)) lb0.classList.add('on');
+            window.WCLib.add('history', libItem(c));
+        }
+
         // Player — udp-player (udp-player JS'ning o'zida HLS/pending/retry logikasi
         // bor). Markup renderModal'da data-udp-config bilan yaratiladi; bu yerda
         // faqat init qilamiz (modal dinamik bo'lgani uchun window.UDP kerak).
@@ -791,6 +1009,13 @@
         // Like
         const likeBtn = $('#actLike');
         if (likeBtn) likeBtn.onclick = async () => {
+            // Server hisobi yo'q — mahalliy kutubxona.
+            if (!loggedIn) {
+                if (!window.WCLib) return;
+                const onLocal = window.WCLib.toggle('liked', libItem(c));
+                likeBtn.classList.toggle('on', onLocal);
+                return;
+            }
             if (!requireLogin()) return;
             likeBtn.classList.add('busy');
             try {
@@ -811,6 +1036,15 @@
         // Watchlist
         const wBtn = $('#actWatch');
         if (wBtn) wBtn.onclick = async () => {
+            // Server hisobi yo'q — mahalliy kutubxona.
+            if (!loggedIn) {
+                if (!window.WCLib) return;
+                const onLocal = window.WCLib.toggle('saved', libItem(c));
+                wBtn.classList.toggle('on', onLocal);
+                wBtn.textContent = onLocal ? '✓ Kutubxona' : '＋ Kutubxona';
+                toast(onLocal ? 'Kutubxonaga qo\'shildi' : 'Kutubxonadan olib tashlandi', 'ok');
+                return;
+            }
             if (!requireLogin()) return;
             wBtn.classList.add('busy');
             try {
@@ -1030,6 +1264,11 @@
                     end: b,
                     title: body.querySelector('#tTitle').value || ''
                 });
+                // MTProto (PHP sessiyasiz) uchun identifikator.
+                try {
+                    const me = localStorage.getItem('wc_tg_me_v1');
+                    if (me) body2.append('tg_me', me);
+                } catch (e) {}
                 const r = await api('reel-create.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1190,6 +1429,17 @@
         v.addEventListener('ended', save);
     }
 
+    // Mahalliy kutubxona (MTProto hisobi) uchun element.
+    function libItem(c) {
+        return {
+            id: c.id,
+            title: c.title,
+            poster: c.poster,
+            category: c.category,
+            year: c.year
+        };
+    }
+
     function requireLogin() {
         if (loggedIn) return true;
         toast('🔐 Bu amal uchun <a href="login.php">Telegram orqali kiring</a>');
@@ -1210,6 +1460,14 @@
             }
         });
 
+        // Hover-preview (karta ustida video boshlanadi).
+        document.addEventListener('mouseover', previewHoverStart);
+        document.addEventListener('mouseout', previewHoverEnd);
+        // Sahifa aylantirilsa yoki fokus yo'qolsa — preview to'xtaydi.
+        window.addEventListener('scroll', () => previewStop(), { passive: true, capture: true });
+        window.addEventListener('blur', () => previewStop());
+        window.addEventListener('beforeunload', () => previewStop());
+
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !$('#modal').hidden) closeModal();
         });
@@ -1222,30 +1480,34 @@
             if (!$('#listView').hidden) loadList(true);
         });
 
-        // Qidiruv (debounce)
+        // Qidiruv maydoni bosh sahifadan olib tashlandi — endi qidiruv chap
+        // paneldagi "Qidiruv" tugmasi orqali alohida oynada ochiladi
+        // (includes/nav.php #igSearch). Shuning uchun bu yerda ixtiyoriy.
         let debounce = null;
         const si = $('#searchInput');
         const sc = $('#searchClear');
 
-        si.addEventListener('input', () => {
-            sc.hidden = si.value === '';
-            clearTimeout(debounce);
-            debounce = setTimeout(() => {
-                state.search = si.value.trim();
+        if (si && sc) {
+            si.addEventListener('input', () => {
+                sc.hidden = si.value === '';
+                clearTimeout(debounce);
+                debounce = setTimeout(() => {
+                    state.search = si.value.trim();
+                    showListView();
+                    updateListTitle();
+                    loadList(true);
+                }, 350);
+            });
+
+            sc.onclick = () => {
+                si.value = '';
+                sc.hidden = true;
+                state.search = '';
                 showListView();
                 updateListTitle();
                 loadList(true);
-            }, 350);
-        });
-
-        sc.onclick = () => {
-            si.value = '';
-            sc.hidden = true;
-            state.search = '';
-            showListView();
-            updateListTitle();
-            loadList(true);
-        };
+            };
+        }
 
         // "Yana ko'rsatish"
         $('#loadMore').onclick = () => {
@@ -1273,6 +1535,9 @@
             }
         });
 
+        // "Davom etish" kartochkasini yopish tugmasi
+        wireContinueFloat();
+
         // Telegram Web App
         const wa = window.Telegram && window.Telegram.WebApp;
         if (wa) {
@@ -1283,6 +1548,19 @@
 
     // ---------------------------------------------------------------- start
     document.addEventListener('DOMContentLoaded', () => {
+        // URL filtrlari: index.php?cat=kino yoki index.php?q=qidiruv
+        try {
+            const uq = new URLSearchParams(location.search);
+            const cat = uq.get('cat');
+            if (cat) state.category = cat;
+            const q = uq.get('q');
+            if (q) {
+                state.search = q;
+                const si = $('#searchInput');
+                if (si) { si.value = q; const sc = $('#searchClear'); if (sc) sc.hidden = false; }
+            }
+        } catch (e) {}
+
         wire();
         loadHome();
 

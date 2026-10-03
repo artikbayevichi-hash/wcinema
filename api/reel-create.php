@@ -18,7 +18,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     fail('POST so‘raladi', 405);
 }
 
-requireUser();
+// PHP sessiya bo'lmasa (MTProto), foydalanuvchini brauzer yuborgan
+// `tg_me` dan topamiz/yaratamiz — reels yaratish hammaga ochiq.
+$userId = reelUserId();
+if ($userId <= 0) {
+    fail('Foydalanuvchi aniqlanmadi. Sahifani yangilab, qayta urinib ko‘ring.', 401);
+}
 
 $reels = new Reels();
 

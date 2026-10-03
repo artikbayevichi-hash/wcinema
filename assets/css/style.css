@@ -253,6 +253,55 @@ main { padding: 4px 0 20px; }
     background: rgba(255, 255, 255, .28);
 }
 
+/* ---- Hover-preview: karta ustida o'ynaydigan video ---------------------- */
+.card-preview {
+    position: absolute; inset: 0;
+    /* Shaffof: video kadrlari kelguncha ostidagi poster ko'rinib turadi. */
+    background: transparent;
+    z-index: 3;
+    overflow: hidden;
+    animation: pvFade .22s ease;
+}
+.card-preview > video,
+.card-preview .card-preview-tg,
+.card-preview .tgs-preview,
+.card-preview .tgs-pv {
+    width: 100%; height: 100%; display: block;
+    object-fit: cover;
+}
+/* tg-stream'ning `.tgs` konteynerini karta o'lchamiga moslashtiramiz:
+   min-height va burchaklar preview'da kerak emas. */
+.card-preview .tgs-preview {
+    min-height: 0;
+    border-radius: 0;
+    background: transparent;
+}
+.card.pv-on .yt-thumb .yt-dur { opacity: 0; }
+@keyframes pvFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Preview yuklanmoqda — kichik spinner (fon shaffof, poster ko'rinadi) */
+.tgs-pv-load {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+}
+.tgs-pv-load i {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, .25);
+    border-top-color: #fff;
+    animation: pvSpin .8s linear infinite;
+    display: block;
+}
+@keyframes pvSpin { to { transform: rotate(360deg); } }
+
+/* Preview'da player "chrome" (yuqori chiziq, footer, tayyorgarlik paneli)
+   yashiriladi — faqat video ko'rinadi. Adaptiv (MSE) yo'lida `.udp-player`
+   thumbnail'ni to'liq qoplashi kerak. */
+.card-preview .tgs-bar,
+.card-preview .tgs-body,
+.card-preview .tgs-foot,
+.card-preview .tgs-prep { display: none !important; }
+.card-preview .udp-player { width: 100%; height: 100%; border-radius: 0; }
+
 .yt-body { display: flex; gap: 10px; align-items: flex-start; }
 .yt-av {
     flex: 0 0 auto;

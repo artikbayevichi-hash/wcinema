@@ -157,7 +157,7 @@
             state.seen.clear();
             state.slideEls = [];
             pauseAll();
-            track.innerHTML = '<div class="reels-loading"><span class="spinner"></span> Yuklanmoqda…</div>';
+            track.innerHTML = '<div class="reels-loading"><span class="spinner"></span></div>';
         }
 
         try {

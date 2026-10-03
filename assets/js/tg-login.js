@@ -59,8 +59,9 @@
   }
 
   function logoSvg() {
-    return '<svg class="tgl-logo-svg" viewBox="0 0 160 160" aria-hidden="true">'
-      + '<path fill-rule="evenodd" d="' + LOGO_PATH + '"/></svg>';
+    var base = (global.APP && global.APP.base) ? global.APP.base : '';
+    var v = (global.APP && global.APP.logoV) ? global.APP.logoV : 1;
+    return '<img class="tgl-logo-svg" src="' + base + '/assets/img/logo.png?v=' + v + '" alt="W CINEMA" width="120" height="120">';
   }
 
   // ---- mavzu ---------------------------------------------------------------

@@ -20,6 +20,8 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Reels yuklash — <?php echo htmlspecialchars(SITE_NAME); ?></title>
@@ -50,16 +52,13 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
     <span style="width:34px"></span>
 </header>
 
-<?php if (!$userId): ?>
-    <div class="up-card">
-        <div style="font-size:40px">🔐</div>
-        <h1 style="font-size:19px;margin:10px 0 6px">Kirish kerak</h1>
-        <p style="color:var(--muted);font-size:13.5px;margin-bottom:18px">
-            Reels yuklash uchun Telegram orqali kiring.
-        </p>
-        <a class="up-btn" href="login.php">Telegram orqali kiring</a>
-    </div>
-<?php else: ?>
+<?php
+// Reels yuklash endi BARCHA foydalanuvchilar uchun ochiq. Sayt MTProto
+// orqali ishlaganda serverda PHP sessiyasi bo'lmaydi; shu sabab brauzer
+// o'z Telegram identifikatorini (`wc_tg_me_v1` -> `tg_me`) yuboradi va
+// server foydalanuvchini shundan topadi/yaratadi (Auth::ensureUserFromClient).
+// Yuklangan reel baribir moderatsiyadan (status 0) o'tadi.
+?> 
 
 <form class="up-card" id="upForm" enctype="multipart/form-data">
 
@@ -234,11 +233,17 @@ $maxMb  = (int) REEL_EFFECTIVE_MAX_UPLOAD_MB;
             submit.textContent = 'Yuborish';
             showMsg('Tarmoq uzildi', 'err');
         };
-        xhr.send(new FormData(form));
+        // Telegram identifikatorini ham yuboramiz — server foydalanuvchini
+        // shundan topadi/yaratadi (PHP sessiya bo'lmagani uchun).
+        const fd = new FormData(form);
+        try {
+            const me = localStorage.getItem('wc_tg_me_v1');
+            if (me) fd.append('tg_me', me);
+        } catch (e) {}
+        xhr.send(fd);
     });
 })();
 </script>
-<?php endif; ?>
 
 </body>
 </html>

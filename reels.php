@@ -21,6 +21,8 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Reels — <?php echo htmlspecialchars(SITE_NAME); ?></title>
@@ -55,17 +57,13 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
         <button class="reels-tab" data-sort="mine">👤 Mening</button>
         <?php endif; ?>
     </div>
-    <?php if ($userId): ?>
     <a class="reels-back" href="reels-upload.php" aria-label="Yuklash">＋</a>
-    <?php else: ?>
-    <a class="reels-back" href="login.php" aria-label="Kirish">🔐</a>
-    <?php endif; ?>
 </header>
 
 <!-- ============================== Oqim (vertikal) ============================== -->
 <div class="reels-track" id="reelsTrack">
     <div class="reels-loading">
-        <span class="spinner"></span> Yuklanmoqda…
+        <span class="spinner"></span>
     </div>
 </div>
 

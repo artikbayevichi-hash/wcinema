@@ -17,7 +17,8 @@ $user   = $auth->getCurrentUser();
 $userId = $user ? (int) $user['id'] : null;
 
 if (!$userId) {
-    header('Location: login.php');
+    // PHP hisobi yo'q (faqat Telegram/MTProto) — mahalliy kutubxonaga o'tamiz.
+    header('Location: profile.php?tab=history');
     exit;
 }
 
@@ -26,6 +27,8 @@ $items = $catalog->getContinueWatching($userId, 200);
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Tarix — <?php echo htmlspecialchars(SITE_NAME); ?></title>

@@ -27,6 +27,8 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
 <!DOCTYPE html>
 <html lang="uz">
 <head>
+    <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
+    <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
@@ -54,6 +56,7 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
     // PHP -> JS ko'prigi (tg-stream.js APP.base va APP.tg ni o'qiydi).
     window.APP = {
         base: <?php echo json_encode($base); ?>,
+        logoV: <?php echo @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1; ?>,
         siteName: <?php echo json_encode(SITE_NAME); ?>,
         tg: {
             apiId:   <?php echo (int) TG_API_ID; ?>,

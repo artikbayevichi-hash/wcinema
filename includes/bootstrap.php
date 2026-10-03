@@ -136,6 +136,30 @@ function requireUser() {
     return $user;
 }
 
+/**
+ * Reels yuklash uchun joriy foydalanuvchi ID'si (0 bo'lsa — aniqlanmadi).
+ *
+ * Sayt brauzerdagi MTProto orqali ishlaganda serverda PHP sessiyasi
+ * bo'lmaydi. Shu sabab brauzer `tg_me` (wc_tg_me_v1) yuboradi; undan
+ * foydalanuvchi topiladi yoki yaratiladi. Bu amal FAQAT kontent
+ * qo'shish uchun — admin huquqi BERMAYDI (yuklama moderatsiyaga tushadi).
+ */
+function reelUserId() {
+    global $user, $auth;
+    if ($user) {
+        return (int) $user['id'];
+    }
+    $raw = input('tg_me', '', 2000);
+    if ($raw === '' || $raw[0] !== '{') {
+        return 0;
+    }
+    $tg = json_decode($raw, true);
+    if (!is_array($tg) || empty($tg['id'])) {
+        return 0;
+    }
+    return (int) $auth->ensureUserFromClient($tg);
+}
+
 /** Faqat admin. JSON API uchun (boshqa joyda esa sahifa 403). */
 function requireAdmin($json = true) {
     global $auth;
