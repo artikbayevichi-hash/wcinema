@@ -40,6 +40,7 @@ $counts  = [
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/reels.css">
     <link rel="stylesheet" href="assets/css/instagram.css">
+    <?php require __DIR__ . '/includes/tv-head.php'; ?>
 </head>
 <body class="adm-body ig-shell">
 
@@ -150,7 +151,7 @@ $counts  = [
     <?php if ((int) $r['status'] !== 1): ?>
     <div class="adm-reject">
         <textarea id="rj_<?php echo (int) $r['id']; ?>" rows="2" maxlength="255"
-                  placeholder="Rad etish sababi (muallifga Telegram orqali yuboriladi)"></textarea>
+                  placeholder="Rad etish sababi (muallifga yuboriladi)"></textarea>
     </div>
     <?php endif; ?>
 

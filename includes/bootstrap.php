@@ -40,6 +40,12 @@ require_once __DIR__ . '/../includes/TgPull.php';
 require_once __DIR__ . '/../includes/TgResolve.php';
 require_once __DIR__ . '/../includes/Reels.php';
 require_once __DIR__ . '/../includes/TelegramDelivery.php';
+// Account Privacy: profil maxfiyligi + bloklangan foydalanuvchilar
+require_once __DIR__ . '/../includes/Blocks.php';
+require_once __DIR__ . '/../includes/Settings.php';
+require_once __DIR__ . '/../includes/Notifications.php';
+// Kontent yuklash (Reels / Image Post / Long Video + thumbnail)
+require_once __DIR__ . '/../includes/Uploader.php';
 
 $auth    = new Auth();
 $catalog = new Catalog();
@@ -131,7 +137,7 @@ function fail($message, $status = 400) {
 function requireUser() {
     global $user;
     if (!$user) {
-        Auth::fail('Telegram orqali kiring', 401);
+        Auth::fail('Avval tizimga kiring', 401);
     }
     return $user;
 }

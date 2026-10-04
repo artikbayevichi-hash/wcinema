@@ -105,7 +105,13 @@
     play: null,            // tg-play.js oqimi (MKV/HEVC uchun), null = tabiiy
     playAbort: null,       // joriy oqimni to'xtatish uchun AbortController
     playLib: null,         // tg-play.js moduli (bir marta import qilinadi)
-    me: null               // joriy Telegram akkaunti (getMe natijasi)
+    me: null,              // joriy Telegram akkaunti (getMe natijasi)
+    pvCache: null,         // { "kanal/post": {t, doc, size, loc, probe} } kesh
+    prefetchKey: null,     // oldindan yuklanayotgan hujjat kaliti
+    prefetchPromise: null, // oldindan yuklash promise
+    prefetchAbort: null,   // uni to'xtatish uchun funksiya
+    onPlayerReady: null,   // mount(onReady) — player o'ynashga tayyor bo'lganda
+    readyFired: false      // onReady bir marta chaqirilishi uchun
   };
 
   // ------------------------------------------------------------------- yordam
@@ -440,6 +446,39 @@
     } catch (e) {}
   }
 
+  // =========================================== Kirish xabarnomasi (Telegram push)
+  //
+  // MTProto sessiya tikilgach serverga BIR MARTA `action=hello` yuboramiz.
+  // Server ham `notifications` ga yozadi, ham Telegram Bot orqali shaxsiy
+  // chat'iga "Hisobga kirdingiz" xabarini yuboradi. Deduplik serverda
+  // (5 daqiqa), shuning uchun qayta-qayta chaqirish zararli emas.
+  //
+  // Muhim: bu so'rov Telegram sessiyasidan MUSTAQIL, `catch` da jim
+  // yo'qotiladi — bildirishnoma yuborilmasa sayt ishlashda davom etadi.
+  var HELLO_SENT = false;
+  function pingLoginAlert() {
+    if (HELLO_SENT) return;
+    var me = S.me || null;
+    if (!me || me.id == null) return;
+    HELLO_SENT = true;
+    try {
+      var body = new URLSearchParams({ action: 'hello' });
+      body.set('tg_me', JSON.stringify({
+        id: String(me.id),
+        firstName: me.firstName || '',
+        lastName: me.lastName || '',
+        username: me.username || ''
+      }));
+      fetch(base() + '/api/notifications.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        credentials: 'same-origin',
+        keepalive: true
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   // Baytlarni data-URL ga o'giradi (profil rasmi uchun).
   function bytesToDataUrl(bytes, mime) {
     var u8 = (bytes instanceof Uint8Array) ? bytes : new Uint8Array(bytes || []);
@@ -580,7 +619,7 @@
         if (saved && !allowLogin) {
           return S.client.connect()
             .then(function () { return S.client.getMe(); })
-            .then(function (me) { saveMe(me); savePhoto(S.client, me); return S.client; })
+            .then(function (me) { saveMe(me); savePhoto(S.client, me); pingLoginAlert(); return S.client; })
             .catch(function (e) {
               var m = (e && (e.errorMessage || e.message)) || String(e);
               if (isAuthError(m)) {
@@ -655,7 +694,7 @@
         // aynan bitta odam bo'yicha sanash uchun. getMe() xato bersa
         // ham davom etamiz (me = null bo'lib qoladi).
         return c.getMe().then(
-          function (me) { saveMe(me); savePhoto(c, me); return c; },
+          function (me) { saveMe(me); savePhoto(c, me); pingLoginAlert(); return c; },
           function () { return c; }
         );
       })
@@ -858,7 +897,12 @@
   // BITTA `upload.getFile` so'rovi. Qaytgan bayt soni `length` dan kam
   // bo'lishi mumkin (blok chegarasi tufayli) — buni `readBytes` hal
   // qiladi. Fayl tugagan bo'lsa — bo'sh massiv (xato EMAS).
-  function readOnce(offset, length, cap) {
+  //
+  // `ctx` — ixtiyoriy hujjat konteksti ({loc, dcId}). Berilmasa joriy
+  // aktiv hujjat (S.loc/S.doc) ishlatiladi. Bu oldindan yuklash (prefetch)
+  // uchun kerak: aktiv oqimga tegmasdan BOSHQA hujjatni o'qish imkonini
+  // beradi.
+  function readOnce(offset, length, cap, ctx) {
     var aligned = Math.floor(offset / 4096) * 4096;
     var skip = offset - aligned;
     var want = Math.ceil((length + skip) / 4096) * 4096;
@@ -867,12 +911,15 @@
     var lim = Math.min(cap || tgCap, roomInBlock(offset));
     if (want > lim) want = lim;
 
+    var loc = (ctx && ctx.loc) ? ctx.loc : S.loc;
+    var dc  = (ctx && ctx.dcId != null) ? ctx.dcId : (S.doc ? S.doc.dcId : undefined);
+
     return S.client.invoke(new S.T.Api.upload.GetFile({
-      location: S.loc,
+      location: loc,
       offset: aligned,
       limit: want,
       precise: true
-    }), S.doc.dcId).then(function (res) {
+    }), dc).then(function (res) {
       var b = res.bytes || res;
       var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
       // Telegram kamroq qaytarsa — ortiqcha joyni nol bilan
@@ -884,20 +931,26 @@
 
   // To'liq oraliqni o'qish. Har bir Telegram so'rovi 1 MB blok ichida
   // qoladi; katta oraliq bo'laklab yig'iladi.
-  function readBytes(offset, length) {
+  //
+  // `ctx` — ixtiyoriy hujjat konteksti ({loc, dcId, abort}). Prefetch shu
+  // orqali aktiv oqimga tegmasdan boshqa hujjatni o'qiy oladi; `abort()`
+  // true qaytarsa o'qish darhol to'xtaydi (foydalanuvchi slaydni tashlab
+  // ketgan bo'lsa — ortiqcha trafik ketmaydi).
+  function readBytes(offset, length, ctx) {
     if (!(length > 0)) return Promise.resolve(new Uint8Array(0));
+    if (ctx && ctx.abort && ctx.abort()) return Promise.resolve(new Uint8Array(0));
 
     var skip0 = offset - Math.floor(offset / 4096) * 4096;
 
     // 1) Hammasi bitta blokka va bitta so'rovga sig'adi — to'g'ridan.
     if (length <= Math.min(tgCap, roomInBlock(offset)) - skip0) {
-      return readOnce(offset, length).catch(function (e) {
+      return readOnce(offset, length, null, ctx).catch(function (e) {
         var m = (e && (e.errorMessage || e.message)) || String(e);
         if (!isLimitError(m) || tgCap <= TG_MIN) throw e;
         // Telegram kutilganidan kichikroq chegara qo'llasa —
         // yarmini sinab ko'ramiz.
         tgCap = Math.max(TG_MIN, Math.floor(tgCap / 2));
-        return readOnce(offset, length, tgCap);
+        return readOnce(offset, length, tgCap, ctx);
       });
     }
 
@@ -915,13 +968,14 @@
 
       function step() {
         if (got >= length) return finish();
+        if (ctx && ctx.abort && ctx.abort()) return finish();
         var off = offset + got;
         var skip = off - Math.floor(off / 4096) * 4096;
         // Shu blokka sig'adigan maksimal foydali bayt soni.
         var fits = Math.min(tgCap, roomInBlock(off)) - skip;
         if (fits < 1) fits = 1;                    // hech qachon to'xtamasin
         var piece = Math.min(fits, length - got);
-        return readOnce(off, piece).then(function (b) {
+        return readOnce(off, piece, null, ctx).then(function (b) {
           if (!b.length) return finish();          // fayl tugadi
           parts.push(b);
           got += b.length;
@@ -1032,6 +1086,21 @@
    * ------------------------------------------------------------------------ */
   function isPreview() { return !!(S.cfg && S.cfg.preview); }
 
+  // Player o'ynashga tayyor bo'lganda mount(onReady) ni BIR MARTA chaqiradi.
+  // Reels shundan keyin pastdagi (keyingi) videoni oldindan yuklaydi.
+  function fireReady() {
+    if (S.readyFired) return;
+    S.readyFired = true;
+    if (typeof S.onPlayerReady === 'function') {
+      try { S.onPlayerReady(); } catch (e) { /* jim */ }
+    }
+  }
+  function armReady(v) {
+    if (!v) return;
+    v.addEventListener('canplay', fireReady, { once: true });
+    v.addEventListener('playing', fireReady, { once: true });
+  }
+
   // Login oqimini ishga tushirmaydigan "jim" view (xuddi verify() kabi).
   function silentView() {
     return {
@@ -1049,6 +1118,8 @@
     stop();
     S.mount = node;
     S.cfg = { preview: true, title: opts.title || '' };
+    S.onPlayerReady = null;
+    S.readyFired = false;
     S.job++;
     var job = S.job;
 
@@ -1075,6 +1146,7 @@
     var v = document.getElementById('playerVideo');
     if (v) {
       v.muted = true;
+      armReady(v);
       var p = v.play();
       if (p && p.catch) p.catch(function () { /* avtomatik o'ynash bloklangan */ });
     }
@@ -1088,6 +1160,8 @@
     stop();                                  // avvalgi filmni to'xtatamiz
     S.mount = node;
     S.cfg = opts.cfg || {};
+    S.onPlayerReady = typeof opts.onReady === 'function' ? opts.onReady : null;
+    S.readyFired = false;
     S.job++;
 
     node.classList.add('tgs');
@@ -1203,24 +1277,34 @@
     }
     if (S.job !== job) return;
 
-    // --- 2b) Preview keshi -------------------------------------------
+    // --- 2b) Hujjat keshi --------------------------------------------
     // Bir marta topilgan fayl (doc/loc) va format (probe) keshlanadi.
-    // Takroriy hover bir ZUMDA ochiladi — qayta findDoc/probe qilinmaydi.
-    var pvKey = (isPreview() && opts.channel && opts.post)
+    // Keyingi mount — hover YOKI oldindan yuklash (prefetch) — bir ZUMDA
+    // ochiladi: qayta findDoc/probe qilinmaydi.
+    var cacheKey = (opts.channel && opts.post)
       ? (String(opts.channel) + '/' + Number(opts.post)) : null;
-    if (pvKey) {
-      var pvHit = S.pvCache && S.pvCache[pvKey];
-      if (pvHit && (Date.now() - pvHit.t) < 20 * 60 * 1000) {
-        S.doc = pvHit.doc;
-        S.size = pvHit.size;
+    if (cacheKey) {
+      var cHit = S.pvCache && S.pvCache[cacheKey];
+      // Shu hujjat uchun prefetch HOZIR yuklanayotgan bo'lsa — uni kutamiz.
+      // Shunda ikki marta `findDoc` qilinmaydi va tayyor natija darhol
+      // ishlatiladi (foydalanuvchi slaydni tez almashtirganda ham tez).
+      if (!cHit && S.prefetchKey === cacheKey && S.prefetchPromise) {
+        try { await S.prefetchPromise; } catch (e) { /* pastda o'zimiz qidiramiz */ }
+        if (S.job !== job) return;
+        cHit = S.pvCache && S.pvCache[cacheKey];
+      }
+      if (cHit && (Date.now() - cHit.t) < 20 * 60 * 1000) {
+        S.doc = cHit.doc;
+        S.size = cHit.size;
         S.totalRead = 0;
-        S.loc = pvHit.loc;
-        S.probe = pvHit.probe;
+        S.loc = cHit.loc;
+        S.probe = cHit.probe;
         connect();
-        if (pvHit.probe && pvHit.probe.playable) {
-          renderPreview(node, opts, pvHit.size, pvHit.probe);
+        if (cHit.probe && cHit.probe.playable !== false) {
+          if (isPreview()) renderPreview(node, opts, cHit.size, cHit.probe);
+          else renderPlayer(node, opts, cHit.size, cHit.probe);
         } else {
-          renderAdaptivePlayer(node, opts, pvHit.size, pvHit.probe, 'Tayyorlanmoqda…');
+          renderAdaptivePlayer(node, opts, cHit.size, cHit.probe, 'Tayyorlanmoqda…');
         }
         return;
       }
@@ -1254,9 +1338,9 @@
     S.probe = probe;                            // probeTransport uchun
     if (S.job !== job) return;
 
-    if (pvKey) {
+    if (cacheKey) {
       S.pvCache = S.pvCache || {};
-      S.pvCache[pvKey] = {
+      S.pvCache[cacheKey] = {
         t: Date.now(), doc: S.doc, size: size, loc: S.loc, probe: probe
       };
     }
@@ -1448,6 +1532,43 @@
   }
 
 
+  // --- UDP bo'lmagan sahifalar uchun engil o'ynatish zaxirasi ----------------
+  //
+  // `player.js` (UDP) bo'lsa, u avtomatik o'ynash, boshqaruv va pauzani
+  // boshqaradi. Reels sahifasida player.js yo'q — o'sha yerda <video>
+  // hech qachon `play()` bo'lmay, "qotib" qolardi (foydalanuvchi shikoyati:
+  // "serverdan 0 bayt · ... 20 MB da to'xtadi"). Bu funksiya faqat shunday
+  // sahifalar uchun: avtomatik o'ynatish (avval jim, keyin ovozni ochish)
+  // va bosilganda pauza/play. Index.php'da UDP bor — u yerda chaqirilmaydi.
+  function attachNativeFallback(v) {
+    if (!v) return;
+    v.style.cursor = 'pointer';
+    v.addEventListener('click', function () {
+      if (v.paused) {
+        // Foydalanuvchi bosdi — bu "user gesture", ovozni ochib o'ynatamiz.
+        v.muted = false;
+        var rp = v.play();
+        if (rp && rp.catch) rp.catch(function () { /* jim */ });
+      } else {
+        v.pause();
+      }
+    });
+    var kick = function () {
+      if (!v.paused) return;
+      // Avval JIM o'ynatamiz — ovozli avtomatik o'ynash ko'p brauzerlarda
+      // bloklanadi. Boshlangach ovozni ochamiz.
+      v.muted = true;
+      var p = v.play();
+      if (p && p.then) {
+        p.then(function () { try { v.muted = false; } catch (e) {} })
+         .catch(function () { /* jim qoladi — bosilganda ochiladi */ });
+      }
+    };
+    kick();
+    v.addEventListener('loadeddata', kick, { once: true });
+    v.addEventListener('canplay', kick, { once: true });
+  }
+
   // --------------------------------------------------------------- player
   function renderPlayer(node, opts, size, probe) {
     var cfg = JSON.stringify({
@@ -1492,8 +1613,9 @@
 
     // Saytdagi mavjud Telegram-ko'rinishidagi boshqaruvni ulaymiz
     // (play/pause, seek, ovoz, to'liq ekran, keyingi qism).
+    var hasUdp = !!(global.UDP && global.UDP.initAll);
     try {
-      if (global.UDP && global.UDP.initAll) global.UDP.initAll();
+      if (hasUdp) global.UDP.initAll();
     } catch (e) { /* boshqaruvsiz ham ko'radi */ }
 
     // --- <video> haqiqiy xato bersa --------------------------------------
@@ -1508,6 +1630,11 @@
         v.addEventListener('error', function () {
           onVideoError(node, opts, probe, v);
         }, { once: true });
+        armReady(v);
+
+        // UDP (player.js) bo'lmagan sahifalarda — masalan reels.php —
+        // video hech qachon `play()` bo'lmasdi (yuqoridagi izohga qarang).
+        if (!hasUdp) attachNativeFallback(v);
       }
     } catch (e) { /* eshituvchi ulanmadi — muammo yo'q */ }
 
@@ -1592,6 +1719,7 @@
       v.addEventListener('loadeddata', kick, { once: true });
       v.addEventListener('canplay', kick, { once: true });
     }
+    if (v) armReady(v);
     var bar = node.querySelector('[data-prep-bar]');
     var title = node.querySelector('[data-prep-title]');
     var note = node.querySelector('[data-prep-note]');
@@ -1647,7 +1775,14 @@
       // Tayyor — tayyorgarlik panelini olib tashlaymiz.
       var p = node.querySelector('[data-prep]');
       if (p) p.parentNode.removeChild(p);
-      try { if (!isPreview() && global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
+      if (!isPreview()) {
+        if (global.UDP && global.UDP.initAll) {
+          try { global.UDP.initAll(); } catch (e) {}
+        } else {
+          // Reels kabi UDP'siz sahifalarda video o'zi boshlanishi kerak.
+          attachNativeFallback(v);
+        }
+      }
 
       // Orqaga seek: SourceBuffer bo'shab qolgan bo'lsa, oqim
       // shu vaqtdan qayta quradi.
@@ -1680,7 +1815,13 @@
           S.playAbort = null;
           var p = node.querySelector('[data-prep]');
           if (p) p.parentNode.removeChild(p);
-          try { if (!isPreview() && global.UDP && global.UDP.initAll) global.UDP.initAll(); } catch (e) {}
+          if (!isPreview()) {
+            if (global.UDP && global.UDP.initAll) {
+              try { global.UDP.initAll(); } catch (e) {}
+            } else {
+              attachNativeFallback(v);
+            }
+          }
         }).catch(function (e2) {
           if (e2 && e2.name === 'AbortError') return;
           adaptiveFailed(node, opts, probe, e2);
@@ -1844,11 +1985,19 @@
       .then(function (b) { return new Uint8Array(b); });
   }
 
-  function probeFormat(size) {
+  // `ctx` berilsa — baytlar TO'G'RIDAN-TO'G'RI Telegram'dan (SW orqali
+  // emas) o'qiladi, shunda aktiv oqimga tegmasdan boshqa hujjatni
+  // tekshirish mumkin (prefetch).
+  function probeFormat(size, ctx) {
     if (!global.WcProbe) {
       return Promise.resolve({
         playable: true, containerName: 'MP4', videoCodecs: [],
         reason: null
+      });
+    }
+    if (ctx) {
+      return global.WcProbe.probeMp4(size, function (start, end) {
+        return readBytes(start, end - start + 1, ctx);
       });
     }
     return global.WcProbe.probeMp4(size, fetchRange);
@@ -1902,6 +2051,121 @@
       return waitForController(2500);
     }).catch(function () { return false; });
   }
+
+  // ============================================== oldindan yuklash (prefetch)
+  //
+  // Keyingi reel/film uchun faqat METAMA'LUMOTNI tayyorlaydi: Telegram'dan
+  // xabarni topib (findDoc) doc/size/loc ni keshlaydi. Video baytlari
+  // o'ynalmaydi — shuning uchun aktiv oqimga xalaqit bermaydi. Foydalanuvchi
+  // o'sha slaydga o'tganda mount keshdan bir zumda ochiladi (qayta findDoc
+  // yo'q). Agar foydalanuvchi slaydni tashlab ketsa — cancelPrefetch()
+  // o'qishni to'xtatadi.
+  function prefetch(opts) {
+    opts = opts || {};
+    var key = (opts.channel && opts.post)
+      ? (String(opts.channel) + '/' + Number(opts.post)) : null;
+    if (!key) return Promise.resolve(false);
+
+    // Keshda bor bo'lsa — hech narsa qilmaymiz.
+    var hit = S.pvCache && S.pvCache[key];
+    if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) return Promise.resolve(true);
+
+    // Xuddi shu hujjat allaqachon yuklanmoqda.
+    if (S.prefetchKey === key && S.prefetchPromise) return S.prefetchPromise;
+
+    // Eskisini bekor qilib, yangisini boshlaymiz (bir vaqtda bittasi).
+    cancelPrefetch();
+
+    if (!hasSession()) return Promise.resolve(false);
+
+    var aborted = false;
+    S.prefetchKey = key;
+    S.prefetchAbort = function () { aborted = true; };
+
+    var p = (function () {
+      try {
+        return ensureSession(silentView()).then(function () {
+          if (aborted) return false;
+          return findDoc(S.client, opts);
+        }).then(function (doc) {
+          if (aborted || !doc) return false;
+          var size = bytesOf(doc);
+          if (!size) return false;
+          var loc = new S.T.Api.InputDocumentFileLocation({
+            id: doc.id,
+            accessHash: doc.accessHash,
+            fileReference: doc.fileReference,
+            thumbSize: ''
+          });
+          var ctx = { loc: loc, dcId: doc.dcId, abort: function () { return aborted; } };
+          return probeFormat(size, ctx).then(function (probe) {
+            if (aborted) return false;
+            S.pvCache = S.pvCache || {};
+            S.pvCache[key] = { t: Date.now(), doc: doc, size: size, loc: loc, probe: probe };
+            return true;
+          });
+        });
+      } catch (e) {
+        return Promise.resolve(false);
+      }
+    })();
+
+    S.prefetchPromise = p;
+    p.catch(function () {}).then(function () {
+      // Faqat o'zimiz hali ham joriy promise bo'lsak tozalaymiz —
+      // aks holda yangi prefetch holatini o'chirib qo'yardik.
+      if (S.prefetchPromise === p) {
+        S.prefetchPromise = null;
+        S.prefetchAbort = null;
+        S.prefetchKey = null;
+      }
+    });
+    return p;
+  }
+
+  function cancelPrefetch() {
+    if (S.prefetchAbort) {
+      try { S.prefetchAbort(); } catch (e) {}
+    }
+    S.prefetchAbort = null;
+    S.prefetchKey = null;
+    S.prefetchPromise = null;
+  }
+
+  // Sahifadan chiqishda (boshqa bo'limga o'tish) hamma narsani to'xtatamiz:
+  // aktiv oqim + prefetch + SW kanali. Shunda yangi sahifa Telegram
+  // kanalini kutmasdan tez ochiladi.
+  function release() {
+    cancelPrefetch();
+    try { stop(); } catch (e) {}
+  }
+
+  // ================================================ 9. UMUMIY MTProto KLIENT
+  //
+  //  Reels izohlari, stiker/GIF yuborish kabi vazifalar uchun ulangan
+  //  GramJS klientini qaytaradi. Bu yerda LOGIN OQIMI YO'Q: agar kalit
+  //  bo'lmasa yoki yaroqsiz bo'lsa — reject qilamiz (chaqiruvchi login
+  //  sahifasiga yo'naltiradi yoki xabar ko'rsatadi).
+  function commentClient() {
+    if (S.client && S.authed) return Promise.resolve(S.client);
+    if (!hasSession()) {
+      var e = new Error('AUTH_REQUIRED');
+      e.errorMessage = 'AUTH_REQUIRED';
+      return Promise.reject(e);
+    }
+    var silent = {
+      qrBox: function () { return null; },
+      pwdForm: function () { return null; },
+      pwdInput: function () { return null; },
+      setState: function () {},
+      needPassword: function () {},
+      showError: function () {},
+      askPhone: function () { return Promise.reject(new Error('AUTH_RESTART')); },
+      askCode: function () { return Promise.reject(new Error('AUTH_RESTART')); }
+    };
+    return ensureSession(silent, { allowLogin: false });
+  }
+
 
   // ======================================================= 8. KIRISH ESHIGI
   //
@@ -2187,6 +2451,11 @@
     init: init,
     // Hover-preview uchun SW'ni oldindan tayyorlash (reload qilmaydi).
     warm: warm,
+    // Keyingi videoni oldindan tayyorlash (faqat metama'lumot keshlanadi).
+    prefetch: prefetch,
+    cancelPrefetch: cancelPrefetch,
+    // Sahifadan chiqishda: oqim + prefetch + SW kanalini to'xtatish.
+    release: release,
     // Kirish eshigi — saytga kirganda chaqiriladi (QR skanerlash).
     authGate: authGate,
     hasSession: hasSession,
@@ -2221,6 +2490,11 @@
       if (reload === false) return;
       location.reload();
     },
+    // Ulangan MTProto klient (izohlar, stiker/GIF uchun).
+    // Kalit bo'lmasa/yaroqsiz bo'lsa reject bo'ladi (login talab qilinadi).
+    client: commentClient,
+    // GramJS bundle (Api, utils) — klient ulangandan keyin mavjud bo'ladi.
+    bundle: function () { return S.T || null; },
     // Telegram ilovasida o'z playerida ochish (ixtiyoriy zaxira).
     tgLink: tgDeepLink,
     // Eslikni qayta ko'rsatish (kalit eskirgan bo'lsa).

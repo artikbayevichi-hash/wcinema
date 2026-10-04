@@ -390,6 +390,41 @@ define('REELS_CHANNEL', trim((string) env_value('REELS_CHANNEL', '')));
 define('REELS_BOT_LINK', 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=reel_');
 
 // ---------------------------------------------------------------------------
+// Reels izohlari - Telegram forum-guruh (topics)
+// ---------------------------------------------------------------------------
+// Har bir reel uchun shu guruhda alohida MAVZU (topic) ochiladi va izohlar
+// o'sha mavzuda saqlanadi (Instagram'dagi "comments" kabi, lekin Telegram
+// tomonida). Serverda fayl saqlanmaydi - matn/stiker/GIF/rasm Telegramda
+// qoladi, sayt ularni brauzerdagi MTProto sessiyasi orqali o'qib ko'rsatadi.
+//
+// Qiymat: ommaviy guruh @username'i (masalan @wcinema_chats) yoki
+// -100... ko'rinishidagi chat id. Bo'sh bo'lsa Telegram izohlari o'chiriladi
+// (eski, bazadagi izohlar ishlatiladi).
+//
+// MUHIM: guruhda "Topics" (mavzular) yoqilgan bo'lishi va bot ADMIN
+// (Manage Topics huquqi bilan) bo'lishi shart - aks holda mavzu ochilmaydi.
+define('TG_COMMENTS_CHAT', trim((string) env_value('TG_COMMENTS_CHAT', '')));
+
+// Reels izohlarida foydalanuvchi Telegram nomi bilan ko'rinishi uchun
+// (topic ichidagi xabarlar muallifi). Bu shunchaki ko'rsatish uchun. 
+function _tg_comments_web_url() {
+    $chat = TG_COMMENTS_CHAT;
+    if ($chat === '') {
+        return '';
+    }
+    if ($chat[0] === '@') {
+        return 'https://t.me/' . ltrim($chat, '@');
+    }
+    // -1004333589316 -> https://t.me/c/4333589316
+    $digits = preg_replace('/\D/', '', $chat);
+    if (strpos($digits, '100') === 0) {
+        $digits = substr($digits, 3);
+    }
+    return $digits !== '' ? 'https://t.me/c/' . $digits : '';
+}
+define('TG_COMMENTS_URL', _tg_comments_web_url());
+
+// ---------------------------------------------------------------------------
 // Adminlar
 // ---------------------------------------------------------------------------
 // Telegram ID bo'yicha aniq ro'yxat, vergul bilan ajratilgan:

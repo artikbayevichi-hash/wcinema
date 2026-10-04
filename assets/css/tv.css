@@ -1,0 +1,204 @@
+/* ==========================================================================
+ * tv.css — Smart TV rejimi (10-foot UI)
+ * --------------------------------------------------------------------------
+ * `.tv-mode` klassi `assets/js/tv-mode.js` (yoki `<head>` dagi tez aniqlash
+ * skripti) tomonidan TV platformasi topilganda qo'yiladi:
+ *   · `<html class="tv-mode">`  — bo'sh sahifadan oldin (FOUC yo'q)
+ *   · `<body class="tv-mode">`  — spetsifikatsiya bo'yicha
+ * Shuning uchun selektorlar `.tv-mode` prefix'ini ishlatadi (body yoki html).
+ *
+ * Maqsad: ekrandan 2-3 metr narida o'tirib ham barcha elementlar ko'rinishi
+ *   · shriftlar, ikonkalar, kartalar KATTALASHTIRILADI
+ *   · pult (D-Pad) uchun yorqin fokus halqasi + `scale(1.05)`
+ *   · sichqoncha/yuguruv skrollbarlari YASHIRILADI
+ *
+ * Fiksdan chiqarish: `data-tv-skip` atributi.
+ * ========================================================================== */
+
+/* ------------------------------------------------------- 1) asos o'lcham */
+.tv-mode {
+    font-size: 18px;
+    scrollbar-width: none;              /* Firefox */
+}
+.tv-mode::-webkit-scrollbar,
+.tv-mode *::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.tv-mode * { scrollbar-width: none; }
+
+/* Yon panel va pastki panel (mobil) katta ekranda kerak emas */
+@media (min-width: 1000px) {
+    .tv-mode .ig-mobar,
+    .tv-mode .ig-tabbar { display: none !important; }
+
+    /* TV'da yon panel HAR DOIM to'liq ochiq (hover talab qilinmaydi) */
+    .tv-mode .ig-side { width: 244px !important; box-shadow: none; }
+    .tv-mode .ig-side .ig-brand-text,
+    .tv-mode .ig-side .ig-txt,
+    .tv-mode .ig-side .ig-caret { display: inline !important; }
+    .tv-mode .ig-side .ig-tg-status,
+    .tv-mode .ig-side .ig-side-foot { display: flex !important; }
+    .tv-mode .ig-side .ig-item,
+    .tv-mode .ig-side .ig-brand { justify-content: flex-start !important; }
+    .tv-mode .ig-side .ig-sub:not([hidden]) { display: flex !important; }
+
+    .tv-mode.ig-shell { padding-left: 244px; }
+    .tv-mode.reels-body .reels-top { left: 244px; }
+}
+
+/* Yon panel elementlari — kattaroq */
+.tv-mode .ig-ico { width: 30px; height: 30px; }
+.tv-mode .ig-svg { width: 27px; height: 27px; stroke-width: 2; }
+.tv-mode .ig-item { font-size: 18px; }
+
+/* ------------------------------------------------- 2) fokus (D-Pad) halqa
+   Yorqin chegara + biroz kattalash — YouTube TV / Android TV uslubi.
+   `.tv-focus` klassi `tv-mode.js` pult bilan siljilganda qo'yiladi
+   (`:focus-visible` ga tayanmaslik uchun). */
+.tv-mode :focus { outline: 3px solid var(--accent); outline-offset: 3px; }
+/* Sichqoncha bilan bosilgan elementlarda halqa kerak emas (`:focus-visible`
+   sichqoncha uchun `false`, pult uchun `true` bo'ladi) */
+.tv-mode :focus:not(:focus-visible):not(.tv-focus) { outline: none; }
+.tv-mode :focus-visible,
+.tv-mode .tv-focus {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 10px;
+}
+/* Tablar (chekmasdan foydalanmaydi) */
+.tv-mode .ig-tabbar :focus { outline: none; }
+
+/* Video kartalari (bosh sahifa "shelf" qatorlari) */
+.tv-mode .yt-card,
+.tv-mode .ig-item,
+.tv-mode .reels-slide,
+.tv-mode .pf-cell,
+.tv-mode .ig-cell {
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+.tv-mode .yt-card:focus,
+.tv-mode .yt-card:focus-visible,
+.tv-mode .yt-card.tv-focus,
+.tv-mode .pf-cell:focus,
+.tv-mode .pf-cell:focus-visible,
+.tv-mode .pf-cell.tv-focus,
+.tv-mode .ig-cell:focus,
+.tv-mode .ig-cell:focus-visible,
+.tv-mode .ig-cell.tv-focus {
+    outline: none;
+    transform: scale(1.05);
+    z-index: 3;
+}
+.tv-mode .yt-card:focus .yt-thumb,
+.tv-mode .yt-card:focus-visible .yt-thumb,
+.tv-mode .yt-card.tv-focus .yt-thumb,
+.tv-mode .pf-cell:focus .pf-cell-media,
+.tv-mode .pf-cell:focus-visible .pf-cell-media,
+.tv-mode .pf-cell.tv-focus .pf-cell-media,
+.tv-mode .ig-cell:focus .ig-cell-media,
+.tv-mode .ig-cell.tv-focus .ig-cell-media {
+    box-shadow: 0 0 0 4px var(--accent), 0 14px 40px rgba(0, 0, 0, .55);
+}
+.tv-mode .ig-item:focus,
+.tv-mode .ig-item:focus-visible,
+.tv-mode .ig-item.tv-focus {
+    background: var(--card);
+    outline: none;
+    transform: scale(1.05);
+}
+.tv-mode .reels-slide:focus,
+.tv-mode .reels-slide:focus-visible,
+.tv-mode .reels-slide.tv-focus {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+}
+
+/* Tugmalar va ikonalar */
+.tv-mode button:focus-visible,
+.tv-mode button.tv-focus,
+.tv-mode .reels-c-tool:focus-visible,
+.tv-mode .reels-c-tool.tv-focus,
+.tv-mode .chat-tool:focus-visible,
+.tv-mode .chat-tool.tv-focus,
+.tv-mode .ig-ico:focus-visible,
+.tv-mode .ig-ico.tv-focus {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    transform: scale(1.05);
+}
+
+/* Matn maydonlari — kattaroq */
+.tv-mode input,
+.tv-mode textarea,
+.tv-mode select { font-size: 19px; min-height: 46px; }
+.tv-mode input[type="search"],
+.tv-mode .ig-search input { min-height: 56px; font-size: 22px; }
+
+/* ------------------------------------------------ 3) bosh sahifa (katalog) */
+.tv-mode .filters { padding: 20px 34px 8px; }
+.tv-mode .chip { font-size: 17px; padding: 11px 20px; border-radius: 12px; }
+.tv-mode .chip:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.tv-mode .row { margin-bottom: 34px; }
+.tv-mode .row-title { font-size: 25px; padding: 16px 34px 12px; }
+
+/* Gorizontal qatorlar — skrollbar yashirilgan, fokus doim ko'rinadi */
+.tv-mode .row .grid {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 24px;
+    padding: 8px 34px 18px;
+    scroll-behavior: smooth;
+    scroll-snap-type: x proximity;
+}
+.tv-mode .row .grid > * { scroll-snap-align: center; }
+.tv-mode .yt-card { flex: 0 0 380px; max-width: 380px; }
+.tv-mode .yt-thumb { border-radius: 14px; }
+.tv-mode .yt-title { font-size: 18px; }
+.tv-mode .yt-meta,
+.tv-mode .yt-sub { font-size: 14px; }
+.tv-mode .yt-av { width: 46px; height: 46px; font-size: 22px; }
+
+/* -------------------------------------------------------- 4) reels sahifasi */
+.tv-mode .reels-side-btn { width: 56px; height: 56px; }
+.tv-mode .reels-ico { width: 30px; height: 30px; }
+.tv-mode .reels-side { gap: 26px; }
+.tv-mode .reels-comments { font-size: 18px; }
+.tv-mode .reels-comments-send { width: 52px; height: 52px; }
+
+/* ----------------------------------------------------------- 5) chat sahifasi */
+.tv-mode .chat-composer textarea,
+.tv-mode .chat-composer input { font-size: 19px; }
+.tv-mode .chat-feed { font-size: 18px; }
+.tv-mode .chat-msg { max-width: 74%; }
+.tv-mode .chat-send,
+.tv-mode .chat-tool { width: 50px; height: 50px; }
+.tv-mode .chat-send svg,
+.tv-mode .chat-tool svg { width: 26px; height: 26px; }
+.tv-mode .chat-room { font-size: 18px; padding: 14px 16px; }
+
+/* ------------------------------------------------------------- 6) profil */
+.tv-mode .ig-profile,
+.tv-mode .profile-card { font-size: 18px; }
+.tv-mode .ig-p-name { font-size: 30px; }
+.tv-mode .ig-p-stats { font-size: 19px; }
+.tv-mode .ig-p-sub { font-size: 17px; }
+
+/* --------------------------------------------------- 7) qidiruv / modal */
+.tv-mode .ig-search-bar { padding: 20px 24px; }
+.tv-mode .ig-search-item { font-size: 20px; padding: 14px 20px; }
+.tv-mode .ig-search-item:focus-visible,
+.tv-mode .ig-search-item.tv-focus {
+    background: var(--card);
+    outline: none;
+    transform: scale(1.02);
+}
+.tv-mode .modal-card { max-width: 1100px; }
+.tv-mode .modal-btn { font-size: 18px; padding: 13px 26px; }
+
+/* --------------------------------- 8) kichik ekran (telefon / kichik TV)
+   TV uslublari o'chiriladi, telefondagi oddiy ko'rinish qoladi. */
+@media (max-width: 999px) {
+    .tv-mode { font-size: 16px; }
+    .tv-mode .yt-card { flex: 0 0 44vw; max-width: 44vw; }
+    .tv-mode.ig-shell { padding-left: 0; }
+}

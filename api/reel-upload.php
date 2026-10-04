@@ -1,7 +1,7 @@
 <?php
 // ============================================================================
-// api/reel-upload.php - videoni qabul qilib Telegram kanalga joylash
-// ============================================================================
+// api/reel-upload.php — videoni qabul qilib Telegram kanalga joylash
+// ---------------------------------------------------------------------------
 // Saytdagi "Reels joylash" sahifasi shu yerga yuboradi.
 //
 // Oqim: brauzer -> sayt (vaqtinchalik fayl) -> Telegram kanal (REELS_CHANNEL).

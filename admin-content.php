@@ -32,6 +32,7 @@ if (!$auth->isAdmin()) {
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/reels.css">
     <link rel="stylesheet" href="assets/css/instagram.css">
+    <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <style>
         .adm-form { display:grid; gap:10px; }
         .adm-form .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -156,13 +157,13 @@ if (!$auth->isAdmin()) {
             <!-- Kino / Multfilm: video shu yerda -->
             <div id="singleBlock">
                 <div class="row">
-                    <div><label>Video URL * (Telegram yoki boshqa havola)</label>
+                    <div><label>Video URL * (havola)</label>
                         <input id="f_video_url" maxlength="1000" placeholder="https://t.me/kanal/post yoki video manzil"></div>
                     <div><label>Davomiyligi (daqiqa)</label>
                         <input id="f_video_min" type="number" min="0" placeholder="120"></div>
                 </div>
-                <p class="adm-hint">Telegram havolasi bo'lsa — "Media is too big" bo'lsa ham saqlanadi;
-                   video Telegram serveridan oqiziladi, serverga yuk tushmaydi.</p>
+                <p class="adm-hint">Havola bo'lsa — "Media is too big" bo'lsa ham saqlanadi;
+                   video serverdan oqiziladi, serverga yuk tushmaydi.</p>
             </div>
 
             <!-- Anime / Serial: nechta qism -->
@@ -190,7 +191,7 @@ if (!$auth->isAdmin()) {
                 <div><label>Davlat</label><input id="f_country" maxlength="100" placeholder="AQSh"></div>
                 <div><label>Til</label><input id="f_language" maxlength="50" placeholder="O'zbekcha (tarjima)"></div>
             </div>
-            <div><label>Poster (Telegram post yoki rasm URL)</label>
+            <div><label>Poster (rasm yoki post URL)</label>
                 <input id="f_poster" maxlength="500" placeholder="https://t.me/kanal/123 · yoki rasm URL">
                 <p class="adm-hint" id="posterHint"></p>
             </div>
@@ -439,7 +440,7 @@ async function saveContent() {
 
         if (CURRENT <= 0 && !multi) {
             const u = $('f_video_url').value.trim();
-            if (!u) throw new Error('Video URL kiriting (Telegram yoki boshqa havola)');
+            if (!u) throw new Error('Video URL kiriting (havola)');
             body.first_episode_url = u;
             body.first_episode_duration = String(toSec($('f_video_min').value));
         }
@@ -579,7 +580,7 @@ async function deleteEp(id) {
 function updatePosterHint() {
     const v = $('f_poster').value.trim();
     $('posterHint').textContent = /t\.me/i.test(v)
-        ? '✓ t.me post — rasm ko‘rsatish paytida Telegram CDN dan olinadi (serverga yuklanmaydi).'
+        ? '✓ t.me post — rasm ko‘rsatish paytida tashqi manbadan olinadi (serverga yuklanmaydi).'
         : '';
 }
 $('f_poster').addEventListener('input', updatePosterHint);

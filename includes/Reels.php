@@ -25,8 +25,30 @@
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/Catalog.php';
 require_once __DIR__ . '/TelegramBot.php';
+require_once __DIR__ . '/Notifications.php';
+require_once __DIR__ . '/Alerts.php';
 
 class Reels {
+
+    /** Bildirishnomalar (lazy). */
+    private $ntf = null;
+
+    private function notifier() {
+        if ($this->ntf === null) {
+            $this->ntf = new Notifications();
+        }
+        return $this->ntf;
+    }
+
+    /** Telegram orqali instant bildirishnomalar (lazy). */
+    private $alerts = null;
+
+    private function alerts() {
+        if ($this->alerts === null) {
+            $this->alerts = new Alerts();
+        }
+        return $this->alerts;
+    }
 
     // =====================================================================
     // O'qish
@@ -133,10 +155,26 @@ class Reels {
 
         $ids    = array_column($rows, 'id');
         $liked  = $userId ? $this->likedMap($ids, $userId) : [];
+        // Instagram-uslubidagi holatlar: saqlangan / repost qilingan /
+        // muallifni kuzatayaptimi. Bularning hammasi bitta-o'qishda
+        // xarita sifatida olinadi (reel boshiga so'rov YO'Q).
+        $saved    = $userId ? $this->flagMap('reel_saves', $ids, $userId) : [];
+        $reposted = $userId ? $this->flagMap('reel_reposts', $ids, $userId) : [];
+
+        $authorIds = array_values(array_unique(array_map('intval', array_column($rows, 'user_id'))));
+        $following = $userId ? $this->followingMap($authorIds, $userId) : [];
+        $followers = $this->followerCountMap($authorIds);
+
+        // Galereya (carousel) ekanini bitta so'rov bilan aniqlaymiz:
+        // ko'p media'si bor reel'lar "ko'p rasm" deb belgilanadi.
+        $mediaCount = $this->mediaCountMap($ids);
 
         $out = [];
         foreach ($rows as $r) {
             $pb = $this->playback($r);
+            $format = self::fmtFormat($r);
+            $nMedia = (int) ($mediaCount[$r['id']] ?? 0);
+            $isCarousel = ($format === 'post' && $nMedia > 1);
 
             // CTA: "🎬 To'liq qismni tomosha qilish (12:30 dan)"
             // Faqat 'clip' turida bor - upload turida asosiy kontent yo'q.
@@ -155,6 +193,11 @@ class Reels {
             $out[] = [
                 'id'         => (int) $r['id'],
                 'kind'       => $r['kind'],
+                // --- YouTube/Instagram uslubidagi format turlari ---
+                'format'     => $format,               // reel | post | video
+                'aspect'     => self::fmtAspect($r),    // 9:16 | 1:1 | 16:9
+                'is_carousel'=> $isCarousel,
+                'media_count'=> $nMedia,
                 'title'      => $r['title'] ?: ($r['content_title'] ?? 'Reels'),
                 'description'=> $r['description'],
                 'poster'     => $r['poster'] ?: ($pb['poster'] ?? null),
@@ -163,10 +206,17 @@ class Reels {
                 'reject_reason' => $r['reject_reason'] ?? null,
                 'views'      => (int) ($r['views_count'] ?? 0),
                 'likes'      => (int) ($r['likes_count'] ?? 0),
+                'comments'   => (int) ($r['comments_count'] ?? 0),
                 'shares'     => (int) ($r['shares_count'] ?? 0),
+                'saves'      => (int) ($r['saves_count'] ?? 0),
+                'reposts'    => (int) ($r['reposts_count'] ?? 0),
                 'liked'      => !empty($liked[$r['id']]),
+                'saved'      => !empty($saved[$r['id']]),
+                'reposted'   => !empty($reposted[$r['id']]),
+                'following'  => !empty($following[$r['user_id']]),
                 'created_at' => $r['created_at'],
                 'duration'   => $this->durationOf($r),
+                'topic_id'   => !empty($r['tg_topic_id']) ? (int) $r['tg_topic_id'] : null,
 
                 'playback'   => $pb,
                 'cta'        => $cta,
@@ -176,6 +226,7 @@ class Reels {
                     'username' => $r['author_username'] ?? null,
                     'name'     => ($r['author_name'] ?? '') ?: 'Foydalanuvchi',
                     'avatar'   => $r['author_avatar'] ?? null,
+                    'followers'=> (int) ($followers[$r['user_id']] ?? 0),
                 ],
 
                 // Virtual reel qaysi kontentdan olingani (foydalanuvchi uchun
@@ -201,6 +252,49 @@ class Reels {
     }
 
     /**
+     * Reel formatini aniqlaydi: 'post' | 'video' | 'reel'.
+     *
+     * Eski (migratsiyadan oldingi) yozuvlarda `format` ustuni yo'q — ular
+     * `kind='upload'` bo'lgani uchun odatdagdek 'reel' qaror qilinadi
+     * (ilgari hammasi shu edi).
+     */
+    public static function fmtFormat($r) {
+        $f = strtolower(trim((string) ($r['format'] ?? '')));
+        if (in_array($f, ['post', 'video', 'reel'], true)) {
+            return $f;
+        }
+        return 'reel';
+    }
+
+    /** Ko'rsatish nisbati. */
+    public static function fmtAspect($r) {
+        $a = strtolower(trim((string) ($r['aspect'] ?? '')));
+        if (in_array($a, ['9:16', '1:1', '16:9'], true)) {
+            return $a;
+        }
+        return self::fmtFormat($r) === 'post' ? '1:1' : '9:16';
+    }
+
+    /**
+     * Reel id → media soni (galereya uchun).
+     * @param  array $ids
+     * @return array<int,int>
+     */
+    private function mediaCountMap($ids) {
+        if (!$ids) return [];
+        $in = implode(',', array_map('intval', $ids));
+        $rows = $this->db()->fetchAll(
+            "SELECT reel_id, COUNT(*) AS n FROM reel_media
+              WHERE reel_id IN ($in) GROUP BY reel_id"
+        );
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(int) $row['reel_id']] = (int) $row['n'];
+        }
+        return $map;
+    }
+
+    /**
      * Reel qanday ko'rsatiladi.
      *
      * 'clip' turida asosiy kontentning playback turi olinadi va
@@ -210,6 +304,21 @@ class Reels {
      */
     private function playback($r) {
         $start = (int) $r['start_time'];
+
+        // --- rasm post (single / carousel): video emas, rasm ko'rsatiladi.
+        if (self::fmtFormat($r) === 'post') {
+            $url = (string) ($r['video_url'] ?? '');
+            if ($url === '') {
+                return ['type' => 'none', 'url' => null, 'warning' => 'Rasm topilmadi'];
+            }
+            return [
+                'type'   => 'image',
+                'url'    => $url,
+                'poster' => $r['poster'] ?: $url,
+                'start'  => 0,
+                'seek'   => false,
+            ];
+        }
 
         // --- upload: Telegram kanalidagi video (yoki eski server fayli)
         if ($r['kind'] === 'upload') {
@@ -231,11 +340,26 @@ class Reels {
                 return $pb;
             }
 
-            // Eski (migratsiyadan oldin yuklangan) server fayli
+            // Eski (migratsiyadan oldin yuklangan) server fayli.
+            //
+            // DIQQAT: fayl diskdan o'chib ketgan bo'lishi mumkin (tozalash,
+            // ko'chirish). U holda `api/stream.php` 404 qaytaradi va <video>
+            // "ochilmaydi" — foydalanuvchi "video buzuq" deb o'ylaydi.
+            // Shuning uchun fayl borligini tekshiramiz: yo'q bo'lsa aniq
+            // holat (type=none) qaytaramiz, buzuq oqim emas.
+            $local = (string) $r['video_url'];
+            $localAbs = __DIR__ . '/../' . ltrim(str_replace('\\', '/', $local), '/');
+            if (!is_file($localAbs)) {
+                return [
+                    'type'    => 'none',
+                    'url'     => null,
+                    'warning' => 'Video fayli serverda topilmadi (ehtimol kanalga ko‘chirilmagan)',
+                ];
+            }
             return [
                 'type'  => 'file',
                 'url'   => 'api/stream.php?reel=' . (int) $r['id'],
-                'mime'  => Catalog::mimeFromFile($r['video_url']),
+                'mime'  => Catalog::mimeFromFile($local),
                 'start' => 0,
                 'seek'  => true,
             ];
@@ -570,7 +694,7 @@ class Reels {
             'id'       => $id,
             'token'    => $token,
             'bot_link' => REELS_BOT_LINK . $token,
-            'message'  => 'Endi Telegram ochiladi — botga videoni yuboring. '
+            'message'  => 'Endi bot ochiladi — videoni yuboring. '
                         . 'Reel avtomatik kanalga tushadi.',
         ];
     }
@@ -802,7 +926,193 @@ class Reels {
         $count = (int) ($c['c'] ?? 0);
         $this->db()->update('reels', ['likes_count' => $count], 'id = ?', [(int) $reelId]);
 
+        // Bildirishnoma: faqat YANGI laykda, muallifga (o'ziga emas).
+        if ($liked) {
+            try {
+                $this->notifier()->notifyLike((int) $reelId, (int) $userId, (int) $reel['user_id']);
+            } catch (Exception $e) {
+                error_log('[Reels] notifyLike: ' . $e->getMessage());
+            }
+        }
+
         return ['success' => true, 'liked' => $liked, 'likes' => $count];
+    }
+
+    // =====================================================================
+    // Saqlash (bookmark) + Repost + Kuzatish (follow)
+    // =====================================================================
+
+    /**
+     * "Belgilangan" xaritasi (reel_saves yoki reel_reposts).
+     * Jadval nomi faqat ichki ro'yxatdan olinadi (SQL in'ektsiyaga yo'l yo'q).
+     */
+    private function flagMap($table, array $reelIds, $userId) {
+        $allowed = ['reel_saves', 'reel_reposts'];
+        if (!$reelIds || !$userId || !in_array($table, $allowed, true)) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($reelIds), '?'));
+        $rows = $this->db()->fetchAll(
+            "SELECT reel_id FROM `$table` WHERE user_id = ? AND reel_id IN ($in)",
+            array_merge([(int) $userId], array_map('intval', $reelIds))
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['reel_id']] = true;
+        }
+        return $out;
+    }
+
+    /** Ko'ruvchi qaysi mualliflarni kuzatayotgani. */
+    private function followingMap(array $authorIds, $userId) {
+        if (!$authorIds || !$userId) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($authorIds), '?'));
+        $rows = $this->db()->fetchAll(
+            "SELECT following_id FROM user_follows WHERE follower_id = ? AND following_id IN ($in)",
+            array_merge([(int) $userId], array_map('intval', $authorIds))
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['following_id']] = true;
+        }
+        return $out;
+    }
+
+    /** Mualliflarning kuzatuvchilar soni (reel boshiga emas, bir so'rovda). */
+    private function followerCountMap(array $authorIds) {
+        if (!$authorIds) {
+            return [];
+        }
+        $in = implode(',', array_fill(0, count($authorIds), '?'));
+        $rows = $this->db()->fetchAll(
+            "SELECT following_id, COUNT(*) AS c
+             FROM user_follows WHERE following_id IN ($in)
+             GROUP BY following_id",
+            array_map('intval', $authorIds)
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['following_id']] = (int) $r['c'];
+        }
+        return $out;
+    }
+
+    /** Saqlashni o'zgartirish (toggle). */
+    public function toggleSave($reelId, $userId) {
+        return $this->toggleFlag('reel_saves', 'saves_count', $reelId, $userId, 'saved', 'saves');
+    }
+
+    /** Repostni o'zgartirish (toggle). */
+    public function toggleRepost($reelId, $userId) {
+        return $this->toggleFlag('reel_reposts', 'reposts_count', $reelId, $userId, 'reposted', 'reposts');
+    }
+
+    /**
+     * Umumiy toggle: like bilan bir xil mantiq — count COUNT(*) dan qayta
+     * hisoblanadi (increment double-count xatolariga chidamsiz).
+     */
+    private function toggleFlag($table, $countCol, $reelId, $userId, $stateKey, $countKey) {
+        $allowedT = ['reel_saves', 'reel_reposts'];
+        $allowedC = ['saves_count', 'reposts_count'];
+        if (!in_array($table, $allowedT, true) || !in_array($countCol, $allowedC, true)) {
+            return ['success' => false, 'message' => 'Noto‘g‘ri amal'];
+        }
+        $reel = $this->db()->fetchOne("SELECT id, user_id FROM reels WHERE id = ?", [(int) $reelId]);
+        if (!$reel) {
+            return ['success' => false, 'message' => 'Reels topilmadi'];
+        }
+
+        $existing = $this->db()->fetchOne(
+            "SELECT id FROM `$table` WHERE reel_id = ? AND user_id = ? LIMIT 1",
+            [(int) $reelId, (int) $userId]
+        );
+        if ($existing) {
+            $this->db()->delete($table, 'id = ?', [(int) $existing['id']]);
+            $state = false;
+        } else {
+            $ok = $this->db()->insert($table, [
+                'reel_id' => (int) $reelId,
+                'user_id' => (int) $userId,
+            ]);
+            if (!$ok) {
+                return ['success' => false, 'message' => 'Saqlab bo‘lmadi'];
+            }
+            $state = true;
+        }
+
+        $c = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS c FROM `$table` WHERE reel_id = ?", [(int) $reelId]
+        );
+        $count = (int) ($c['c'] ?? 0);
+        $this->db()->update('reels', [$countCol => $count], 'id = ?', [(int) $reelId]);
+
+        // Repost bo'lsa - muallifga bildirishnoma (saqlashda emas).
+        if ($state && $table === 'reel_reposts') {
+            try {
+                $this->notifier()->notifyRepost((int) $reelId, (int) $userId, (int) $reel['user_id']);
+            } catch (Exception $e) {
+                error_log('[Reels] notifyRepost: ' . $e->getMessage());
+            }
+        }
+
+        return ['success' => true, $stateKey => $state, $countKey => $count];
+    }
+
+    /** Muallifni kuzatishni o'zgartirish. */
+    public function toggleFollow($targetId, $userId) {
+        $targetId = (int) $targetId;
+        $userId   = (int) $userId;
+        if ($targetId <= 0 || $userId <= 0) {
+            return ['success' => false, 'message' => 'Foydalanuvchi topilmadi'];
+        }
+        if ($targetId === $userId) {
+            return ['success' => false, 'message' => 'O‘zingizni kuzata olmaysiz'];
+        }
+        $u = $this->db()->fetchOne("SELECT id FROM users WHERE id = ? LIMIT 1", [$targetId]);
+        if (!$u) {
+            return ['success' => false, 'message' => 'Foydalanuvchi topilmadi'];
+        }
+
+        $existing = $this->db()->fetchOne(
+            "SELECT id FROM user_follows WHERE follower_id = ? AND following_id = ? LIMIT 1",
+            [$userId, $targetId]
+        );
+        if ($existing) {
+            $this->db()->delete('user_follows', 'id = ?', [(int) $existing['id']]);
+            $following = false;
+        } else {
+            $ok = $this->db()->insert('user_follows', [
+                'follower_id'  => $userId,
+                'following_id' => $targetId,
+            ]);
+            if (!$ok) {
+                return ['success' => false, 'message' => 'Saqlab bo‘lmadi'];
+            }
+            $following = true;
+        }
+
+        $c = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS c FROM user_follows WHERE following_id = ?",
+            [$targetId]
+        );
+
+        // Yangi kuzatishda — kuzatilayotgan foydalanuvchiga bildirishnoma
+        // (sayt ichida + Telegram orqali instant).
+        if ($following) {
+            try {
+                $this->alerts()->follow($targetId, $userId);
+            } catch (Exception $e) {
+                error_log('[Reels] follow alert: ' . $e->getMessage());
+            }
+        }
+
+        return [
+            'success'   => true,
+            'following' => $following,
+            'followers' => (int) ($c['c'] ?? 0),
+        ];
     }
 
     // =====================================================================
@@ -909,6 +1219,244 @@ class Reels {
     }
 
     // =====================================================================
+    // Izohlar (comments)
+    // =====================================================================
+
+    /**
+     * Reelga izoh qo'shish.
+     *
+     * Matn tozalanadi (HTML teglar olib tashlanadi, ortiqcha bo'sh joylar
+     * birlashtiriladi) va 1000 belgiga qisqartiriladi. `comments_count`
+     * COUNT(*) dan qayta hisoblanadi — increment emas, xuddi like kabi
+     * (double-count xatolariga chidamli).
+     */
+    public function addComment($reelId, $userId, $body) {
+        $reel = $this->db()->fetchOne(
+            "SELECT id, user_id FROM reels WHERE id = ?", [(int) $reelId]
+        );
+        if (!$reel) {
+            return ['success' => false, 'message' => 'Reels topilmadi'];
+        }
+
+        $body = trim(strip_tags((string) $body));
+        $body = trim((string) preg_replace('/\s+/u', ' ', $body));
+        if ($body === '') {
+            return ['success' => false, 'message' => 'Izoh bo‘sh'];
+        }
+        if (mb_strlen($body) > 1000) {
+            $body = mb_substr($body, 0, 1000);
+        }
+
+        $id = $this->db()->insert('reel_comments', [
+            'reel_id' => (int) $reelId,
+            'user_id' => (int) $userId,
+            'body'    => $body,
+        ]);
+        if (!$id) {
+            return ['success' => false, 'message' => 'Saqlab bo‘lmadi'];
+        }
+
+        $count = $this->commentCount($reelId);
+        $this->db()->update('reels', ['comments_count' => $count], 'id = ?', [(int) $reelId]);
+
+        // Muallifga izoh haqida bildirishnoma.
+        try {
+            $this->notifier()->notifyComment(
+                (int) $reelId, (int) $userId, (int) $reel['user_id'],
+                function_exists('mb_substr') ? mb_substr($body, 0, 120) : substr($body, 0, 120),
+                false
+            );
+        } catch (Exception $e) {
+            error_log('[Reels] notifyComment: ' . $e->getMessage());
+        }
+
+        return [
+            'success'  => true,
+            'comment'  => $this->getComment($id),
+            'comments' => $count,
+        ];
+    }
+
+    /**
+     * Reelning izohlari (eng yangisi birinchi).
+     *
+     * @return array|null null — reel topilmadi.
+     */
+    public function getComments($reelId, $limit = 30, $offset = 0) {
+        $reel = $this->db()->fetchOne(
+            "SELECT id FROM reels WHERE id = ?", [(int) $reelId]
+        );
+        if (!$reel) {
+            return null;
+        }
+
+        $limit  = max(1, min(50, (int) $limit));
+        $offset = max(0, (int) $offset);
+
+        $rows = $this->db()->fetchAll(
+            "SELECT c.id, c.reel_id, c.user_id, c.body, c.created_at,
+                    u.username, u.first_name, u.avatar
+             FROM reel_comments c
+             LEFT JOIN users u ON u.id = c.user_id
+             WHERE c.reel_id = ?
+             ORDER BY c.id DESC
+             LIMIT $limit OFFSET $offset",
+            [(int) $reelId]
+        );
+
+        return array_map([$this, 'formatComment'], $rows);
+    }
+
+    /** Bitta izohni muallif ma'lumoti bilan qaytaradi. */
+    private function getComment($id) {
+        $row = $this->db()->fetchOne(
+            "SELECT c.id, c.reel_id, c.user_id, c.body, c.created_at,
+                    u.username, u.first_name, u.avatar
+             FROM reel_comments c
+             LEFT JOIN users u ON u.id = c.user_id
+             WHERE c.id = ? LIMIT 1",
+            [(int) $id]
+        );
+        return $row ? $this->formatComment($row) : null;
+    }
+
+    /** API uchun izoh shakli. */
+    private function formatComment($c) {
+        return [
+            'id'         => (int) $c['id'],
+            'reel_id'    => (int) $c['reel_id'],
+            'body'       => $c['body'],
+            'created_at' => $c['created_at'],
+            'author'     => [
+                'id'       => (int) $c['user_id'],
+                'username' => $c['username'] ?? null,
+                'name'     => ($c['first_name'] ?? '') ?: 'Foydalanuvchi',
+                'avatar'   => $c['avatar'] ?? null,
+            ],
+        ];
+    }
+
+    /** Izohni o'chirish (muallif yoki admin). */
+    public function deleteComment($commentId, $userId, $isAdmin = false) {
+        $row = $this->db()->fetchOne(
+            "SELECT id, reel_id, user_id FROM reel_comments WHERE id = ?",
+            [(int) $commentId]
+        );
+        if (!$row) {
+            return ['success' => false, 'message' => 'Izoh topilmadi'];
+        }
+        if (!$isAdmin && (int) $row['user_id'] !== (int) $userId) {
+            return ['success' => false, 'message' => 'Bu sizning izohingiz emas'];
+        }
+
+        $this->db()->delete('reel_comments', 'id = ?', [(int) $commentId]);
+        $count = $this->commentCount($row['reel_id']);
+        $this->db()->update('reels', ['comments_count' => $count], 'id = ?', [(int) $row['reel_id']]);
+
+        return ['success' => true, 'comments' => $count];
+    }
+
+    /** Izohlar soni (haqiqiy). */
+    private function commentCount($reelId) {
+        $c = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS c FROM reel_comments WHERE reel_id = ?",
+            [(int) $reelId]
+        );
+        return (int) ($c['c'] ?? 0);
+    }
+
+    // =====================================================================
+    // Telegram izohlari (forum topics)
+    // =====================================================================
+    //
+    // Har bir reel uchun TG_COMMENTS_CHAT guruhida alohida MAVZU (topic)
+    // ochiladi. Izohlar o'sha mavzuda saqlanadi. Bu metod faqat mavzuni
+    // ta'minlaydi - izohlarni o'qish/yozish brauzerdagi MTProto sessiyasi
+    // orqali bo'ladi (serverda Telegram sessiyasi yo'q).
+
+    /** Reel uchun Telegram topic id (bo'lmasa null). */
+    public function topicId($reelId) {
+        $row = $this->db()->fetchOne(
+            "SELECT tg_topic_id FROM reels WHERE id = ?", [(int) $reelId]
+        );
+        if (!$row) {
+            return null;
+        }
+        return !empty($row['tg_topic_id']) ? (int) $row['tg_topic_id'] : null;
+    }
+
+    /**
+     * Reel uchun Telegram mavzusini ta'minlaydi (bo'lmasa bot orqali ochadi).
+     *
+     * @return array ['success'=>bool, 'topic_id'=>int|null, 'chat'=>string,
+     *                'url'=>string, 'created'=>bool, 'message'=>?]
+     */
+    public function ensureTopic($reelId) {
+        $reelId = (int) $reelId;
+        $row = $this->db()->fetchOne(
+            "SELECT r.id, r.title, r.tg_topic_id, r.channel_post,
+                    c.title AS content_title
+             FROM reels r
+             LEFT JOIN content c ON c.id = r.content_id
+             WHERE r.id = ?",
+            [$reelId]
+        );
+        if (!$row) {
+            return ['success' => false, 'message' => 'Reels topilmadi'];
+        }
+        if (!empty($row['tg_topic_id'])) {
+            return [
+                'success'  => true,
+                'topic_id' => (int) $row['tg_topic_id'],
+                'chat'     => TG_COMMENTS_CHAT,
+                'url'      => $this->topicUrl((int) $row['tg_topic_id']),
+                'created'  => false,
+            ];
+        }
+        if (TG_COMMENTS_CHAT === '') {
+            return ['success' => false, 'message' => 'Izohlar sozlanmagan'];
+        }
+
+        $name = trim((string) ($row['title'] ?? ''));
+        if ($name === '') {
+            $name = trim((string) ($row['content_title'] ?? ''));
+        }
+        if ($name === '') {
+            $name = 'Reel #' . $reelId;
+        }
+        $name = '▶︎ ' . $name;
+
+        $bot = new TelegramBot();
+        $res = $bot->createForumTopic(TG_COMMENTS_CHAT, $name);
+        if (!$res || empty($res['message_thread_id'])) {
+            return [
+                'success' => false,
+                'message' => 'Mavzu ochilmadi: ' . ($bot->getLastError() ?: 'noma’lum xato')
+                    . ' (guruhda Topics yoqilganini va bot admin ekanini tekshiring)',
+            ];
+        }
+        $topicId = (int) $res['message_thread_id'];
+        $this->db()->update('reels', ['tg_topic_id' => $topicId], 'id = ?', [$reelId]);
+
+        return [
+            'success'  => true,
+            'topic_id' => $topicId,
+            'chat'     => TG_COMMENTS_CHAT,
+            'url'      => $this->topicUrl($topicId),
+            'created'  => true,
+        ];
+    }
+
+    /** Mavzuning Telegram havolasi (web). */
+    private function topicUrl($topicId) {
+        $topicId = (int) $topicId;
+        if ($topicId <= 0 || TG_COMMENTS_URL === '') {
+            return null;
+        }
+        return rtrim(TG_COMMENTS_URL, '/') . '/' . $topicId;
+    }
+
+    // =====================================================================
     // Moderatsiya
     // =====================================================================
 
@@ -922,7 +1470,7 @@ class Reels {
             return ['success' => false, 'message' => 'Status 1 (tasdiq) yoki 2 (rad) bo‘lishi kerak'];
         }
 
-        $reel = $this->db()->fetchOne("SELECT id FROM reels WHERE id = ?", [(int) $reelId]);
+        $reel = $this->db()->fetchOne("SELECT id, user_id FROM reels WHERE id = ?", [(int) $reelId]);
         if (!$reel) {
             return ['success' => false, 'message' => 'Reels topilmadi'];
         }
@@ -933,6 +1481,13 @@ class Reels {
             : null;
 
         $this->db()->update('reels', $data, 'id = ?', [(int) $reelId]);
+
+        // Sayt ichidagi bildirishnoma (Telegram xabaridan tashqari).
+        try {
+            $this->notifier()->notifyStatus((int) $reelId, (int) $reel['user_id'], $status, $data['reject_reason'] ?: '');
+        } catch (Exception $e) {
+            error_log('[Reels] notifyStatus: ' . $e->getMessage());
+        }
 
         // Muallifga xabar berish (Telegram bot orqali, ixtiyoriy)
         if ($adminId && function_exists('TelegramBot')) {
@@ -1089,12 +1644,25 @@ class Reels {
      * @param int $profileUserId  ko'rsatilayotgan profil egasi
      * @param int|null $viewerId  ko'rayotgan foydalanuvchi (liked uchun)
      * @param bool $includeAll    o'z profili - barcha statuslar (badge bilan)
+     * @param string|null $format 'reel' | 'post' | 'video' — null = hammasi
      * @return array decorate() chiqishi (id, poster, views, likes, status...)
      */
-    public function profileGrid($profileUserId, $viewerId = null, $includeAll = false, $limit = 30, $offset = 0) {
+    public function profileGrid($profileUserId, $viewerId = null, $includeAll = false, $limit = 30, $offset = 0, $format = null) {
         $limit  = max(1, min(60, (int) $limit));
         $offset = max(0, (int) $offset);
         $where  = 'r.user_id = ?' . ($includeAll ? '' : ' AND r.status = 1');
+        $params = [(int) $profileUserId];
+
+        // Format filtri. Eski yozuvlarda `format` NULL bo'lishi mumkin —
+        // ular "reels" yorlig'iga tushishi uchun shart shunday yozilgan.
+        if ($format !== null && $format !== '' && $format !== 'all') {
+            if ($format === 'reel') {
+                $where .= " AND (r.format = 'reel' OR r.format IS NULL OR r.format = '')";
+            } else {
+                $where .= ' AND r.format = ?';
+                $params[] = $format;
+            }
+        }
 
         $sql = "SELECT r.*,
                        u.username   AS author_username,
@@ -1112,7 +1680,7 @@ class Reels {
                 ORDER BY (r.views_count * 10 + r.likes_count * 3) DESC, r.id DESC
                 LIMIT $limit OFFSET $offset";
 
-        return $this->decorate($this->db()->fetchAll($sql, [(int) $profileUserId]), $viewerId);
+        return $this->decorate($this->db()->fetchAll($sql, $params), $viewerId);
     }
 
     /**
@@ -1138,6 +1706,34 @@ class Reels {
                 LEFT JOIN episodes e ON e.id = r.episode_id
                 WHERE l.user_id = ? AND r.status = 1
                 ORDER BY l.created_at DESC
+                LIMIT $limit OFFSET $offset";
+
+        return $this->decorate($this->db()->fetchAll($sql, [(int) $viewerId]), $viewerId);
+    }
+
+    /**
+     * Ko'ruvchi SAQLAGAN reels (bookmark). Instagram'dagi "Saqlanganlar"
+     * bo'limining reels qismi.
+     */
+    public function savedGrid($viewerId, $limit = 30, $offset = 0) {
+        $limit  = max(1, min(60, (int) $limit));
+        $offset = max(0, (int) $offset);
+
+        $sql = "SELECT r.*,
+                       u.username   AS author_username,
+                       u.first_name AS author_name,
+                       u.avatar     AS author_avatar,
+                       c.title      AS content_title,
+                       c.slug       AS content_slug,
+                       e.episode_number AS episode_number,
+                       e.season         AS episode_season
+                FROM reel_saves s
+                JOIN reels r ON r.id = s.reel_id
+                LEFT JOIN users    u ON u.id = r.user_id
+                LEFT JOIN content c ON c.id = r.content_id
+                LEFT JOIN episodes e ON e.id = r.episode_id
+                WHERE s.user_id = ? AND r.status = 1
+                ORDER BY s.created_at DESC
                 LIMIT $limit OFFSET $offset";
 
         return $this->decorate($this->db()->fetchAll($sql, [(int) $viewerId]), $viewerId);

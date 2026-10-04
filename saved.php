@@ -30,6 +30,7 @@ $items = $catalog->getWatchlist($userId, 200);
     <title>Saqlanganlar — <?php echo htmlspecialchars(SITE_NAME); ?></title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/instagram.css">
+    <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. Oddiy
          tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani
          sekinlashtiradi. Shuning uchun shartli yuklanadi. -->

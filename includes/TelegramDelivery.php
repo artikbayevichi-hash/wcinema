@@ -65,7 +65,7 @@ class TelegramDelivery {
      */
     public function deliver($userId, $contentId, $episodeId = 0) {
         if (!TELEGRAM_DELIVERY_ENABLED) {
-            return $this->error('Telegram yetkazib berish o\'chirilgan (config.php)');
+            return $this->error('Yetkazib berish o\'chirilgan (config.php)');
         }
 
         $user    = $this->db->fetchOne("SELECT * FROM users WHERE id = ?", [(int) $userId]);
@@ -96,7 +96,7 @@ class TelegramDelivery {
 
         $telegramId = $user['telegram_chat_id'] ?: $user['telegram_user_id'];
         if (!$telegramId) {
-            return $this->error('Foydalanuvchining Telegram ID\'si saqlanmagan');
+            return $this->error('Foydalanuvchi ID\'si saqlanmagan');
         }
 
         // 1) Allaqachon yuborilganmi?
@@ -120,9 +120,9 @@ class TelegramDelivery {
         }
 
         if ($access === 'error') {
-            $err = $this->telegram->getLastError() ?? 'Telegram bilan aloqa yo\'q';
+            $err = $this->telegram->getLastError() ?? 'Ulanish yo\'q';
             $this->recordAttempt($userId, $contentId, $episodeId, $telegramId, 'failed', $err);
-            return $this->error('Telegram bilan aloqa xatosi: ' . $err);
+            return $this->error('Ulanish xatosi: ' . $err);
         }
 
         // 3) Oqim turini aniqlaymiz
@@ -154,7 +154,7 @@ class TelegramDelivery {
                 $size = (int) @filesize($localPath);
                 if ($size > TELEGRAM_MAX_UPLOAD) {
                     return $this->error(sprintf(
-                        'Video %.1f MB. Telegram\'ga birinchi yuklash limiti 50 MB. ' .
+                        'Video %.1f MB. Birinchi yuklash limiti 50 MB. ' .
                         'Kichikroq sifat yoki fayl tanlang.',
                         $size / 1048576
                     ));
@@ -211,7 +211,7 @@ class TelegramDelivery {
         return [
             'success'    => true,
             'status'     => 'sent',
-            'message'    => ($episodeId > 0 ? 'Qism' : 'Film') . ' Telegram\'ga yuborildi',
+            'message'    => ($episodeId > 0 ? 'Qism' : 'Film') . ' saqlandi',
             'message_id' => $messageId,
         ];
     }

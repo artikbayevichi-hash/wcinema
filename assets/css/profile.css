@@ -168,29 +168,50 @@
 .pf-btn {
     flex: 1;
     min-width: 110px;
-    padding: 9px 14px;
-    border-radius: 10px;
+    padding: 10px 16px;
+    border-radius: 999px;
     border: 1px solid var(--pf-border);
     background: rgba(255, 255, 255, 0.06);
     color: var(--pf-text);
     font-size: 13.5px;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: .1px;
     text-align: center;
     text-decoration: none;
     cursor: pointer;
-    transition: background .15s, opacity .15s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    transition: transform .14s cubic-bezier(.2,.8,.3,1), background .16s ease,
+                border-color .16s ease, box-shadow .16s ease, color .16s ease;
+    -webkit-tap-highlight-color: transparent;
 }
-.pf-btn:active { background: rgba(255, 255, 255, 0.12); }
+.pf-btn:hover { background: rgba(255, 255, 255, 0.1); }
+.pf-btn:active { transform: scale(.97); }
 .pf-btn.prim {
-    background: var(--pf-blue);
-    border-color: var(--pf-blue);
+    background: linear-gradient(180deg, #37b7f5, var(--pf-blue));
+    border-color: transparent;
     color: #fff;
+    box-shadow: 0 4px 14px rgba(42, 171, 238, .32);
 }
-.pf-btn.prim:active { background: #007fd4; }
+.pf-btn.prim:hover {
+    background: linear-gradient(180deg, #4cc1f8, #1c9fe0);
+    box-shadow: 0 6px 18px rgba(42, 171, 238, .42);
+}
+/* "Kuzatilmoqda" - xabardan voz kechilgani, shaffofroq ko'rinadi. */
 .pf-btn.ghost {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--pf-border);
     color: var(--pf-sub);
+    box-shadow: none;
 }
+.pf-btn.ghost:hover { background: rgba(255, 255, 255, 0.09); color: var(--pf-text); }
+/* Ikkinchi darajali tugma ("Xabar") - ko'k emas, ko'rinarli lekin yumshoq. */
+.pf-btn.soft {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--pf-border);
+    color: var(--pf-text);
+}
+.pf-btn.soft:hover { background: rgba(255, 255, 255, 0.13); }
+.pf-btn.busy { pointer-events: none; opacity: .65; }
 
 /* ------------------------------------------------------------- Highlightlar */
 .pf-highlight-wrap { padding: 16px 16px 6px; }
@@ -441,6 +462,108 @@
 }
 .pf-toast.err { background: #2a1618; color: #ffd0d0; border-color: var(--pf-danger); }
 .pf-toast[hidden] { display: none; }
+
+/* ==========================================================================
+   YouTube / Instagram uslubidagi kengaytmalar
+   --------------------------------------------------------------------------
+   · 5 ta yorliq (Reels | Posts | Videos | Yoqqanlar | Saqlangan)
+   · hujra format belgilari (galereya soni, video/rasm)
+   · maxfiy profil holati
+   ========================================================================== */
+
+/* Yorliqlar — ko'p bo'lganda siljitiladigan qator */
+.pf-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.pf-tabs::-webkit-scrollbar { display: none; }
+.pf-tab {
+    flex: 1 0 auto;
+    min-width: 84px;
+    max-width: 200px;
+    white-space: nowrap;
+}
+
+/* Hujra format belgisi (yuqori ong burchak) */
+.pf-cell-tag {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    background: rgba(0, 0, 0, 0.62);
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.5;
+    font-weight: 600;
+    color: #fff;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+/* Nisbati bo'yacha kadr (Instagram "Reels" belgisi kabi) */
+.pf-cell.tall .pf-cell-media::after,
+.pf-cell.wide .pf-cell-media::after {
+    content: '';
+    position: absolute;
+    right: 6px;
+    bottom: 34px;
+    width: 15px;
+    height: 20px;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+}
+.pf-cell.tall .pf-cell-media::after { border-left-width: 5px; }
+.pf-cell.wide .pf-cell-media::after { border-top-width: 5px; }
+
+/* Bloklash tugmasi — xavfliroq ko'rinish */
+.pf-btn.pf-block-btn {
+    color: var(--pf-danger);
+    border-color: rgba(255, 77, 109, 0.35);
+}
+.pf-btn.pf-block-btn:hover { background: rgba(255, 77, 109, 0.12); }
+
+/* Maxfiylik belgisi */
+.pf-private {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 3px 9px;
+    background: rgba(255, 77, 109, 0.14);
+    border: 1px solid rgba(255, 77, 109, 0.28);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #ff8fa3;
+}
+.pf-private[hidden] { display: none; }
+
+/* Maxfiy profil: kontent o'rniga ogohlantirish */
+.pf-locked {
+    margin: 14px;
+    padding: 30px 20px;
+    background: var(--pf-card, #12121a);
+    border: 1px solid var(--pf-border);
+    border-radius: 16px;
+    text-align: center;
+}
+.pf-locked[hidden] { display: none; }
+.pf-locked-ico { font-size: 40px; line-height: 1; }
+.pf-locked-t { margin-top: 10px; font-size: 16px; font-weight: 700; color: var(--pf-text); }
+.pf-locked-s { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--pf-sub); }
+
+/* TV rejimida kattaroq */
+.tv-mode .pf-tab { font-size: 16px; padding: 16px 0 14px; min-width: 120px; }
+.tv-mode .pf-cell-tag { font-size: 14px; padding: 3px 10px; }
+.tv-mode .pf-locked-t { font-size: 22px; }
+.tv-mode .pf-locked-s { font-size: 17px; }
 
 @media (min-width: 600px) {
     .pf-modal-box { border-radius: 18px; margin-bottom: 12vh; }

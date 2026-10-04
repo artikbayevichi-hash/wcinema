@@ -997,7 +997,7 @@ export async function openWithFfmpeg(o) {
   }
 
   // 2) Butun faylni xotiraga olish
-  log('Fayl Telegram dan olinmoqda (0%)…');
+  log('Fayl olinmoqda (0%)…');
   var CH = 4 * 1024 * 1024;
   var parts = [];
   var got = 0;
@@ -1006,7 +1006,7 @@ export async function openWithFfmpeg(o) {
     var n = Math.min(CH, size - got);
     parts.push(await read(got, n));
     got += n;
-    log('Fayl Telegram dan olinmoqda (' + Math.round(got / size * 100) + '%)…');
+    log('Fayl olinmoqda (' + Math.round(got / size * 100) + '%)…');
   }
   if (stopped || isAborted(signal)) throw abortError();
 

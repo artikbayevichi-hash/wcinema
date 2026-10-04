@@ -643,7 +643,7 @@
             ? `<img class="nv-poster" src="${esc(pb.poster)}" alt="" onerror="this.style.display='none'">`
             : '';
         const open = pb.url
-            ? `<a class="nv-btn" href="${esc(pb.url)}" target="_blank" rel="noopener">📱 Telegram'da ochish</a>`
+            ? `<a class="nv-btn" href="${esc(pb.url)}" target="_blank" rel="noopener">📱 Ilovada ochish</a>`
             : '';
         return `<div class="player-wrap no-video">
             ${poster}
@@ -759,7 +759,7 @@
             }
             const code = v.error ? v.error.code : 0;
             const msg = code === 4
-                ? 'Video manbai topilmadi (Telegram havolasi eskirgan bo‘lishi mumkin).'
+                ? 'Video manbai topilmadi (havola eskirgan bo‘lishi mumkin).'
                 : 'Video yuklab bo‘lmadi.';
             errEl.textContent = '⚠️ ' + msg + ' Admin panelda “⬆️ Videoni serverga yuklash” orqali qo‘shing.';
             errEl.hidden = false;
@@ -896,7 +896,7 @@
                     c.likes ? fmtViews(c.likes) : ''}</span></button>
                 <button class="action${c.in_watchlist ? ' on' : ''}" id="actWatch">${
                     c.in_watchlist ? '✓' : '＋'} Kutubxona</button>
-                <button class="action primary" id="actSend">📤 Telegram'ga</button>
+                <button class="action primary" id="actSend">📤 Saqlash</button>
                 <button class="action" id="actShare">🔗 Ulashish</button>
                 <button class="action" id="actClip">✂️ Reels</button>
             </div>
@@ -1078,7 +1078,7 @@
                     toast(esc(r.message || 'Yuborildi'), 'ok');
                 } else {
                     toast(esc(r.message || 'Yuborilmadi'), 'err');
-                    sendBtn.textContent = '📤 Telegram\'ga';
+                    sendBtn.textContent = '📤 Saqlash';
                 }
             } catch (e) {
                 // 428 = /start kerak
@@ -1442,7 +1442,7 @@
 
     function requireLogin() {
         if (loggedIn) return true;
-        toast('🔐 Bu amal uchun <a href="login.php">Telegram orqali kiring</a>');
+        toast('🔐 Bu amal uchun <a href="login.php">kiring</a>');
         return false;
     }
 

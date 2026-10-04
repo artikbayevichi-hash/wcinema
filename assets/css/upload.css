@@ -1,0 +1,172 @@
+/* ==========================================================================
+   upload.css — kontent yuklash sahifasi (Reels / Rasm post / Uzun video)
+   --------------------------------------------------------------------------
+   reels.css ichidagi `.up-*` asosiy uslublarni kengaytiradi:
+     · format tanlovchisi (3 ta karta)
+     · galereya (carousel) ko'rinishi
+     · klientda yaratilgan preview/thumbnail va uning boshqaruvi
+   ========================================================================== */
+
+/* ------------------------------------------------------------ 1. FORMATLAR */
+.up-formats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 4px;
+}
+@media (max-width: 420px) {
+    .up-formats { grid-template-columns: 1fr; }
+}
+
+.up-format {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 8px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .15s, background .15s, transform .12s;
+}
+.up-format:hover { background: var(--card-2); }
+.up-format[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: rgba(42, 171, 238, .12);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.up-format-ico { font-size: 22px; line-height: 1.1; }
+.up-format-name { font-size: 13px; font-weight: 800; color: var(--text); }
+.up-format-ratio {
+    font-size: 10px; font-weight: 700; letter-spacing: .4px;
+    color: var(--muted);
+    background: var(--card-2);
+    border-radius: 999px;
+    padding: 2px 7px;
+}
+.up-format[aria-pressed="true"] .up-format-ratio {
+    background: rgba(42, 171, 238, .2);
+    color: #9fd8ff;
+}
+
+/* ------------------------------------------- 2. GALEREYA (carousel) strip */
+.up-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 2px 2px;
+    scrollbar-width: thin;
+}
+.up-strip::-webkit-scrollbar { height: 6px; }
+.up-strip::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+
+.up-strip-item {
+    position: relative;
+    flex: 0 0 auto;
+    width: 84px; height: 84px;
+    border-radius: 11px;
+    overflow: hidden;
+    border: 2px solid var(--line);
+    background: var(--card-2);
+}
+.up-strip-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.up-strip-item.is-main { border-color: var(--accent); }
+.up-strip-x {
+    position: absolute; top: 3px; right: 3px;
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .72);
+    color: #fff; border: 0; border-radius: 50%;
+    font-size: 13px; line-height: 1; cursor: pointer;
+}
+.up-strip-badge {
+    position: absolute; left: 3px; bottom: 3px;
+    padding: 1px 6px;
+    background: rgba(0, 0, 0, .72);
+    border-radius: 999px;
+    font-size: 9.5px; font-weight: 800;
+    color: var(--accent);
+}
+.up-strip-empty {
+    flex: 1 1 100%;
+    padding: 14px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--muted);
+}
+
+/* --------------------------------------------------- 3. THUMBNAIL PREVIEW */
+.up-thumb {
+    margin-top: 14px;
+    padding: 12px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+}
+.up-thumb[hidden] { display: none; }
+.up-thumb-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; margin-bottom: 10px;
+}
+.up-thumb-title { font-size: 12.5px; font-weight: 800; color: var(--muted); }
+.up-thumb-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.up-thumb-frame[data-aspect="9:16"] { aspect-ratio: 9 / 16; max-width: 220px; margin: 0 auto; }
+.up-thumb-frame[data-aspect="1:1"]  { aspect-ratio: 1 / 1;  max-width: 300px; margin: 0 auto; }
+.up-thumb-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.up-thumb-frame .up-thumb-pending {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 12.5px;
+}
+.up-thumb-bar {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px;
+}
+.up-thumb-time {
+    flex: 1 1 auto;
+    min-width: 90px;
+    accent-color: var(--accent);
+}
+.up-thumb-val {
+    font-size: 11.5px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 42px; text-align: right;
+}
+.up-thumb-btn {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    background: var(--card-2);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    color: var(--text);
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+}
+.up-thumb-btn:hover { background: #2a3140; }
+.up-thumb-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ------------------------------------------------- 4. TAYYORGARLIK QATORI */
+.up-files {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--muted);
+}
+.up-files b { color: var(--text); }
+
+/* ------------------------------------------------------------- 5. TV REJIMI */
+.tv-mode .up-formats { gap: 12px; }
+.tv-mode .up-format { padding: 18px 12px; }
+.tv-mode .up-format-name { font-size: 17px; }
+.tv-mode .up-format-ico { font-size: 30px; }
+.tv-mode .up-strip-item { width: 120px; height: 120px; }
+.tv-mode .up-thumb-btn { padding: 11px 16px; font-size: 14px; }
+.tv-mode .up-thumb-title { font-size: 15px; }

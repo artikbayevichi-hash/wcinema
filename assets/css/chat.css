@@ -1,0 +1,406 @@
+/* ==========================================================================
+   chat.css - W CINEMA chat sahifasi (Instagram/Telegram uslubida)
+   ========================================================================== */
+
+.chat-body { }
+
+/* Umumiy sahifa konteyneri */
+.chat-page {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - var(--ig-tabbar-h) - 20px);
+}
+
+/* -------------------------------------------------- Yuqoridagi 4 ta xona */
+.chat-rooms {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 6px 0 22px;
+}
+@media (max-width: 480px) {
+    .chat-rooms { gap: 7px; }
+}
+.chat-room {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 6px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 14px;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .15s ease, transform .1s ease, background .15s ease;
+    min-height: 86px;
+}
+.chat-room:hover { border-color: var(--accent); background: var(--card-2, var(--card)); }
+.chat-room:active { transform: scale(.97); }
+.chat-room-ico { font-size: 24px; line-height: 1; }
+.chat-room-ttl {
+    font-size: 12.5px; font-weight: 700; line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.chat-room-off { opacity: .45; }
+.chat-room-skel {
+    height: 86px; border-radius: 14px;
+    background: linear-gradient(100deg, var(--card) 30%, var(--card-2, #1a1d24) 50%, var(--card) 70%);
+    background-size: 200% 100%;
+    animation: chat-shimmer 1.2s infinite linear;
+}
+@keyframes chat-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ------------------------------------------------------------ bo'lim sarlavha */
+.chat-sec-h {
+    font-size: 13px; font-weight: 700; letter-spacing: .5px;
+    text-transform: uppercase; color: var(--muted);
+    margin: 4px 2px 10px;
+}
+
+/* -------------------------------------------------------------- kontaktlar */
+.chat-contacts { display: flex; flex-direction: column; }
+.chat-contact {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 8px; border: 0; background: transparent;
+    border-radius: 12px; cursor: pointer; text-align: left;
+    color: var(--text); font: inherit; width: 100%;
+}
+.chat-contact:hover { background: var(--card); }
+.chat-cav {
+    flex: 0 0 auto; width: 48px; height: 48px; border-radius: 50%;
+    overflow: hidden; background: var(--card);
+    display: flex; align-items: center; justify-content: center;
+}
+.chat-cav img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.chat-cb-ph { font-weight: 700; color: var(--muted); font-size: 18px; }
+.chat-cmain { display: flex; flex-direction: column; min-width: 0; }
+.chat-cmain b { font-size: 15px; font-weight: 700; }
+.chat-cmain span { font-size: 12.5px; color: var(--muted); }
+
+.chat-empty {
+    color: var(--muted); font-size: 14px; text-align: center;
+    padding: 34px 16px; line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------- suhbat */
+.chat-thread {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--ig-tabbar-h) - 40px);
+    min-height: 320px;
+}
+.chat-thead {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0 10px;
+    border-bottom: 1px solid var(--line);
+}
+.chat-back {
+    border: 0; background: transparent; color: var(--text);
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex: 0 0 auto;
+}
+.chat-back:hover { background: var(--card); }
+.chat-back svg { width: 22px; height: 22px; }
+.chat-ttl { flex: 1; font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-tg {
+    flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; color: var(--muted);
+}
+.chat-tg:hover { background: var(--card); color: var(--text); }
+.chat-tg svg { width: 20px; height: 20px; }
+
+.chat-feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-behavior: smooth;
+}
+.chat-status { color: var(--muted); text-align: center; padding: 40px 12px; font-size: 14px; }
+
+.chat-row { display: flex; gap: 8px; align-items: flex-end; max-width: 100%; }
+.chat-row.mine { flex-direction: row-reverse; }
+.chat-avw { flex: 0 0 auto; }
+.chat-avw .reels-c-av { width: 32px; height: 32px; font-size: 13px; }
+.chat-col { display: flex; flex-direction: column; max-width: 76%; }
+.chat-row.mine .chat-col { align-items: flex-end; }
+.chat-who { font-size: 11.5px; color: var(--muted); margin: 0 4px 3px; }
+
+.chat-bub {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 8px 11px 6px;
+    font-size: 14.5px;
+    line-height: 1.4;
+    word-break: break-word;
+    max-width: 100%;
+}
+.chat-row.mine .chat-bub {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.chat-txt { white-space: pre-wrap; }
+.chat-txt-empty { opacity: .5; }
+.chat-time { display: block; margin-top: 3px; font-size: 10.5px; opacity: .65; text-align: right; }
+.chat-row.mine .chat-time { color: #fff; }
+/* Faqat media bo'lgan xabar: vaqt bubble'siz, o'z-o'zidan satrda. */
+.chat-time-free {
+    display: block; margin-top: 2px; font-size: 10.5px;
+    color: var(--muted); text-align: left;
+}
+.chat-row.mine .chat-time-free { text-align: right; }
+
+/* ---------------------------------------------------------- Media xabarlar
+   Reels izohlaridagi kabi: rasm / GIF / stiker KO'K (accent) orqa fonli
+   bubble ichida emas - shuning uchun foni to'liq shaffof qoladi. */
+.chat-media { max-width: 100%; }
+.chat-media .reels-c-media {
+    margin-top: 0;
+    max-width: 240px;
+}
+/* reels.css dagi `background: var(--card-2)` va border-radius ni bekor qilamiz. */
+.chat-media .reels-c-media img,
+.chat-media .reels-c-media video,
+.chat-media .reels-c-media .reels-tgs,
+.chat-media .reels-tgs-img {
+    background: transparent !important;
+    border-radius: 12px;
+    box-shadow: none;
+}
+/* Stiker o'z o'lchamida, markazlashgan - orqa fon butunlay yo'q va burchak
+   yumaloq emas (Telegram'dagi kabi "kesilgan" ko'rinish). */
+.chat-media .reels-c-sticker {
+    background: transparent !important;
+    border-radius: 0;
+    max-width: 150px;
+}
+/* GIF esa rasm kabi yumaloq burchakli (12px) - huddi yuborilgan rasm ustubida. */
+.chat-media .reels-c-gif {
+    background: transparent !important;
+    border-radius: 12px;
+    max-width: 150px;
+}
+/* ...lekin YUKLANAYOTGAN paytda skelet ko'rinishi kerak (bo'sh qator
+   bo'lib qolmasin). Tayyor bo'lgach yana butunlay shaffof bo'ladi. */
+.chat-media .reels-c-sticker:not([data-ready="1"]),
+.chat-media .reels-c-gif:not([data-ready="1"]) {
+    background: var(--card-2) !important;
+    border-radius: 12px;
+}
+.chat-media .reels-c-sticker img,
+.chat-media .reels-c-sticker video {
+    border-radius: 0;
+    background: transparent;
+}
+.chat-media .reels-c-gif img,
+.chat-media .reels-c-gif video {
+    border-radius: 12px;
+    background: transparent;
+}
+
+/* --------------------------------------------------- kompozitor (Telegram uslubi) */
+.chat-composer {
+    display: flex; align-items: flex-end; gap: 2px;
+    border-top: 1px solid var(--line);
+    padding: 8px 0 4px;
+    background: inherit;
+}
+.chat-tool {
+    flex: 0 0 auto; width: 40px; height: 40px; border: 0; border-radius: 50%;
+    background: transparent; color: var(--muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s ease, color .15s ease, transform .12s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.chat-tool:hover { background: var(--card); color: var(--text); }
+.chat-tool:active { transform: scale(.92); }
+.chat-tool[aria-expanded="true"] { background: var(--card); color: var(--accent); }
+.chat-tool svg { width: 23px; height: 23px; }
+.chat-composer textarea {
+    flex: 1; resize: none; min-height: 40px; max-height: 120px;
+    border: 1px solid var(--line); border-radius: 20px;
+    background: var(--card); color: var(--text);
+    padding: 9px 15px; font: inherit; font-size: 14.5px;
+    line-height: 1.35; outline: none;
+}
+.chat-composer textarea:focus { border-color: var(--accent); }
+.chat-send {
+    flex: 0 0 auto; width: 40px; height: 40px; border: 0; border-radius: 50%;
+    background: transparent; color: var(--accent); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s ease, transform .12s ease;
+}
+.chat-send:hover { background: var(--card); }
+.chat-send:active { transform: scale(.92); }
+.chat-send svg { width: 24px; height: 24px; }
+
+/* --- Bloklangan foydalanuvchi: kompozitor butunlay o'chadi --- */
+.chat-composer.is-locked {
+    opacity: .55;
+    cursor: not-allowed;
+    background: var(--card);
+    border-top-color: var(--accent-2);
+}
+.chat-composer.is-locked textarea { cursor: not-allowed; }
+.chat-composer.is-locked .chat-tool,
+.chat-composer.is-locked .chat-send { pointer-events: none; color: var(--muted); }
+.chat-locked-note {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; margin: 0 12px 8px;
+    border: 1px solid var(--accent-2);
+    border-radius: 12px;
+    background: rgba(255, 92, 92, .08);
+    color: var(--accent-2);
+    font-size: 13px; line-height: 1.4;
+}
+.chat-locked-note svg { width: 17px; height: 17px; flex: 0 0 auto; }
+
+/* Telegram uslubida: matn yo'q -> MIKROFON (xushab, halqa). Mikrofon TEZ
+   bosilsa -> SKRIPKA (rasm biriktirish). Matn bor -> YUBORISH (ko'k doira). */
+.chat-send[data-mode="mic"],
+.chat-send[data-mode="attach"] { color: var(--muted); }
+.chat-send[data-mode="mic"]:hover,
+.chat-send[data-mode="attach"]:hover { color: var(--text); background: var(--card); }
+.chat-send[data-mode="send"] {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(42, 171, 238, .32);
+}
+.chat-send[data-mode="send"]:hover { background: #37b7f5; }
+.chat-send .tv-send-mic svg { width: 23px; height: 23px; }
+.chat-send .tv-send-clip svg { width: 22px; height: 22px; }
+.chat-send .tv-send-ico svg { width: 21px; height: 21px; }
+
+/* ------------------------------------------------------------------ picker
+   Telegram Desktop kabi: bitta panel, ichida 4 ta bo'lim
+   (Emoji | Stiker | GIF | Rasm). Rasm bo'limi darhol fayl tanlashni ochadi. */
+.chat-picker {
+    border-top: 1px solid var(--line);
+    background: var(--bg-2);
+    max-height: 52vh; overflow: hidden;
+    display: flex; flex-direction: column;
+}
+.chat-picker-tabs {
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px 8px 4px;
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+.chat-picker-tab {
+    border: 0; background: transparent; color: var(--muted);
+    font: inherit; font-size: 15px; font-weight: 700;
+    padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    min-width: 42px;
+    transition: background .15s ease, color .15s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.chat-picker-tab:hover { background: var(--card); color: var(--text); }
+.chat-picker-tab.on { background: var(--accent); color: #fff; }
+.chat-picker-x {
+    margin-left: auto;
+    border: 0; background: transparent; color: var(--muted);
+    font-size: 22px; line-height: 1; cursor: pointer;
+    width: 34px; height: 34px; border-radius: 50%;
+}
+.chat-picker-x:hover { background: var(--card); color: var(--text); }
+.chat-picker-body { min-height: 64px; overflow-y: auto; padding: 6px 2px 8px; }
+.chat-gif-search {
+    padding: 0 6px 8px;
+    position: sticky; top: 0; z-index: 2;
+    background: var(--bg-2);
+}
+.chat-gif-search input {
+    width: 100%; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); color: var(--text); padding: 8px 12px;
+    font: inherit; font-size: 14px; outline: none;
+}
+.chat-gif-search input:focus { border-color: var(--accent); }
+
+/* ------------------------------------------------------------------- emoji */
+.chat-emoji-sec { margin-bottom: 10px; }
+.chat-emoji-cap {
+    font-size: 11px; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .05em;
+    padding: 2px 8px 5px;
+    position: sticky; top: 0; background: var(--bg-2); z-index: 1;
+}
+.chat-emoji-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    gap: 2px; padding: 0 6px;
+}
+.chat-emoji {
+    border: 0; background: transparent; cursor: pointer;
+    font-size: 26px; line-height: 1.2; padding: 4px 0;
+    border-radius: 9px;
+    transition: background .12s ease, transform .12s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.chat-emoji:hover { background: var(--card); transform: scale(1.12); }
+.chat-emoji:active { transform: scale(.92); }
+
+/* ----------------------------------------------------------------- stiker */
+.chat-sticker-body { overflow-y: auto; }
+.chat-sticker-sets {
+    display: flex; gap: 6px; overflow-x: auto; padding: 6px 6px 8px;
+    position: sticky; top: 0; z-index: 2; background: var(--bg-2);
+}
+.chat-sticker-set {
+    flex: 0 0 auto; border: 1px solid var(--line); background: var(--card);
+    color: var(--muted); border-radius: 8px; padding: 5px 10px;
+    font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.chat-sticker-set.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+/* Stiker kartalari - orqa foni yo'q (faqat bosilganda paydo bo'ladi). */
+.chat-sticker-item {
+    border: 0; background: transparent; cursor: pointer; border-radius: 10px;
+    padding: 4px;
+    transition: background .12s ease;
+}
+.chat-sticker-item:hover { background: var(--card); }
+.chat-sticker-item img,
+.chat-sticker-item video { width: 100%; max-height: 64px; object-fit: contain; background: transparent; }
+.chat-sticker-item .reels-tgs { width: 64px; height: 64px; }
+
+/* Stikerlar to'plami grid (izohlardagi `.reels-c-sticker-item` bilan bir xil
+   ko'rinish uchun qayta ishlatamiz). */
+.chat-sticker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; padding: 0 6px; }
+
+/* --------------------------------------------------------------------- GIF */
+.chat-gif-body { overflow-y: auto; }
+.chat-gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; width: 100%; padding: 0 6px; }
+.chat-gif-item {
+    position: relative; border: 0; background: transparent; border-radius: 10px;
+    overflow: hidden; cursor: pointer; padding: 0; min-height: 70px;
+    transition: box-shadow .14s ease, transform .14s ease;
+}
+.chat-gif-item:hover { box-shadow: 0 0 0 2px var(--accent) inset; }
+.chat-gif-item:active { transform: scale(.96); }
+.chat-gif-item img, .chat-gif-item video,
+.chat-gif-item .reels-tgs { width: 100%; height: 100%; object-fit: cover; display: block; background: transparent; }
+.chat-gif-item .reels-tgs svg { max-height: 180px; }
+
+/* ------------------------------------------------------------------- toast */
+.chat-toast {
+    position: fixed; left: 50%; bottom: calc(var(--ig-tabbar-h) + 20px);
+    transform: translateX(-50%);
+    background: rgba(20, 22, 28, .96); color: #fff;
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 16px; font-size: 13.5px; z-index: 200; max-width: 88vw;
+}
+.chat-toast[hidden] { display: none; }
+
+/* Desktop: balandroq suhbat + 4 xona bir qatorda */
+@media (min-width: 1000px) {
+    .chat-thread { height: calc(100vh - 120px); }
+    .chat-page { min-height: calc(100vh - 40px); }
+}

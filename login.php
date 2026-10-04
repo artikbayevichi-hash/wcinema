@@ -261,7 +261,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
             <input type="hidden" name="tg_auth_date" id="tgAuthDate">
             <input type="hidden" name="tg_hash" id="tgHash">
             <button type="submit" class="telegram-btn" id="telegramBtn">
-                <span id="btnText">🔒 Telegram orqali kirish</span>
+                <span id="btnText">🔒 Kirish</span>
             </button>
         </form>
 
@@ -278,7 +278,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
 
         <!-- Bot orqali kirish - eng ishonchli yo'l (har qanday brauzer/WebView'da ishlaydi) -->
         <button type="button" class="telegram-btn bot-login-btn" id="botLoginBtn">
-            🤖 Telegram orqali kirish
+            🤖 Kirish
         </button>
         <div class="login-status" id="loginStatus" style="display:none">
             <span class="loading"></span>

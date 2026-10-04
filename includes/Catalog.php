@@ -368,7 +368,7 @@ class Catalog {
                     'mime' => 'video/mp4',
                     'seek' => true,
                     'warning' => 'ADMIN TEKSHIRUV rejimi: video server orqali uzatilmoqda '
-                        . '(oddiy tomoshabin uchun esa Telegram\'da ochiladi).',
+                        . '(oddiy tomoshabin uchun esa to‘g‘ridan-to‘g‘ri oqadi).',
                 ];
             }
 
@@ -413,8 +413,8 @@ class Catalog {
                     'type' => 'file', 'url' => $playUrl, 'mime' => 'video/mp4',
                     'poster' => $tgImage, 'seek' => true,
                     'warning' => $playUrl === $tgVideo
-                        ? 'Video to‘g‘ridan-to‘g‘ri Telegram CDN‘dan oqadi — saytga yuk tushmaydi.'
-                        : 'Telegram videosi Cloudflare Edge CDN orqali uzatilmoqda.',
+                        ? 'Video to‘g‘ridan-to‘g‘ri CDN‘dan oqadi — saytga yuk tushmaydi.'
+                        : 'Video Cloudflare Edge CDN orqali uzatilmoqda.',
                 ];
             }
 
@@ -602,9 +602,9 @@ class Catalog {
             'mime'    => null,
             'seek'    => false,
             'warning' => $big
-                ? 'Katta hajmli film. Sayt uni Telegram serveridan to‘g‘ridan-to‘g‘ri o‘ynatadi '
+                ? 'Katta hajmli film. Sayt uni to‘g‘ridan-to‘g‘ri o‘ynatadi '
                   . '— saytga yuk tushmaydi, ilovaga o‘tish shart emas.'
-                : 'Video Telegram serveridan to‘g‘ridan-to‘g‘ri oqadi — saytga yuk tushmaydi.',
+                : 'Video to‘g‘ridan-to‘g‘ri oqadi — saytga yuk tushmaydi.',
         ];
     }
 

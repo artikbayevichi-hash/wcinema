@@ -1,14 +1,14 @@
-<?php
+﻿<?php
 // ============================================================================
-// reels-upload.php - reelsni sayt orqali yuklash
-// ============================================================================
+// reels-upload.php — kontent joylash (Reels · Rasm post · Uzun video)
+// ----------------------------------------------------------------------------
 // Oqim:
-//   1) Foydalanuvchi videoni saytda tanlaydi, sarlavha/izoh yozadi va
-//      (ixtiyoriy) qaysi filmdan olinganini nom yoki ID bo'yicha qidiradi.
-//   2) "Yuklash" bosiladi -> api/reel-upload.php faylni qabul qiladi va
-//      to'g'ridan-to'g'ri Telegram kanalga (REELS_CHANNEL) joylaydi.
-//   3) Fayl serverda SAQLANMAYDI - Telegram'ga uzatilgach darhol o'chiriladi.
-//      Tomoshabinlar videoni Telegram'dan ko'radi, sayt faqat havolani saqlaydi.
+//   1) Foydalanuvchi formatni tanlaydi (Reels 9:16 / Rasm post 1:1 /
+//      Uzun video 16:9), fayl(lar)ni tanlaydi.
+//   2) THUMBNAIL klientda yaratiladi (canvas) — serverda ffmpeg yo'q.
+//   3) api/upload.php faylni qabul qiladi:
+//        · video → to'g'ridan-to'g'ri kanalga (serverda saqlanmaydi)
+//        · rasm  → serverga (uploads/posts/) saqlanadi (galereya uchun)
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
@@ -17,7 +17,13 @@ $userId = $user ? (int) $user['id'] : null;
 $stats  = $userId ? $reels->authorStats($userId) : null;
 
 $channelReady = (REELS_CHANNEL !== '');
-$maxMb        = (int) REEL_MAX_UPLOAD_MB;
+
+// Limitlar — Uploader::create() bilan bir xil (server tekshiruvi ham bor).
+$limits = [
+    'reel'  => ['name' => 'Reels',      'ratio' => '9:16', 'maxMb' => 50,  'icon' => "\u{1F4E5}", 'max' => 1],
+    'post'  => ['name' => 'Rasm post',  'ratio' => '1:1',  'maxMb' => 12,  'icon' => "\u{1F5BC}", 'max' => 10],
+    'video' => ['name' => 'Uzun video', 'ratio' => '16:9', 'maxMb' => 200, 'icon' => "\u{1F4FA}", 'max' => 1],
+];
 ?>
 <!DOCTYPE html>
 <html lang="uz">
@@ -26,11 +32,13 @@ $maxMb        = (int) REEL_MAX_UPLOAD_MB;
     <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Reels yuklash — <?php echo htmlspecialchars(SITE_NAME); ?></title>
+    <title>Joylash &mdash; <?php echo htmlspecialchars(SITE_NAME); ?></title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/reels.css">
+    <link rel="stylesheet" href="assets/css/upload.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/upload.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/instagram.css">
-    <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. -->
+    <?php require __DIR__ . '/includes/tv-head.php'; ?>
+    <!-- Telegram Web App &mdash; FAQAT Telegram ilovasi ichida kerak. -->
     <script>
     (function () {
       if (!/Telegram/i.test(navigator.userAgent)
@@ -75,24 +83,25 @@ $maxMb        = (int) REEL_MAX_UPLOAD_MB;
 </head>
 <body class="up-body ig-shell">
 
-<!-- Instagram uslubidagi navigatsiya -->
+<!-- Navigatsiya -->
 <?php $NAV_ACTIVE = 'upload'; require __DIR__ . '/includes/nav.php'; ?>
 
 <header class="up-top">
-    <a class="reels-back" href="reels.php" aria-label="Orqaga">←</a>
-    <div class="up-title">Reels joylash</div>
+    <a class="reels-back" href="reels.php" aria-label="Orqaga">&larr;</a>
+    <div class="up-title">Joylash</div>
     <span style="width:34px"></span>
 </header>
 
 <?php if (!$channelReady): ?>
-<!-- ================= Reels kanali sozlanmagan ================= -->
+<!-- ==================== Kanal sozlanmagan ==================== -->
 <div class="up-card">
     <div class="up-drop" style="cursor:default">
-        <div class="up-drop-icon">🔧</div>
-        <div class="up-drop-text">Reels kanali hali sozlanmagan</div>
+        <div class="up-drop-icon">&#9888;</div>
+        <div class="up-drop-text">Video kanali sozlanmagan</div>
         <div class="up-drop-hint">
             Administrator <code>.env</code> faylida <code>REELS_CHANNEL</code> ni
-            ko'rsatishi va botni kanalga admin qilib qo'shishi kerak.
+            ko&lsquo;rsatishi va botni kanalga admin qilib qo&lsquo;shishi kerak.
+            Rasm postlari shu kanalga bog&lsquo;liq emas &mdash; ular ishlaydi.
         </div>
     </div>
 </div>
@@ -100,25 +109,58 @@ $maxMb        = (int) REEL_MAX_UPLOAD_MB;
 
 <form class="up-card" id="upForm" onsubmit="return false;">
 
-    <!-- ============================ Video fayl ============================ -->
-    <div class="up-drop" id="upDrop">
-        <div class="up-drop-icon">🎬</div>
-        <div class="up-drop-text">Videoni tanlang yoki shu yerga tashlang</div>
-        <div class="up-drop-hint">MP4 · WEBM · MOV — <?php echo $maxMb; ?> MB gacha</div>
-        <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
+    <!-- ============================== FORMAT ============================== -->
+    <label class="up-label" style="margin-top:0">Format</label>
+    <div class="up-formats" id="upFormats" role="group" aria-label="Format tanlang">
+        <?php foreach ($limits as $fid => $f): ?>
+        <button type="button" class="up-format" data-format="<?php echo $fid; ?>"
+                aria-pressed="<?php echo $fid === 'reel' ? 'true' : 'false'; ?>">
+            <span class="up-format-ico"><?php echo $f['icon']; ?></span>
+            <span class="up-format-name"><?php echo htmlspecialchars($f['name']); ?></span>
+            <span class="up-format-ratio"><?php echo $f['ratio']; ?></span>
+        </button>
+        <?php endforeach; ?>
     </div>
 
-    <!-- ============================ Maydonlar ============================ -->
+    <!-- ============================ FAYL ============================ -->
+    <div class="up-drop" id="upDrop">
+        <div class="up-drop-icon">&#128225;</div>
+        <div class="up-drop-text">Videoni tanlang yoki shu yerga tashlang</div>
+        <div class="up-drop-hint">MP4 &middot; WEBM &middot; MOV &mdash; 50 MB gacha</div>
+        <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" hidden>
+    </div>
+    <div class="up-files" id="upFiles" hidden></div>
+
+    <!-- Galereya uchun tanlangan rasm ko'rinishi -->
+    <div class="up-strip" id="upStrip"></div>
+
+    <!-- ========================= THUMBNAIL ========================= -->
+    <div class="up-thumb" id="upThumb" hidden>
+        <div class="up-thumb-head">
+            <span class="up-thumb-title">Preview (thumbnail)</span>
+            <button type="button" class="up-thumb-btn" id="upThumbRe">Qayta olish</button>
+        </div>
+        <div class="up-thumb-frame" id="upThumbFrame" data-aspect="9:16">
+            <img id="upThumbImg" alt="">
+        </div>
+        <div class="up-thumb-bar" id="upThumbTime" hidden>
+            <input type="range" class="up-thumb-time" id="upThumbSeek"
+                   min="0" max="10" step="0.1" value="0">
+            <span class="up-thumb-val" id="upThumbVal">0:00</span>
+        </div>
+    </div>
+
+    <!-- ============================ MAYDONLAR ============================ -->
     <label class="up-label">
         Sarlavha
         <input type="text" id="upTitle" maxlength="200"
-               placeholder="Masalan: Anime finali — hayajonli" autocomplete="off">
+               placeholder="Masalan: Anime finali &mdash; hayajonli" autocomplete="off">
     </label>
 
     <label class="up-label">
         Izoh <span style="color:var(--muted)">(ixtiyoriy)</span>
         <textarea id="upDesc" rows="3" maxlength="500"
-                  placeholder="Qisqa izoh…"></textarea>
+                  placeholder="Qisqa izoh&hellip;"></textarea>
     </label>
 
     <!-- ==================== Qaysi filmdan? (ixtiyoriy) ==================== -->
@@ -126,7 +168,7 @@ $maxMb        = (int) REEL_MAX_UPLOAD_MB;
         Qaysi filmdan? <span style="color:var(--muted)">(ixtiyoriy)</span>
         <div class="src-pick" id="srcPick">
             <input type="text" id="srcSearch"
-                   placeholder="Kino / anime / multfilm nomi yoki ID…"
+                   placeholder="Kino / anime / multfilm nomi yoki ID&hellip;"
                    autocomplete="off">
             <div class="src-results" id="srcResults" hidden></div>
         </div>
@@ -141,11 +183,12 @@ $maxMb        = (int) REEL_MAX_UPLOAD_MB;
 
     <div class="up-msg" id="upMsg" hidden></div>
 
-    <button class="up-btn" id="upSubmit" type="submit">📤 Yuklash va kanalga joylash</button>
+    <button class="up-btn" id="upSubmit" type="submit">Yuklash</button>
 
-    <p class="up-note">
-        Video <b>serverda saqlanmaydi</b> — to'g'ridan-to'g'ri
-        <b>Telegram kanalga</b> joylanadi va saytda o'sha yerdan o'ynaydi.
+    <p class="up-note" id="upNote">
+        Video <b>serverda saqlanmaydi</b> &mdash; to&lsquo;g&lsquo;ridan-to&lsquo;g&lsquo;ri
+        <b>kanalga</b> joylanadi va saytda o&lsquo;sha yerdan o&lsquo;ynaydi.
+        Rasm postlari esa saytda saqlanadi.
     </p>
 </form>
 
@@ -154,211 +197,22 @@ $maxMb        = (int) REEL_MAX_UPLOAD_MB;
 <!-- ============================ Mening statistika ============================ -->
 <?php if ($stats && $stats['total'] > 0): ?>
 <div class="up-card up-stats">
-    <h2 style="font-size:15px;margin-bottom:12px">📊 Mening reelslarim</h2>
+    <h2 style="font-size:15px;margin-bottom:12px">&#128202; Mening kontentim</h2>
     <div class="up-stats-grid">
         <div class="up-stat"><b><?php echo (int) $stats['approved']; ?></b><span>Tasdiqlangan</span></div>
         <div class="up-stat"><b><?php echo (int) $stats['pending']; ?></b><span>Kutilmoqda</span></div>
-        <div class="up-stat"><b><?php echo (int) $stats['views']; ?></b><span>Ko'rish</span></div>
+        <div class="up-stat"><b><?php echo (int) $stats['views']; ?></b><span>Ko&lsquo;rish</span></div>
         <div class="up-stat"><b><?php echo (int) $stats['likes']; ?></b><span>Yoqish</span></div>
     </div>
     <?php if ($stats['rejected'] > 0): ?>
     <p class="up-note" style="margin-top:12px">
-        ⚠️ Rad etilgan: <?php echo (int) $stats['rejected']; ?> ta
+        &#10060; Rad etilgan: <?php echo (int) $stats['rejected']; ?> ta
     </p>
     <?php endif; ?>
 </div>
 <?php endif; ?>
 
-<script>
-(function () {
-    const form = document.getElementById('upForm');
-    if (!form) return;                       // kanal sozlanmagan
-
-    const drop    = document.getElementById('upDrop');
-    const fileEl  = document.getElementById('upFile');
-    const title   = document.getElementById('upTitle');
-    const desc    = document.getElementById('upDesc');
-    const search  = document.getElementById('srcSearch');
-    const results = document.getElementById('srcResults');
-    const chip    = document.getElementById('srcChip');
-    const cidEl   = document.getElementById('upContentId');
-    const msg     = document.getElementById('upMsg');
-    const submit  = document.getElementById('upSubmit');
-    const prog    = document.getElementById('upProgress');
-    const bar     = document.getElementById('upBar');
-    const progTxt = document.getElementById('upProgText');
-
-    const esc = (s) => String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-
-    let file = null;
-
-    function showMsg(t, kind) {
-        msg.hidden = false;
-        msg.textContent = t;
-        msg.className = 'up-msg ' + (kind || '');
-    }
-    function fmtMb(bytes) { return (Number(bytes || 0) / 1048576).toFixed(1) + ' MB'; }
-
-    // ---------------------------------------------------- fayl tanlash
-    function setFile(f) {
-        if (!f) return;
-        const okType = /^video\//.test(f.type) || /\.(mp4|webm|mov)$/i.test(f.name);
-        if (!okType) { showMsg('❌ Faqat MP4 / WEBM / MOV video qabul qilinadi', 'err'); return; }
-        if (f.size > <?php echo $maxMb; ?> * 1048576) {
-            showMsg('❌ Fayl <?php echo $maxMb; ?> MB dan katta', 'err');
-            return;
-        }
-        file = f;
-        drop.classList.add('has');
-        drop.querySelector('.up-drop-icon').textContent = '🎬';
-        drop.querySelector('.up-drop-text').textContent = f.name;
-        drop.querySelector('.up-drop-hint').textContent = fmtMb(f.size) + ' · yuborishga tayyor';
-        msg.hidden = true;
-    }
-
-    drop.addEventListener('click', () => fileEl.click());
-    fileEl.addEventListener('change', function () { setFile(this.files && this.files[0]); });
-    ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => {
-        e.preventDefault(); drop.classList.add('over');
-    }));
-    ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => {
-        e.preventDefault(); drop.classList.remove('over');
-    }));
-    drop.addEventListener('drop', (e) => {
-        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        setFile(f);
-    });
-
-    // ---------------------------------------------------- kontent qidiruvi
-    let timer = null;
-    let picked = null;
-
-    function clearPick() {
-        picked = null;
-        cidEl.value = '';
-        chip.hidden = true;
-        chip.innerHTML = '';
-    }
-    function pick(item) {
-        picked = item;
-        cidEl.value = item.id;
-        results.hidden = true;
-        if (title && !title.value.trim()) title.value = item.title || '';
-        chip.hidden = false;
-        chip.innerHTML = '📺 ' + esc(item.title)
-            + (item.category ? ' · ' + esc(item.category) : '')
-            + ' <button type="button" title="Olib tashlash">✕</button>';
-        chip.querySelector('button').addEventListener('click', () => {
-            clearPick();
-            search.value = '';
-            search.focus();
-        });
-    }
-    async function doSearch(q) {
-        results.hidden = false;
-        results.innerHTML = '<div class="empty">Qidirilmoqda…</div>';
-        try {
-            const res = await fetch('api/catalog.php?q=' + encodeURIComponent(q) + '&per_page=8', {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin'
-            });
-            const d = await res.json();
-            const items = (d && d.items) || [];
-            if (!items.length) {
-                results.innerHTML = '<div class="empty">Topilmadi — bo‘sh qoldirsangiz ham bo‘ladi</div>';
-                return;
-            }
-            results.innerHTML = items.map((it, i) => `
-                <button type="button" data-i="${i}">
-                    ${it.poster ? `<img src="${esc(it.poster)}" alt="">` : '<img alt="">'}
-                    <span>
-                        <span class="t">${esc(it.title)}</span>
-                        <span class="s">#${it.id}${it.category ? ' · ' + esc(it.category) : ''}${it.year ? ' · ' + it.year : ''}</span>
-                    </span>
-                </button>`).join('');
-            results.querySelectorAll('button[data-i]').forEach((b) => {
-                b.addEventListener('click', () => pick(items[Number(b.dataset.i)]));
-            });
-        } catch (e) {
-            results.innerHTML = '<div class="empty">Qidiruvda xatolik</div>';
-        }
-    }
-    if (search) {
-        search.addEventListener('input', () => {
-            clearTimeout(timer);
-            const q = search.value.trim();
-            if (q.length < 1) { results.hidden = true; return; }
-            timer = setTimeout(() => doSearch(q), 250);
-        });
-        search.addEventListener('focus', () => {
-            if (search.value.trim().length >= 1 && !picked) doSearch(search.value.trim());
-        });
-    }
-    document.addEventListener('click', (e) => {
-        if (results && !e.target.closest('#srcPick')) results.hidden = true;
-    });
-
-    // ---------------------------------------------------- yuklash
-    form.addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        if (!file) { showMsg('❌ Avval video tanlang', 'err'); return; }
-
-        const fd = new FormData();
-        fd.append('video', file);
-        fd.append('title', title ? title.value : '');
-        fd.append('description', desc ? desc.value : '');
-        fd.append('content_id', cidEl.value || '');
-        try {
-            const me = localStorage.getItem('wc_tg_me_v1');
-            if (me) fd.append('tg_me', me);
-        } catch (e) {}
-
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', 'api/reel-upload.php');
-
-        submit.disabled = true;
-        submit.textContent = '⏳ Yuklanmoqda…';
-        prog.hidden = false;
-        bar.style.width = '0%';
-        progTxt.textContent = fmtMb(file.size);
-        showMsg('Video Telegram kanalga yuborilmoqda…', '');
-
-        xhr.upload.onprogress = function (e) {
-            if (!e.lengthComputable) return;
-            const p = Math.min(100, e.loaded / e.total * 100);
-            bar.style.width = p.toFixed(0) + '%';
-            progTxt.textContent = p.toFixed(0) + '% · '
-                + fmtMb(e.loaded) + ' / ' + fmtMb(e.total);
-        };
-
-        xhr.onload = function () {
-            let d = {};
-            try { d = JSON.parse(xhr.responseText); } catch (e) {}
-            if (xhr.status >= 200 && xhr.status < 300 && d.success) {
-                bar.style.width = '100%';
-                progTxt.textContent = '100%';
-                showMsg('✅ ' + (d.message || 'Joylandi!'), 'ok');
-                submit.textContent = '✅ Yuborildi';
-                setTimeout(() => { location.href = 'reels.php'; }, 1400);
-            } else {
-                submit.disabled = false;
-                submit.textContent = '📤 Yuklash va kanalga joylash';
-                showMsg('❌ ' + (d.message || ('Xato ' + xhr.status)), 'err');
-            }
-        };
-        xhr.onerror = function () {
-            submit.disabled = false;
-            submit.textContent = '📤 Yuklash va kanalga joylash';
-            showMsg('❌ Ulanish xatosi. Internetni tekshirib, qayta urinib ko‘ring.', 'err');
-        };
-
-        xhr.send(fd);
-    });
-})();
-</script>
+<script src="assets/js/upload-page.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/upload-page.js') ?: 1; ?>"></script>
 
 </body>
 </html>

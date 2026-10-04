@@ -34,6 +34,7 @@ $items = $catalog->getContinueWatching($userId, 200);
     <title>Tarix — <?php echo htmlspecialchars(SITE_NAME); ?></title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/instagram.css">
+    <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. -->
     <script>
     (function () {

@@ -192,6 +192,121 @@ class TelegramBot {
     }
 
     /**
+     * Forum-guruh (topics) ichida xabar yuborish.
+     *
+     * @param string   $chatId
+     * @param int      $threadId  topic id (message_thread_id)
+     * @param string   $text
+     * @param string   $parseMode
+     * @param array|null $replyMarkup
+     * @return array|null
+     */
+    public function sendMessageToTopic($chatId, $threadId, $text, $parseMode = 'HTML', $replyMarkup = null) {
+        $data = [
+            'chat_id'           => $chatId,
+            'message_thread_id' => (int) $threadId,
+            'text'              => $text,
+            'parse_mode'        => $parseMode,
+        ];
+        if ($replyMarkup) {
+            $data['reply_markup'] = json_encode($replyMarkup, JSON_UNESCAPED_UNICODE);
+        }
+        return $this->request('sendMessage', $data);
+    }
+
+    /**
+     * Forum-guruhda yangi MAVZU (topic) ochish.
+     *
+     * Bot guruhda ADMIN bo'lishi va "Manage Topics" huquqi bo'lishi shart.
+     *
+     * @return array|null ['message_thread_id'=>, 'name'=>, ...]
+     */
+    public function createForumTopic($chatId, $name, $iconColor = null) {
+        $data = [
+            'chat_id' => $chatId,
+            'name'    => mb_substr(trim((string) $name), 0, 128),
+        ];
+        if ($iconColor !== null) {
+            $data['icon_color'] = (int) $iconColor;
+        }
+        $res = $this->request('createForumTopic', $data);
+        return $res['result'] ?? null;
+    }
+
+    /**
+     * Mavzuni qayta nomlash.
+     */
+    public function editForumTopic($chatId, $threadId, $name) {
+        $res = $this->request('editForumTopic', [
+            'chat_id'           => $chatId,
+            'message_thread_id' => (int) $threadId,
+            'name'              => mb_substr(trim((string) $name), 0, 128),
+        ]);
+        return $res['result'] ?? null;
+    }
+
+    /**
+     * Guruh a'zosining holati (admin mi?).
+     *
+     * @return array|null ['status'=>'administrator'|'member'|'creator'|...,'user'=>...]
+     */
+    public function getChatMember($chatId, $userId) {
+        $res = $this->request('getChatMember', [
+            'chat_id' => $chatId,
+            'user_id' => (int) $userId,
+        ]);
+        return $res['result'] ?? null;
+    }
+
+    /**
+     * Stiker yuborish (file_id yoki CURLFile).
+     */
+    public function sendSticker($chatId, $sticker, $options = []) {
+        $data = [
+            'chat_id' => $chatId,
+            'sticker' => $this->prepareFileArgument($sticker),
+        ];
+        if (!empty($options['message_thread_id'])) {
+            $data['message_thread_id'] = (int) $options['message_thread_id'];
+        }
+        return $this->request('sendSticker', $data);
+    }
+
+    /**
+     * GIF (animation) yuborish (file_id yoki CURLFile).
+     */
+    public function sendAnimation($chatId, $animation, $options = []) {
+        $data = [
+            'chat_id'   => $chatId,
+            'animation' => $this->prepareFileArgument($animation),
+        ];
+        if (!empty($options['message_thread_id'])) {
+            $data['message_thread_id'] = (int) $options['message_thread_id'];
+        }
+        if (!empty($options['caption'])) {
+            $data['caption'] = mb_substr($options['caption'], 0, 1024);
+        }
+        return $this->request('sendAnimation', $data);
+    }
+
+    /**
+     * Rasm yuborish (file_id yoki CURLFile).
+     */
+    public function sendPhoto($chatId, $photo, $options = []) {
+        $data = [
+            'chat_id' => $chatId,
+            'photo'   => $this->prepareFileArgument($photo),
+        ];
+        if (!empty($options['message_thread_id'])) {
+            $data['message_thread_id'] = (int) $options['message_thread_id'];
+        }
+        if (!empty($options['caption'])) {
+            $data['caption'] = mb_substr($options['caption'], 0, 1024);
+        }
+        return $this->request('sendPhoto', $data);
+    }
+
+    /**
      * Video yuborish.
      *
      * @param string $chatId

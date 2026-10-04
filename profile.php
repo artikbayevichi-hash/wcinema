@@ -1,26 +1,23 @@
-<?php
+﻿<?php
 // ============================================================================
-// profile.php - Instagram uslubidagi profil sahifasi
-// ============================================================================
-//   profile.php            -> o'z profili (login kerak)
-//   profile.php?user_id=N  -> boshqa foydalanuvchi profili (oddiy ko'rish)
+// profile.php — YouTube/Instagram uslubidagi profil sahifasi
+// ----------------------------------------------------------------------------
+//   profile.php            → o'z profili
+//   profile.php?user_id=N  → boshqa foydalanuvchi profili
 //
-// Sahifa "karkas" - ma'lumotni api/profile.php yuklaydi (assets/js/profile.js).
-// Tarkiblar (Instagram'ga o'xshash):
-//   * avatar + ism + @username + bio
+// Sahifa "karkas" — ma'lumotni api/profile.php yuklaydi (assets/js/profile.js).
+// Tarkiblar:
+//   * avatar + ism + @username + bio + maxfiylik belgisi
 //   * statistika: Reels | Ko'rishlar | Yoqtirishlar
-//   * Highlight qator (eng mashhur reels)
-//   * yorliqlar: Reels (grid) | Yoqqanlar | Saqlangan
+//   * Highlight qator (eng mashhur kontent)
+//   * yorliqlar: Reels | Posts | Videos | Yoqqanlar | Saqlangan
 //   * profilni tahrirlash modal (bio, ism, username, avatar)
+//   * boshqa profil: Kuzatish | Xabar | Bloklash
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
 $viewUserId = (int) ($_GET['user_id'] ?? 0);
 $meId       = $user ? (int) $user['id'] : null;
-
-// DIQQAT: endi login qilmagan (faqat MTProto/Telegram) foydalanuvchi ham
-// profilni ko'ra oladi. Bunday holatda ma'lumot brauzerdagi Telegram
-// akkauntidan (wc_tg_me_v1) va mahalliy kutubxonadan (localStorage) olinadi.
 ?>
 <!DOCTYPE html>
 <html lang="uz">
@@ -29,12 +26,13 @@ $meId       = $user ? (int) $user['id'] : null;
     <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-    <title>Profil — <?php echo htmlspecialchars(SITE_NAME); ?></title>
-    <meta name="description" content="Profil — <?php echo htmlspecialchars(SITE_NAME); ?>">
+    <title>Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?></title>
+    <meta name="description" content="Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?>">
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/profile.css">
     <link rel="stylesheet" href="assets/css/instagram.css">
-    <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. Oddiy
+    <?php require __DIR__ . '/includes/tv-head.php'; ?>
+    <!-- Telegram Web App &mdash; FAQAT Telegram ilovasi ichida kerak. Oddiy
          tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani
          sekinlashtiradi. Shuning uchun shartli yuklanadi. -->
     <script>
@@ -49,16 +47,17 @@ $meId       = $user ? (int) $user['id'] : null;
 </head>
 <body class="profile-body ig-shell">
 
-<!-- Instagram uslubidagi navigatsiya -->
+<!-- Navigatsiya -->
 <?php $NAV_ACTIVE = 'profile'; require __DIR__ . '/includes/nav.php'; ?>
 
 <!-- ================================================= Yuqori panel -->
 <header class="pf-top">
-    <a class="pf-back" href="index.php" aria-label="Orqaga">←</a>
+    <a class="pf-back" href="index.php" aria-label="Orqaga">&larr;</a>
     <div class="pf-title" id="pfTitle">Profil</div>
     <div class="pf-top-actions">
-        <a class="pf-top-btn" href="reels-upload.php" title="Reels yuklash" id="pfUploadBtn" hidden>＋</a>
-        <a class="pf-top-btn" href="logout.php" title="Chiqish" id="pfLogoutBtn" hidden>⏻</a>
+        <a class="pf-top-btn" href="settings.php" title="Sozlamalar" id="pfSettingsBtn" hidden>&#9881;</a>
+        <a class="pf-top-btn" href="reels-upload.php" title="Joylash" id="pfUploadBtn" hidden>&#10133;</a>
+        <a class="pf-top-btn" href="logout.php" title="Chiqish" id="pfLogoutBtn" hidden>&#9211;</a>
     </div>
 </header>
 
@@ -69,9 +68,10 @@ $meId       = $user ? (int) $user['id'] : null;
         <div class="pf-header">
             <div class="pf-avatar" id="pfAvatar"></div>
             <div class="pf-head-info">
-                <h1 class="pf-name" id="pfName">…</h1>
-                <span class="pf-username" id="pfUsername">@…</span>
+                <h1 class="pf-name" id="pfName">&hellip;</h1>
+                <span class="pf-username" id="pfUsername">@&hellip;</span>
                 <p class="pf-bio" id="pfBio"></p>
+                <span class="pf-private" id="pfPrivateBadge" hidden>&#128274; Maxfiy</span>
             </div>
         </div>
 
@@ -84,15 +84,27 @@ $meId       = $user ? (int) $user['id'] : null;
         <div class="pf-actions" id="pfActions"></div>
     </section>
 
-    <!-- Highlight qator (Instagram'dagi kabi) -->
+    <!-- Maxfiy profil ogohlantirishi -->
+    <div class="pf-locked" id="pfLocked" hidden>
+        <div class="pf-locked-ico">&#128274;</div>
+        <div class="pf-locked-t">Bu profil maxfiy</div>
+        <div class="pf-locked-s">
+            Bu hisob faqat uni kuzatuvchilar ko‘ra oladi.
+            Agar sizni kuzatmoqchimisangiz, «Kuzatish» tugmasini bosing.
+        </div>
+    </div>
+
+    <!-- Highlight qator -->
     <section class="pf-highlight-wrap" id="pfHighlightsWrap" hidden>
-        <div class="pf-sec-title">⭐ Highlightlar</div>
+        <div class="pf-sec-title">&#127894; Highlightlar</div>
         <div class="pf-highlights" id="pfHighlights"></div>
     </section>
 
     <!-- Yorliqlar -->
-    <nav class="pf-tabs" id="pfTabs">
+    <nav class="pf-tabs" id="pfTabs" aria-label="Profil bo'limlari">
         <button class="pf-tab active" data-tab="reels">Reels</button>
+        <button class="pf-tab" data-tab="posts">Posts</button>
+        <button class="pf-tab" data-tab="videos">Videos</button>
         <button class="pf-tab" data-tab="liked" data-self hidden>Yoqqanlar</button>
         <button class="pf-tab" data-tab="saved" data-self hidden>Saqlangan</button>
     </nav>
@@ -106,27 +118,27 @@ $meId       = $user ? (int) $user['id'] : null;
 <!-- Tahrirlash modali -->
 <div class="pf-modal" id="pfModal" hidden>
     <div class="pf-modal-box">
-        <h3>✏️ Profilni tahrirlash</h3>
+        <h3>&#9998; Profilni tahrirlash</h3>
         <form id="pfEditForm" autocomplete="off">
             <label>Ism *</label>
-            <input name="first_name" id="pfInName" maxlength="50" required>
+            <input name="first_name" id="pfInName" maxlength="100" required>
 
             <label>Familiya</label>
-            <input name="last_name" id="pfInLast" maxlength="50">
+            <input name="last_name" id="pfInLast" maxlength="100">
 
             <label>Username</label>
             <input name="username" id="pfInUser" maxlength="40" placeholder="@username">
 
             <label>Avatar URL</label>
-            <input name="avatar" id="pfInAvatar" maxlength="500" placeholder="https://… (ixtiyoriy)">
+            <input name="avatar" id="pfInAvatar" maxlength="500" placeholder="https://&hellip; (ixtiyoriy)">
 
             <label>Bio</label>
-            <textarea name="bio" id="pfInBio" maxlength="300" rows="3" placeholder="O'zingiz haqingizda…"></textarea>
+            <textarea name="bio" id="pfInBio" maxlength="500" rows="3" placeholder="O'zingiz haqingizda&hellip;"></textarea>
 
             <div class="pf-modal-err" id="pfEditErr"></div>
             <div class="pf-modal-btns">
                 <button type="button" class="pf-btn ghost" id="pfModalCancel">Bekor qilish</button>
-                <button type="submit" class="pf-btn prim" id="pfModalSave">💾 Saqlash</button>
+                <button type="submit" class="pf-btn prim" id="pfModalSave">&#128190; Saqlash</button>
             </div>
         </form>
     </div>
@@ -150,6 +162,6 @@ $meId       = $user ? (int) $user['id'] : null;
     const APP_BOT         = <?php echo json_encode((string) TELEGRAM_BOT_USERNAME); ?>;
 </script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
-<script src="assets/js/profile.js"></script>
+<script src="assets/js/profile.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/profile.js') ?: 1; ?>"></script>
 </body>
 </html>

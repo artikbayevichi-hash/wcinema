@@ -33,18 +33,12 @@
 }
 .reels-back:hover { background: rgba(0,0,0,.7); }
 
-.reels-tabs {
+.reels-headtitle {
     flex: 1;
-    display: flex; justify-content: center; gap: 6px;
+    text-align: center;
+    font-size: 17px; font-weight: 800; color: #fff;
+    text-shadow: 0 1px 5px rgba(0,0,0,.7);
 }
-.reels-tab {
-    padding: 6px 12px; border-radius: 999px;
-    background: rgba(0,0,0,.35);
-    color: rgba(255,255,255,.65);
-    font-size: 13px; font-weight: 700;
-    transition: background .15s, color .15s;
-}
-.reels-tab.active { background: rgba(255,255,255,.18); color: #fff; }
 
 /* ---------------------------------------------------------------- Vertikal
    Har bir .reel-slide balandligi = ekran balandligi. Oqim vertikal
@@ -60,6 +54,7 @@
 .reels-track::-webkit-scrollbar { display: none; }
 
 .reels-slide {
+    --reel-w: 100%;                   /* video kengligi (desktop'da qayta o'rnatiladi) */
     position: relative;
     height: 100dvh;
     scroll-snap-align: start;
@@ -69,19 +64,38 @@
     overflow: hidden;
 }
 
-.reels-slide video,
-.reels-slide iframe,
-.reels-slide .reels-tg {
+/* Video qobig'i. Telefonda butun ekran; katta ekranda Instagram'dagi kabi
+   markazdagi karta bo'lib turadi (o'ng tomonida amallar paneli). */
+.reels-media {
+    position: relative;
+    width: var(--reel-w);
+    height: 100%;
+    background: #000;
+}
+
+.reels-media video,
+.reels-media iframe,
+.reels-media .reels-tg {
     width: 100%; height: 100%;
     object-fit: contain;
     border: 0; display: block; background: #000;
 }
-.reels-slide .reels-tg video,
-.reels-slide .reels-tg iframe,
-.reels-slide .reels-tg canvas {
+.reels-media .reels-tg video,
+.reels-media .reels-tg iframe,
+.reels-media .reels-tg canvas {
     width: 100%; height: 100%;
     object-fit: contain;
     border: 0; display: block; background: #000;
+}
+
+/* Telegram CDN player (`tgs` = tg-stream.js mount). Yuqoridagi
+   `.reels-media .reels-tg { display:block }` qoidasi `.tgs` ning
+   `display:flex` ini yengib ketardi — natijada `.udp-player` balandlikni
+   egallamay, video/footer noto'g'ri joylashardi. Bu qoida (yuqoriroq
+   spesifiklik) flex ustunini tiklaydi. */
+.reels-media .reels-tg.tgs {
+    display: flex;
+    flex-direction: column;
 }
 
 .reels-empty {
@@ -110,75 +124,143 @@
     color: #c3cad8; font-size: 13.5px; text-align: center; padding: 20px;
 }
 
-/* ---------------------------------------------------------------- O'ng panel
-   Ko'rish/yoqish/ulashish tugmalari va muallif ma'lumoti
+/* ---------------------------------------------------------------- Amallar paneli
+   Instagram Reels'dagi kabi har bir reel ichida. Telefonda video o'ng
+   tomonida ustun bo'lib turadi; katta ekranda videoning o'ng tomoniga
+   chiqadi (pastdagi media query'ga qarang).
    -------------------------------------------------------------------------- */
 .reels-side {
-    position: fixed; z-index: 25;
-    right: 10px;
-    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
-    display: flex; flex-direction: column; align-items: center; gap: 14px;
-    max-width: 76vw;
-}
-.reels-side-toggle { display: none; }
-
-.reels-side-body {
-    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    position: absolute; z-index: 6;
+    right: 12px;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
 }
 
-/* Muallif + izoh (chap pastda) */
+/* ---------------------------------------------------------------- Ovoz tugmasi */
+.reels-mute {
+    position: absolute; z-index: 7;
+    right: 14px;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.45); color: #fff; border: 0; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.reels-mute:hover { background: rgba(0,0,0,.7); }
+.reels-mute svg { width: 18px; height: 18px; display: block; }
+
+/* ---------------------------------------------------------------- Muallif paneli
+   Past-chapda video ustida: avatar + ism + Kuzatish, izoh, audio.
+   -------------------------------------------------------------------------- */
 .reels-meta {
-    position: fixed; z-index: 25;
+    position: absolute; z-index: 6;
     left: 14px;
-    right: 96px;
-    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    right: 84px;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
     pointer-events: none;
+    display: flex; flex-direction: column; gap: 8px;
+    text-shadow: 0 1px 5px rgba(0,0,0,.85);
 }
 .reels-meta > * { pointer-events: auto; }
 
+.reels-byline {
+    display: flex; align-items: center; gap: 8px;
+}
 .reels-author {
     display: flex; align-items: center; gap: 8px;
-    margin-bottom: 8px;
-    text-shadow: 0 1px 4px rgba(0,0,0,.9);
-    text-decoration: none;
-    color: #fff;
-    align-self: flex-start;
+    text-decoration: none; color: #fff;
+    min-width: 0;
 }
 .reels-author-avatar {
-    width: 32px; height: 32px; border-radius: 50%;
+    width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
     object-fit: cover; background: rgba(255,255,255,.18);
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; font-weight: 800; color: #fff;
-    border: 1.5px solid rgba(255,255,255,.4);
+    border: 1.5px solid rgba(255,255,255,.5);
 }
 .reels-author-name {
     font-size: 14px; font-weight: 800; color: #fff;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-.reels-title {
-    font-size: 14.5px; font-weight: 700; color: #fff;
-    margin-bottom: 4px; line-height: 1.35;
-    text-shadow: 0 1px 4px rgba(0,0,0,.9);
+/* Kuzatish / Kuzatilmoqda
+   Instagramdagidek: "Kuzatish" - to'ldirilgan yorqin tugma (attention),
+   "Kuzatilmoqda" - yumshoq shaffof holat (diqqatni bermaydi). */
+.reels-follow {
+    flex: 0 0 auto;
+    padding: 5px 14px; border-radius: 999px;
+    border: 1px solid transparent;
+    background: linear-gradient(180deg, #ffffff, #e6ebf2);
+    color: #10131a; font-family: inherit;
+    font-size: 12.5px; font-weight: 800; cursor: pointer;
+    letter-spacing: .1px;
+    text-shadow: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .28);
+    transition: transform .14s cubic-bezier(.2,.8,.3,1), background .18s ease,
+                color .18s ease, box-shadow .18s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.reels-follow:hover {
+    background: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .34);
+}
+.reels-follow:active { transform: translateY(0) scale(.97); }
+.reels-follow.on {
+    border-color: rgba(255, 255, 255, .38);
+    background: rgba(255, 255, 255, .13);
+    color: rgba(255, 255, 255, .86);
+    box-shadow: none;
+    font-weight: 700;
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.reels-follow.on:hover { background: rgba(255, 255, 255, .2); }
+.reels-follow.busy { pointer-events: none; opacity: .6; }
+
+/* Izoh (caption) */
+.reels-caption {
+    font-size: 13.5px; line-height: 1.4; color: rgba(255,255,255,.95);
+    max-width: 100%;
+}
+.reels-cap-title { font-weight: 700; margin-right: 6px; }
+.reels-cap-desc { color: rgba(255,255,255,.9); }
+.reels-caption:not(.open) .reels-cap-text {
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
 }
-.reels-desc {
-    font-size: 12.5px; color: rgba(255,255,255,.82);
-    line-height: 1.45;
-    text-shadow: 0 1px 4px rgba(0,0,0,.9);
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-    overflow: hidden;
+.reels-cap-more {
+    display: inline-block; margin: 3px 0 0; padding: 0;
+    background: none; border: 0; cursor: pointer;
+    color: rgba(255,255,255,.62); font-size: 12.5px; font-family: inherit;
 }
+.reels-cap-more[hidden] { display: none; }
+
+/* Audio qatori */
+.reels-audio {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: #fff; max-width: 100%;
+}
+.reels-audio-ico { display: flex; flex: 0 0 auto; opacity: .95; }
+.reels-audio-ico svg { width: 14px; height: 14px; display: block; }
+.reels-audio-txt {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.reels-stats {
+    font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,.85);
+}
+
 .reels-source {
-    display: inline-block; margin-top: 6px;
-    font-size: 11.5px; color: rgba(255,255,255,.75);
+    display: inline-block; margin-top: 2px; align-self: flex-start;
+    font-size: 11.5px; color: rgba(255,255,255,.78);
     background: rgba(0,0,0,.45); border-radius: 999px;
     padding: 3px 9px; text-decoration: none;
+    text-shadow: none;
 }
 
 /* Rad etish sababi (muallif ko'radi) */
 .reels-reject {
-    display: inline-block; margin-top: 6px;
+    display: inline-block; align-self: flex-start;
     font-size: 11.5px; color: #ff9a9a;
     background: rgba(255,92,92,.18);
     border: 1px solid rgba(255,92,92,.45);
@@ -189,7 +271,7 @@
 
 /* CTA: "🎬 To'liq qismni tomosha qilish (12:30 dan)" */
 .reels-cta {
-    display: inline-block; margin-top: 8px;
+    display: inline-block; align-self: flex-start;
     background: rgba(42,171,238,.92);
     color: #fff; font-size: 12.5px; font-weight: 700;
     padding: 8px 14px; border-radius: 10px;
@@ -199,25 +281,150 @@
 }
 .reels-cta:hover { filter: brightness(1.1); }
 
-/* O'ngdagi tugmalar */
+/* O'ngdagi tugmalar — Instagram Reels uslubida: dumaloq fon yo'q,
+   faqat kontur ikonka + kuchli soya (video ustida o'qilishi uchun). */
 .reels-btn {
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
     color: #fff; text-decoration: none;
-    text-shadow: 0 1px 4px rgba(0,0,0,.9);
+    background: none; border: 0; padding: 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
 }
 .reels-btn-icon {
-    width: 44px; height: 44px; border-radius: 50%;
+    width: 30px; height: 30px;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,.4);
-    font-size: 21px; line-height: 1;
-    transition: transform .12s, background .15s;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,.85));
+    transition: transform .12s;
 }
-.reels-btn:hover .reels-btn-icon { background: rgba(0,0,0,.65); }
-.reels-btn:active .reels-btn-icon { transform: scale(.88); }
-.reels-btn.on .reels-btn-icon { background: rgba(255,92,92,.85); }
+.reels-btn-icon svg { width: 27px; height: 27px; display: block; }
+.reels-btn:active .reels-btn-icon { transform: scale(.86); }
+.reels-btn.on .reels-btn-icon svg { fill: currentColor; }
+.reels-btn.on .reels-btn-icon { animation: reels-pop .28s ease; }
+@keyframes reels-pop {
+    0% { transform: scale(1); }
+    45% { transform: scale(1.28); }
+    100% { transform: scale(1); }
+}
+/* Ranglar: like qizil, repost yashil, saqlash oq */
+.reels-btn.reels-like.on { color: #ff2d55; }
+.reels-btn.reels-repost.on { color: #4ade80; }
+.reels-btn.reels-repost.on .reels-btn-icon svg { fill: none; }
+.reels-btn.reels-more { margin-top: 2px; }
 .reels-btn.busy { pointer-events: none; opacity: .6; }
+.reels-btn.danger { color: #fff; }
 .reels-btn-n {
-    font-size: 11.5px; font-weight: 700;
+    font-size: 12px; font-weight: 700;
+    text-shadow: 0 1px 4px rgba(0,0,0,.9);
+    min-height: 1em;
+}
+
+/* ---------------------------------------------------------------- Oldingi/keyingi
+   Instagram'dagi yon strelkalar (faqat katta ekranda ko'rinadi).
+   -------------------------------------------------------------------------- */
+.reels-nav {
+    display: none;
+    position: fixed; z-index: 30;
+    right: 28px;
+    width: 44px; height: 44px; border-radius: 50%;
+    align-items: center; justify-content: center;
+    background: rgba(38,38,38,.82); color: #fff; border: 0; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.reels-nav:hover { background: rgba(70,70,70,.9); }
+.reels-nav:active { transform: scale(.94); }
+.reels-nav svg { width: 22px; height: 22px; display: block; }
+.reels-nav-up { top: calc(50% - 56px); }
+.reels-nav-down { top: calc(50% + 12px); }
+
+/* ---------------------------------------------------------------- "More" menyu */
+.reels-menu { position: fixed; inset: 0; z-index: 90; }
+.reels-menu[hidden] { display: none; }
+.reels-menu-backdrop {
+    position: absolute; inset: 0; background: rgba(0,0,0,.6);
+}
+.reels-menu-sheet {
+    position: absolute; left: 50%; bottom: 0;
+    transform: translateX(-50%);
+    width: min(440px, 100%);
+    background: var(--bg-2, #16181d);
+    border: 1px solid var(--line, #262a33);
+    border-radius: 18px 18px 0 0;
+    padding: 8px;
+    animation: reels-sheet-up .2s ease;
+}
+@keyframes reels-sheet-up {
+    from { transform: translate(-50%, 18px); opacity: .4; }
+    to   { transform: translate(-50%, 0);    opacity: 1; }
+}
+.reels-menu-row {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 13px 14px; border: 0; border-radius: 12px;
+    background: none; color: var(--text, #eef2f7);
+    font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;
+}
+.reels-menu-row:hover { background: rgba(255,255,255,.07); }
+.reels-menu-ico { display: flex; flex: 0 0 auto; }
+.reels-menu-ico svg { width: 20px; height: 20px; display: block; }
+.reels-menu-row.danger { color: #ff6b6b; }
+
+/* ---------------------------------------------------------------- Toast */
+.reels-toast {
+    position: fixed; z-index: 120;
+    left: 50%; bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%) translateY(8px);
+    background: rgba(255,255,255,.15);
+    color: #fff; font-size: 13px; font-weight: 600;
+    padding: 9px 16px; border-radius: 999px;
+    max-width: 82vw;
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s, transform .18s;
+}
+.reels-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ==========================================================================
+   KATTA EKRAN (>=1000px): Instagram-dagi markaziy karta.
+   Video markazda, amallar paneli uning o'ng tomonida.
+   ========================================================================== */
+@media (min-width: 1000px) {
+    .reels-slide {
+        --reel-w: min(calc((100dvh - 56px) * 9 / 16), 440px);
+    }
+    .reels-media {
+        height: calc(100dvh - 56px);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 18px 50px rgba(0,0,0,.55);
+    }
+    .reels-meta {
+        left: calc(50% - var(--reel-w) / 2 + 16px);
+        right: auto;
+        width: calc(var(--reel-w) - 32px);
+        bottom: 30px;
+    }
+    .reels-side {
+        left: calc(50% + var(--reel-w) / 2 + 18px);
+        right: auto;
+        bottom: auto;
+        top: 50%;
+        transform: translateY(-50%);
+        gap: 18px;
+    }
+    .reels-mute {
+        left: calc(50% + var(--reel-w) / 2 - 48px);
+        right: auto;
+        bottom: 38px;
+    }
+    .reels-nav { display: flex; }
+    .reels-menu-sheet {
+        bottom: auto; top: 50%;
+        transform: translate(-50%, -50%);
+        border-radius: 16px;
+        animation: reels-sheet-pop .18s ease;
+    }
+    @keyframes reels-sheet-pop {
+        from { transform: translate(-50%, -50%) scale(.94); opacity: .5; }
+        to   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+    }
 }
 
 /* Yuklash tugmasi */
@@ -295,6 +502,418 @@
 .author-score {
     font-size: 12.5px; font-weight: 800; color: var(--accent);
 }
+
+/* --------------------------------------------------------------- Izohlar */
+.reels-comments-modal .reels-comments-box {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: min(420px, 100%);
+    display: flex; flex-direction: column;
+    background: var(--bg-2);
+    border-left: 1px solid var(--line);
+    box-shadow: -12px 0 30px rgba(0,0,0,.4);
+}
+.reels-comments-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 12px;
+    border-bottom: 1px solid var(--line);
+}
+.reels-comments-title { font-size: 16px; font-weight: 800; }
+.reels-comments-title span { color: var(--muted); font-weight: 700; }
+.reels-comments-head .reels-modal-x { position: static; }
+.reels-comments-list {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 14px;
+}
+.reels-c-row { display: flex; gap: 10px; align-items: flex-start; transition: opacity .25s ease, transform .25s ease; }
+.reels-c-row-del { opacity: 0; transform: translateX(14px); pointer-events: none; }
+/* Instagram modeli: javoblar root izoh ostida, ozgina chekinish bilan */
+.reels-c-thread { display: block; }
+.reels-c-replies {
+    margin-left: 17px; padding-left: 27px; margin-top: 2px;
+    border-left: 2px solid var(--line);
+}
+.reels-c-viewreplies {
+    background: none; border: 0; padding: 4px 0; cursor: pointer;
+    color: var(--muted); font-weight: 700; font-size: 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.reels-c-viewreplies:hover { color: var(--text); }
+.reels-c-replies-list { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+.reels-c-replies-list[hidden] { display: none; }
+.reels-c-replies .reels-c-av { width: 28px; height: 28px; font-size: 12px; }
+.reels-c-replies .reels-c-name { font-size: 12.5px; }
+.reels-c-replies .reels-c-body { font-size: 13px; }
+.reels-c-author { flex: 0 0 auto; text-decoration: none; }
+.reels-c-av {
+    width: 36px; height: 36px; border-radius: 50%;
+    object-fit: cover; background: var(--card-2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; color: var(--text);
+}
+.reels-c-main { flex: 1; min-width: 0; }
+.reels-c-name {
+    font-size: 13px; font-weight: 700;
+    color: var(--text); text-decoration: none;
+}
+.reels-c-body {
+    display: inline;
+    font-size: 13.5px; color: var(--text); line-height: 1.45;
+    overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.reels-c-meta {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 11.5px; color: var(--muted); margin-top: 6px;
+}
+.reels-c-time { color: var(--muted); }
+.reels-c-mact {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    color: var(--muted); font-weight: 700; font-size: 11.5px; line-height: 1;
+}
+.reels-c-mact:hover { color: var(--text); }
+.reels-c-mact-del:hover { color: #ff5c5c; }
+.reels-c-mact.busy { opacity: .5; pointer-events: none; }
+.reels-c-del {
+    flex: 0 0 auto; background: none; border: 0; cursor: pointer;
+    color: var(--muted); font-size: 14px; padding: 2px 4px; line-height: 1;
+}
+.reels-c-del:hover { color: #ff5c5c; }
+.reels-c-empty, .reels-c-loading {
+    color: var(--muted); font-size: 13px; text-align: center;
+    padding: 28px 0;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.reels-comments-form {
+    display: flex; gap: 8px; align-items: center;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line);
+}
+.reels-comments-input {
+    flex: 1; min-width: 0;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 10px 14px;
+    color: var(--text); font-size: 13.5px; outline: none;
+}
+.reels-comments-input:focus { border-color: var(--accent); }
+.reels-comments-send {
+    flex: 0 0 auto; background: var(--accent); color: #fff;
+    border: 0; border-radius: 999px; padding: 0 16px;
+    height: 40px; font-weight: 700; font-size: 13.5px; cursor: pointer;
+}
+.reels-comments-send:disabled { opacity: .6; }
+
+/* Telegram izoh vositalari (stiker / GIF / rasm) va tanlagich */
+.reels-c-tools {
+    display: flex; align-items: center; gap: 4px;
+    padding: 6px 10px 0;
+}
+.reels-c-tool {
+    width: 34px; height: 34px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: 0; cursor: pointer;
+    color: var(--muted); border-radius: 50%; text-decoration: none;
+}
+.reels-c-tool:hover { color: var(--text); background: var(--card-2); }
+.reels-c-tool svg { width: 21px; height: 21px; }
+.reels-c-tool-tg { margin-left: auto; }
+
+.reels-c-picker {
+    border-top: 1px solid var(--line);
+    background: var(--bg-2);
+    display: flex; flex-direction: column;
+    max-height: 42dvh;
+}
+.reels-c-picker-head {
+    font-size: 12px; font-weight: 800; color: var(--text);
+    padding: 8px 12px 4px;
+}
+.reels-c-picker-body {
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 6px 10px 10px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 6px; max-height: 36dvh;
+}
+.reels-c-picker-body .reels-c-empty { grid-column: 1 / -1; padding: 16px 0; }
+.reels-c-sticker-sets {
+    display: flex; gap: 6px; overflow-x: auto;
+    padding: 4px 10px 6px;
+}
+.reels-c-sticker-set {
+    flex: 0 0 auto; background: var(--card); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+    white-space: nowrap;
+}
+.reels-c-sticker-set.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.reels-c-sticker-item {
+    background: none; border: 0; cursor: pointer; padding: 4px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; min-height: 60px;
+}
+.reels-c-sticker-item:hover { background: var(--card-2); }
+.reels-c-sticker-item img, .reels-c-sticker-item video { width: 100%; max-height: 64px; object-fit: contain; }
+.reels-c-sticker-item .reels-tgs { width: 64px; height: 64px; }
+.reels-c-gif-search { padding: 2px 12px 8px; }
+.reels-c-gif-search input {
+    width: 100%; background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 14px; color: var(--text);
+    font-size: 13px; outline: none;
+}
+.reels-c-gif-search input:focus { border-color: var(--accent); }
+.reels-c-gif-item {
+    display: block; width: 100%; margin: 0 0 6px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 3px; cursor: pointer; overflow: hidden;
+    break-inside: avoid; aspect-ratio: 1 / 1;
+    position: relative;
+}
+.reels-c-gif-item img, .reels-c-gif-item video {
+    width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 7px;
+    position: relative; z-index: 1;
+}
+.reels-c-gif-item .reels-tgs { width: 100%; height: 100%; position: relative; z-index: 1; }
+/* Yuklanayotganda shimmer (Instagram skeleton). */
+.reels-c-gif-item::before {
+    content: ''; position: absolute; inset: 3px; border-radius: 8px; z-index: 0;
+    background: linear-gradient(100deg, var(--card) 25%, var(--card-2) 50%, var(--card) 75%);
+    background-size: 200% 100%;
+    animation: reelsShimmer 1.1s linear infinite;
+}
+.reels-c-gif-item[data-thumb="1"]::before,
+.reels-c-gif-item[data-ready="1"]::before { animation: none; opacity: 0; }
+@keyframes reelsShimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+
+/* GIF: "Ko'p ishlatilgan" + "Saqlangan" bo'limlari */
+.reels-c-picker-body.reels-c-gif-body { display: block; }
+.reels-c-gif-sec { margin-bottom: 8px; }
+.reels-c-gif-cap {
+    font-size: 11px; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 2px 2px 6px;
+}
+.reels-c-gif-grid {
+    columns: 100px;
+    column-gap: 6px;
+}
+
+/* Izoh ichidagi media (rasm / stiker / GIF / video) */
+.reels-c-media { margin-top: 6px; max-width: 240px; }
+.reels-c-media img, .reels-c-media video {
+    max-width: 100%; height: auto; max-height: 320px;
+    border-radius: 10px; display: block; background: var(--card-2);
+    object-fit: contain;
+}
+.reels-c-sticker { max-width: 130px; }
+.reels-c-sticker img, .reels-c-sticker video { max-height: 130px; border-radius: 8px; }
+
+/* Instagram uslubidagi ochilish animatsiyasi: noaniq (blur) → aniq.
+   `data-thumb` — thumbnail ko'rindi, `data-ready` — to'liq fayl tayyor. */
+.reels-c-gif-item img, .reels-c-gif-item video,
+.reels-c-media img, .reels-c-media video {
+    opacity: 0; filter: blur(7px); transform: scale(.97);
+    transition: opacity .32s ease, filter .32s ease, transform .4s cubic-bezier(.2,.75,.25,1);
+}
+.reels-c-gif-item[data-thumb="1"] img, .reels-c-gif-item[data-thumb="1"] video,
+.reels-c-media[data-thumb="1"] img, .reels-c-media[data-thumb="1"] video {
+    opacity: .85; filter: blur(3px);
+}
+.reels-c-gif-item[data-ready="1"] img, .reels-c-gif-item[data-ready="1"] video,
+.reels-c-media[data-ready="1"] img, .reels-c-media[data-ready="1"] video {
+    opacity: 1; filter: none; transform: none;
+}
+.reels-c-media .reels-tgs { opacity: 0; transition: opacity .32s ease; }
+.reels-c-media[data-ready="1"] .reels-tgs { opacity: 1; }
+/* Stiker picker kartalari ham mayin paydo bo'lsin. */
+.reels-c-sticker-item img, .reels-c-sticker-item video,
+.reels-c-sticker-item .reels-tgs { opacity: 0; transition: opacity .3s ease; }
+.reels-c-sticker-item[data-ready="1"] img, .reels-c-sticker-item[data-ready="1"] video,
+.reels-c-sticker-item[data-ready="1"] .reels-tgs,
+.reels-c-sticker-item[data-thumb="1"] img, .reels-c-sticker-item[data-thumb="1"] video { opacity: 1; }
+.reels-c-video { position: relative; }
+.reels-c-media-play {
+    height: 120px; border-radius: 10px; background: var(--card-2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.reels-c-media-fail { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.reels-c-media-fail[hidden] { display: none; }
+
+/* Yuklanmoqda: media `opacity: 0` bo'lgani uchun xabar "bo'sh" qator
+   ko'rinib turardi (chatda ayniqsa ko'p chalkashlik qilardi). Shuning
+   uchun joyini oldindan band qilib, "skelet" ko'rsatamiz. */
+.reels-c-media:not([data-ready="1"]):not(.tv-voice) {
+    position: relative;
+    min-height: 96px;
+    border-radius: 10px;
+    background: var(--card-2);
+    overflow: hidden;
+}
+.reels-c-media:not([data-ready="1"]):not(.tv-voice)::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 10px;
+    background: linear-gradient(100deg,
+        transparent 18%, rgba(255, 255, 255, .07) 45%, transparent 72%);
+    background-size: 220% 100%;
+    animation: reelsMediaShimmer 1.2s linear infinite;
+    pointer-events: none;
+}
+@keyframes reelsMediaShimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -20% 0; }
+}
+/* Stiker/GIF kichikroq skelet */
+.reels-c-sticker:not([data-ready="1"]) { min-height: 90px; max-width: 130px; }
+/* Ovozli xabar o'z holicha to'ldirilgan (yuklanganda ham ko'rinadi). */
+.reels-c-media.tv-voice { min-height: 0; background: var(--card); }
+.reels-c-media.tv-voice::after { content: none; }
+.reels-c-open-tg {
+    display: inline-block; margin-top: 10px; color: var(--accent);
+    font-weight: 700; font-size: 13px; text-decoration: none;
+}
+
+/* Izoh amallari: javob / o'chirish */
+/* Izoh layki (Instagram uslubidagi yurak) */
+.reels-c-like { display: flex; flex-direction: column; align-items: center; margin-top: 9px; }
+.reels-c-like-btn {
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    background: none; border: 0; cursor: pointer; color: var(--muted); border-radius: 50%;
+}
+.reels-c-like-btn svg { width: 17px; height: 17px; }
+.reels-c-like-btn:hover { color: #ff5c8a; background: var(--card-2); }
+.reels-c-like-btn.on { color: #ff2d6f; }
+.reels-c-like-btn.on svg { fill: currentColor; }
+.reels-c-like-btn.pop { animation: reels-like-pop .34s ease; }
+@keyframes reels-like-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+.reels-c-like-n { font-size: 10.5px; font-weight: 700; color: var(--muted); min-height: 12px; line-height: 1; }
+.reels-c-handle { color: var(--muted); font-weight: 600; font-size: 12px; }
+.reels-c-quote {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+    font-size: 12px; color: var(--muted); cursor: pointer;
+}
+.reels-c-quote-bar { width: 3px; height: 16px; border-radius: 2px; background: var(--muted); flex: 0 0 auto; }
+.reels-c-quote-av { flex: 0 0 auto; display: inline-flex; }
+.reels-c-quote-av .reels-c-av { width: 20px; height: 20px; font-size: 10px; }
+.reels-c-quote-name { font-weight: 700; flex: 0 0 auto; }
+.reels-c-quote-un { color: var(--muted); font-weight: 600; }
+.reels-c-quote-txt {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    opacity: .85;
+}
+
+/* .tgs (Lottie) animatsiyali stikerlar */
+.reels-tgs { width: 100%; display: block; }
+.reels-tgs svg { width: 100%; height: 100%; display: block; }
+.reels-tgs-img { width: 100%; display: block; }
+.reels-c-sticker .reels-tgs { aspect-ratio: 1 / 1; max-width: 130px; }
+.reels-c-sticker .reels-tgs svg { max-height: 130px; }
+
+/* Rasm / GIF / stiker bosilganda kattalashtirib ko'rsatish (lightbox) */
+.reels-c-zoom { cursor: zoom-in; }
+.reels-lb {
+    position: fixed; inset: 0; z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .92); padding: 24px;
+}
+.reels-lb[hidden] { display: none; }
+.reels-lb-stage {
+    max-width: 88vw; max-height: 80vh;
+    display: flex; align-items: center; justify-content: center;
+    animation: reels-lb-in .18s ease;
+}
+.reels-lb-stage img,
+.reels-lb-stage video {
+    max-width: 88vw; max-height: 80vh; width: auto; height: auto;
+    border-radius: 12px; object-fit: contain; display: block;
+}
+.reels-lb-stage .reels-tgs { width: 68vmin; height: 68vmin; }
+.reels-lb-x {
+    position: absolute; top: 16px; right: 18px; width: 40px; height: 40px;
+    border: 0; border-radius: 50%; cursor: pointer; color: #fff;
+    background: rgba(255, 255, 255, .16); font-size: 18px; line-height: 1;
+}
+.reels-lb-x:hover { background: rgba(255, 255, 255, .28); }
+@keyframes reels-lb-in {
+    from { transform: scale(.92); opacity: .3; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+
+/* Javob satri (kiritish maydoni ustida) */
+.reels-c-replybar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px; background: var(--card-2); border-top: 1px solid var(--line);
+    font-size: 12.5px;
+}
+.reels-c-replybar[hidden] { display: none; }
+.reels-c-replybar-txt {
+    flex: 1; min-width: 0; color: var(--text); font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.reels-c-replybar-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 4px; }
+.reels-c-replybar-av { flex: 0 0 auto; display: inline-flex; }
+.reels-c-replybar-av:empty { display: none; }
+.reels-c-replybar-av .reels-c-av { width: 22px; height: 22px; font-size: 11px; }
+
+/* @ belgilash ro'yxati */
+.reels-c-mentions { display: flex !important; flex-direction: column; gap: 2px; grid-template-columns: none; }
+.reels-c-mention {
+    display: flex; align-items: center; gap: 8px; text-align: left;
+    background: none; border: 0; cursor: pointer; padding: 8px 10px; border-radius: 10px;
+    color: var(--text); font-size: 13px;
+}
+.reels-c-mention:hover { background: var(--card-2); }
+.reels-c-mention-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reels-c-mention-un { color: var(--muted); font-size: 12px; }
+.reels-c-gif video { max-height: 320px; }
+
+/* @username modal */
+.reels-username-modal { display: flex; align-items: center; justify-content: center; }
+.reels-uname-box {
+    position: relative; z-index: 2;
+    width: min(92vw, 360px);
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px;
+    padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.5);
+}
+.reels-uname-title { margin: 0 0 6px; font-size: 17px; font-weight: 800; color: var(--text); }
+.reels-uname-desc { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.reels-uname-row {
+    display: flex; align-items: center; gap: 4px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0 12px;
+}
+.reels-uname-at { color: var(--muted); font-weight: 700; }
+.reels-uname-input {
+    flex: 1; min-width: 0; background: none; border: 0; outline: none;
+    color: var(--text); padding: 11px 0; font-size: 14px;
+}
+.reels-uname-err { color: #ff6b6b; font-size: 12px; margin-top: 8px; }
+.reels-uname-save {
+    width: 100%; margin-top: 14px; height: 42px; border: 0; border-radius: 999px;
+    background: var(--accent); color: #fff; font-weight: 800; font-size: 14px; cursor: pointer;
+}
+
+@media (max-width: 640px) {
+    .reels-comments-modal .reels-comments-box {
+        top: auto; left: 0; right: 0; bottom: 0;
+        width: 100%; height: 74dvh;
+        border-left: 0; border-top: 1px solid var(--line);
+        border-radius: 18px 18px 0 0;
+        box-shadow: 0 -12px 30px rgba(0,0,0,.5);
+    }
+}
+
+/* Reels'da texnik "diagnostika" matni ko'rinmasin ("MP4 · 38 MB ·
+   serverdan 0 bayt" va "Telegram'dan: ..."). Foydalanuvchi buni
+   "bekorchi yozuv" deb atagan — video maydoni toza bo'lsin. */
+.reels-slide .reels-tg .tgs-foot,
+.reels-slide .reels-tg .tgs-read,
+.reels-slide .reels-tg .tgs-note { display: none !important; }
 
 /* ==========================================================================
    Yuklash sahifasi

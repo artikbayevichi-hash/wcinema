@@ -518,6 +518,9 @@ async function progressiveResponse(size, mime, baseHeaders) {
         if (off + u8.length >= size) { controller.close(); return; }
         return;                         // pull() yana chaqiriladi
       }
+      // O'qish davomida brauzer oqimni bekor qilgan bo'lsa (seek/yopilish) —
+      // endi hech narsa yubormaymiz (yopilgan oqimga `enqueue` xato beradi).
+      if (dead) return;
       off += u8.length;
       STATS.requests++;
       STATS.bytes += u8.length;
@@ -582,7 +585,13 @@ self.addEventListener('fetch', (e) => {
     // Brauzer shunda odatiy video javobini oladi, oqimni o'zi xohlagancha
     // (backpressure) tortadi — 520 MB fayl ham xuddi shu yo'l bilan ishlaydi.
     // Seek uchun alohida Range so'rovlari keladi, ular 206 bilan xizmat qiladi.
-    if (!rg) return progressiveResponse(size, mime, headers);
+    // Boshidan ochiq so'rov ("bytes=0-" yoki Range umuman yo'q) — PROGRESSIV
+    // oqim. Shunda brauzer videoning boshini darhol oladi, qolganini esa
+    // ko'rish davomida oqib keladi. Ilgari bu holatda faqat 2 MB berilib,
+    // brauzer qayta-qayta so'rardi — birinchi kadr kechikardi.
+    if (!rg || (rg.open && rg.start === 0)) {
+      return progressiveResponse(size, mime, headers);
+    }
 
     const start = rg.start;
 

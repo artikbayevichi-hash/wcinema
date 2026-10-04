@@ -28,7 +28,7 @@ if ($initialContentId <= 0 && $initialEpisodeId > 0) {
 
 // --- Tarmoqqa chiqarish uchun sifatli ta'rif (Open Graph / Telegram preview)
 $pageTitle = SITE_NAME;
-$pageDesc  = 'Kino, anime va multfilmlar katalogi. Tomosha qiling, Telegram\'ga saqlang.';
+$pageDesc  = 'Kino, anime va multfilmlar katalogi. Tomosha qiling va saqlang.';
 $pageImage = '';
 $pageUrl   = SITE_URL . '/index.php';
 if ($initialContentId > 0 && $item = $catalog->getContent($initialContentId)) {
@@ -68,6 +68,7 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/player.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/player.css') ?: 1; ?>">
 <link rel="stylesheet" href="assets/css/tg-stream.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-stream.css') ?: 1; ?>">
+<?php require __DIR__ . '/includes/tv-head.php'; ?>
     <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. Oddiy
          tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani
          sekinlashtiradi. Shuning uchun shartli yuklanadi. -->

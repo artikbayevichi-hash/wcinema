@@ -59,6 +59,20 @@ Limitlar: `REEL_MAX_UPLOAD_MB` (50), `REEL_MIN/MAX_LENGTH` (3–90 s), hajm
 `min(post_max_size, upload_max_filesize, REEL_MAX_UPLOAD_MB)` = amaliy chegara
 (`REEL_EFFECTIVE_MAX_UPLOAD_MB`).
 
+**Tez o'ynash (streaming):** `<video>` `tg-cdn-worker.js` orqali Telegram'dan
+**progressiv** oqadi — `bytes=0-` so'rovi 200 + oqim bilan javob oladi, ya'ni
+videoning boshi darhol ochiladi, qolgani ko'rish davomida yuklanadi (seek
+uchun alohida Range so'rovlari 206 bilan xizmat qiladi). Aktiv reel tez
+tayyor bo'lsa (`TgStream` `onReady`), `reels.js` **keyingi** reelning
+hujjatini oldindan tayyorlaydi (`TgStream.prefetch`) — keyingi slaydga
+o'tish bir zumda. Slayd tashlab ketilsa `cancelPrefetch()`, boshqa bo'limga
+o'tilganda esa `TgStream.release()` oqim va prefetch'ni darhol to'xtatadi
+(fon yuklamasi yangi sahifani sekinlashtirmaydi). `reels.php` sahifa
+ochilishidanoq `TgStream.warm()` + `verify()` ni chaqiradi — Service Worker
+va GramJS klient **birinchi** reel bosilishidan oldin tayyor bo'ladi (aks
+holda `ensureWorker()` 6 soniyagacha kutib yoki sahifani qayta yuklab,
+"video ochilmayapti" degan taassurot berardi).
+
 ---
 
 ## 🛡 Admin huquqlari

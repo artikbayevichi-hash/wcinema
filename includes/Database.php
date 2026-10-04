@@ -33,7 +33,7 @@ class Database {
     public function query($sql, $params = []) {
         try {
             $stmt = $this->connection->prepare($sql);
-            $stmt->execute($params);
+            $stmt->execute(self::normParams($params));
             return $stmt;
         } catch (PDOException $e) {
             $msg = "Database query error: " . $e->getMessage();
@@ -129,12 +129,37 @@ class Database {
 
         // $data qiymatlari + WHERE parametrlari bitta pozitsion ro'yxatga
         // birlashtiriladi, shunda tartib SQL'dagi ? lar bilan mos keladi.
-        $params = array_values($data);
+        $params = self::normParams(array_values($data));
         foreach ((array) $whereParams as $p) {
             $params[] = $p;
         }
 
         return $this->query("UPDATE $table SET $setClause WHERE $where", $params);
+    }
+
+    /**
+     * PDO ga bog'lashdan oldin qiymatlarni PDO tushunadigan turga o'tkazadi.
+     *
+     * MUHIM: PDO `true`/`false` ni birlashtirsa, `''` (bo'sh satr) yuboradi
+     * va MySQL "Incorrect integer value: ''" xatosi beradi (natijada
+     * `query()` false qaytaradi va yozuv jimgina "yo'q" bo'lib qoladi).
+     * Shu sababli boolean -> 1/0, null -> NULL ga aylantiramiz.
+     *
+     * @param  array $params
+     * @return array
+     */
+    private static function normParams($params) {
+        $out = [];
+        foreach ((array) $params as $p) {
+            if (is_bool($p)) {
+                $out[] = $p ? 1 : 0;
+            } elseif (is_array($p) || is_object($p)) {
+                $out[] = json_encode($p);
+            } else {
+                $out[] = $p;
+            }
+        }
+        return $out;
     }
 
     public function delete($table, $where, $params = []) {

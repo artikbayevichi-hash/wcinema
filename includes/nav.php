@@ -5,16 +5,17 @@
 //   KATTA EKRAN (>=1000px): chap yon panel (mini guide)
 //     Sichqoncha/fokus panelga kirsa — kengayadi, chiqsa — yig'iladi.
 //     Tartib (tepadan pastga):
-//       Profil · Qidiruv · Bosh sahifa · Reels · Kino · Animelar ·
+//       Profil · Qidiruv · Bosh sahifa · Reels · Chat · Kino · Animelar ·
 //       Multfilmlar · Kutubxona · Bildirishnomalar
 //
 //   TELEFON  (<1000px): yuqori panel + pastki panel
+//     Pastki panel: Bosh sahifa · Reels · Chat · Qidiruv · Profil
 //
 //   TV REJIMI (html.tv): pult bilan boshqarishga moslashgan katta interfeys.
-//     Avtomatik aniqlanadi yoki `assets/js/tv.js` orqali yoqiladi.
+//     Avtomatik aniqlanadi yoki `assets/js/tv-mode.js` orqali yoqiladi (`?tv=1`).
 //
 // Sahifalar qo'ng'iroqdan OLDIN $NAV_ACTIVE o'rnatishi mumkin:
-//   'home', 'reels', 'upload', 'profile', 'notifications',
+//   'home', 'reels', 'chat', 'upload', 'profile', 'notifications',
 //   'saved', 'liked', 'history', 'later', 'search'
 // ============================================================================
 
@@ -68,6 +69,8 @@ function ig_svg($name) {
         'film'     => '<path fill-rule="evenodd" d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm6 4.3v7.4l6-3.7z"/>',
         'movie'    => '<path fill-rule="evenodd" d="M5 4.5h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2zm5 4.2v6.6l5.6-3.3z"/>',
         'reels'    => '<path fill-rule="evenodd" d="M5.2 9.4h13.6a2 2 0 0 1 2 2v6.4a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2v-6.4a2 2 0 0 1 2-2zm5.1 2.6v5.4l5-2.7z"/><path d="M4.4 4h13.2l-1.8 3.6H2.6z"/>',
+        // Chat — Telegram'ga o'xshash samolyotcha, saytning kontur uslubida.
+        'chat'     => '<path d="M21.3 4.3 3.2 11.4a.55.55 0 0 0 .06 1.04l4.6 1.45 1.45 4.6a.55.55 0 0 0 1.04.06L21.3 4.3z"/><path d="M7.86 13.89 21.3 4.3"/>',
         'library'  => '<rect x="4" y="4.5" width="4.6" height="15" rx="1"/><rect x="10" y="4.5" width="4.6" height="15" rx="1"/><path d="M15.6 5.6l3.1 13.6a1 1 0 0 0 1.2.8l1.1-.3"/>',
         'history'  => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
         'clock'    => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
@@ -110,27 +113,10 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
 <script>
 (function () {
   // ------------------------------------------------------------------
-  // 1) TV REJIMINI ANIQLASH (pult bilan boshqarish uchun)
-  //    - `?tv=1` / `?tv=0` bilan majburan yoqish/o'chirish
-  //    - `localStorage['wc_tv_mode']` eslab qolinadi
-  //    - aks holda TV user-agent avtomatik aniqlanadi
-  // ------------------------------------------------------------------
-  try {
-    var p = new URLSearchParams(location.search);
-    var forced = p.get('tv');
-    var saved = null;
-    try { saved = localStorage.getItem('wc_tv_mode'); } catch (e) {}
-    var ua = navigator.userAgent || '';
-    var isTv = /(SmartTV|Tizen|Web0S|WebOS|NetCast|BRAVIA|HbbTV|PlayStation|Xbox|Roku|AppleTV|Android TV|GoogleTV|AFT[BMN]|CrKey)/i.test(ua);
-    var on = (forced === '1') ? true
-           : (forced === '0') ? false
-           : (saved === '1' ? true : (saved === '0' ? false : isTv));
-    if (on) document.documentElement.classList.add('tv');
-  } catch (e) {}
-
-  // ------------------------------------------------------------------
-  // 2) TELEGRAM KIRISH HIMOYASI (guard)
-  //    Kalit faqat brauzer localStorage'ida. Bo'lmasa — login sahifasi.
+  // 1) TV REJIMI — <head> da `tv-boot.php` allaqachon `.tv-mode`
+  //    klassini qo'ygan bo'lishi kerak (FOUC bo'lmasligi uchun).
+  //    Bu yerda faqat Telegram kirish himoyasi (guard) ishlaydi.
+  //    TV boshqaruvi: `assets/js/tv-mode.js` (pult / D-Pad).
   // ------------------------------------------------------------------
   try {
     var v = localStorage.getItem('wc_mtproto_auth_v1');
@@ -168,6 +154,9 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
 
         <!-- Reels -->
         <?php echo ig_item('reels.php', 'reels', 'reels', 'Reels', $NAV_ACTIVE); ?>
+
+        <!-- Chat -->
+        <?php echo ig_item('chat.php', 'chat', 'chat', 'Chat', $NAV_ACTIVE); ?>
 
         <div class="ig-sep"></div>
 
@@ -235,18 +224,20 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
 <header class="ig-mobar">
     <a class="ig-mobar-brand" href="index.php"><img class="ig-logo" src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/../assets/img/logo.png') ?: 1; ?>" alt="<?php echo htmlspecialchars(SITE_NAME); ?>" width="32" height="32"><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
     <div class="ig-mobar-actions">
-        <a class="ig-mobar-btn" href="index.php" data-nav-search="1" aria-label="Qidiruv"><?php echo ig_svg('search'); ?></a>
+        <?php /* Telefonda qidiruv yuqoridagi panelda emas - faqat pastki
+                navigatsiyada (Instagram uslubidagi markaziy "Qidiruv"). */ ?>
         <a class="ig-mobar-btn" href="notifications.php" aria-label="Bildirishnomalar"><?php echo ig_svg('bell'); ?></a>
         <button class="ig-mobar-btn" id="igMoreBtnM" type="button" aria-label="Sozlamalar"><?php echo ig_svg('settings'); ?></button>
     </div>
 </header>
 
 <!-- ============================== Telefon: pastki panel ============================== -->
+<!-- Instagram tartibi: Bosh sahifa | Reels | Chat(markazda) | Qidiruv | Profil -->
 <nav class="ig-tabbar">
     <a href="index.php" class="<?php echo $NAV_ACTIVE === 'home' ? 'active' : ''; ?>" aria-label="Bosh sahifa"><?php echo ig_svg('home'); ?></a>
+    <a href="reels.php" class="<?php echo $NAV_ACTIVE === 'reels' ? 'active' : ''; ?>" aria-label="Reels"><?php echo ig_svg('reels'); ?></a>
+    <a href="chat.php" class="<?php echo $NAV_ACTIVE === 'chat' ? 'active' : ''; ?>" aria-label="Chat"><?php echo ig_svg('chat'); ?></a>
     <a href="index.php" data-nav-search="1" aria-label="Qidiruv" class="<?php echo $NAV_ACTIVE === 'search' ? 'active' : ''; ?>"><?php echo ig_svg('search'); ?></a>
-    <a href="reels.php" class="ig-tab-create <?php echo $NAV_ACTIVE === 'reels' ? 'active' : ''; ?>" aria-label="Reels"><?php echo ig_svg('reels'); ?></a>
-    <a href="<?php echo $igCreateH; ?>" aria-label="Yaratish"><?php echo ig_svg('plus'); ?></a>
     <a href="<?php echo $igProfileH; ?>" class="ig-tab-profile <?php echo $NAV_ACTIVE === 'profile' ? 'active' : ''; ?>" aria-label="Profil"><?php echo $igAvatar; ?></a>
 </nav>
 
@@ -293,7 +284,12 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
                 </a>
                 <a class="ig-set-row" href="reels-upload.php">
                     <span class="ig-set-ico"><?php echo ig_svg('plus'); ?></span>
-                    <span class="ig-set-txt">Reels yuklash</span>
+                    <span class="ig-set-txt">Joylash</span>
+                    <span class="ig-set-arrow">&rsaquo;</span>
+                </a>
+                <a class="ig-set-row" href="settings.php">
+                    <span class="ig-set-ico"><?php echo ig_svg('settings'); ?></span>
+                    <span class="ig-set-txt">Maxfiylik va bloklar</span>
                     <span class="ig-set-arrow">&rsaquo;</span>
                 </a>
             </div>
@@ -319,16 +315,12 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
             <?php endif; ?>
 
             <div class="ig-set-group">
-                <div class="ig-set-label">Telegram</div>
+                <div class="ig-set-label">Aloqa</div>
                 <a class="ig-set-row" href="https://t.me/<?php echo htmlspecialchars(TELEGRAM_BOT_USERNAME); ?>" target="_blank" rel="noopener">
                     <span class="ig-set-ico"><?php echo ig_svg('globe'); ?></span>
                     <span class="ig-set-txt">Bot&#8217;ga o&#8217;tish</span>
                     <span class="ig-set-arrow">&rsaquo;</span>
                 </a>
-                <button class="ig-set-row" id="tgReauthLink" type="button">
-                    <span class="ig-set-ico"><?php echo ig_svg('tag'); ?></span>
-                    <span class="ig-set-txt">Telegramdan chiqish</span>
-                </button>
             </div>
 
             <?php if ($igLogged): ?>
@@ -344,9 +336,28 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
     </div>
 </div>
 
+<!-- ============================== Bildirishnomalar oynasi (flyout) ============================== -->
+<div class="ig-ntf" id="igNtf" hidden>
+    <div class="ig-ntf-panel" role="dialog" aria-modal="true" aria-label="Bildirishnomalar">
+        <div class="ig-ntf-head">
+            <span class="ig-ntf-title">Bildirishnomalar</span>
+            <div class="ig-ntf-head-actions">
+                <button class="ig-ntf-mark" id="igNtfMarkAll" type="button">Barchasini o‘qish</button>
+                <button class="ig-ntf-close" id="igNtfClose" type="button" aria-label="Yopish">
+                    <svg class="ig-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="ig-ntf-body" id="igNtfBody">
+            <div class="ig-ntf-empty">Yuklanmoqda…</div>
+        </div>
+        <a class="ig-ntf-all" href="notifications.php">Barchasini ko‘rish</a>
+    </div>
+</div>
+
 <script>
 // DIQQAT: bu skript sahifaning YUQORI qismida turadi, shuning uchun hamma
-// ish `DOMContentLoaded` ichida bajariladi (`tv.js` esa alohida yuklanadi).
+// ish `DOMContentLoaded` ichida bajariladi (`tv-mode.js` esa alohida yuklanadi).
 window.addEventListener('DOMContentLoaded', function () {
     var TG_KEY = 'wc_mtproto_auth_v1';
 
@@ -468,6 +479,7 @@ window.addEventListener('DOMContentLoaded', function () {
     var searchHint = document.getElementById('igSearchHint');
     var searchX    = document.getElementById('igSearchClose');
     var searchTimer = null;
+    var igSearchSeq = 0;
 
     function igEsc(s) {
         return String(s == null ? '' : s)
@@ -510,13 +522,43 @@ window.addEventListener('DOMContentLoaded', function () {
              + '<div class="ig-sres-thumb">' + poster + '</div>'
              + '<div class="ig-sres-title">' + igEsc(c.title) + '</div>'
              + (sub.length ? '<div class="ig-sres-sub">' + igEsc(sub.join(' · ')) + '</div>' : '')
+             + '<div class="ig-sres-id">ID: ' + (parseInt(c.id, 10) || 0) + '</div>'
              + '</a>';
+    }
+
+    function igProfileCard(u) {
+        var name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+        var av = u.avatar
+            ? '<img src="' + igEsc(u.avatar) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
+            : '<span class="ig-sprof-ph">' + igEsc((u.first_name || '?').charAt(0).toUpperCase()) + '</span>';
+        return '<a class="ig-sprof" href="profile.php?user_id=' + (parseInt(u.id, 10) || 0) + '">'
+             + '<span class="ig-sprof-av">' + av + '</span>'
+             + '<span class="ig-sprof-info"><b>' + igEsc(u.username ? ('@' + u.username) : name) + '</b>'
+             + '<span>' + igEsc(name) + '</span></span>'
+             + '</a>';
+    }
+
+    function igReelCard(r) {
+        var poster = r.poster
+            ? '<img src="' + igEsc(r.poster) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
+            : '<div class="ig-sres-ph">Reels</div>';
+        var who = r.author_username ? ('@' + r.author_username) : (r.author_name || '');
+        return '<a class="ig-sres" href="reels.php?reel=' + (parseInt(r.id, 10) || 0) + '">'
+             + '<div class="ig-sres-thumb">' + poster + '</div>'
+             + '<div class="ig-sres-title">' + igEsc(r.title) + '</div>'
+             + (who ? '<div class="ig-sres-sub">' + igEsc(who) + '</div>' : '')
+             + '</a>';
+    }
+
+    function igSection(title, html) {
+        if (!html) return '';
+        return '<div class="ig-sres-sec"><div class="ig-sres-sec-h">' + title + '</div>' + html + '</div>';
     }
 
     function igRunSearch() {
         if (!searchInp || !searchGrid) return;
         var q = searchInp.value.trim();
-        if (q.length < 2) {
+        if (q.length < 2 && !/^\d+$/.test(q)) {
             searchGrid.innerHTML = '';
             if (searchHint) {
                 searchHint.hidden = false;
@@ -525,17 +567,32 @@ window.addEventListener('DOMContentLoaded', function () {
             return;
         }
         if (searchHint) { searchHint.hidden = false; searchHint.textContent = 'Qidirilmoqda…'; }
-        fetch(igSearchBase() + '/api/catalog.php?per_page=24&q=' + encodeURIComponent(q), {
+        var seq = ++igSearchSeq;
+        fetch(igSearchBase() + '/api/search.php?limit=12&q=' + encodeURIComponent(q), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         }).then(function (r) { return r.json(); }).then(function (d) {
-            var items = (d && d.items) || [];
-            searchGrid.innerHTML = items.map(igResultCard).join('');
+            if (seq !== igSearchSeq) return;
+            var profiles = (d && d.profiles) || [];
+            var content  = (d && d.content) || [];
+            var reels    = (d && d.reels) || [];
+            var html = '';
+            if (profiles.length) {
+                html += igSection('Profillar', profiles.map(igProfileCard).join(''));
+            }
+            if (content.length) {
+                html += igSection('Kinolar', '<div class="ig-search-cards">' + content.map(igResultCard).join('') + '</div>');
+            }
+            if (reels.length) {
+                html += igSection('Reelslar', '<div class="ig-search-cards">' + reels.map(igReelCard).join('') + '</div>');
+            }
+            searchGrid.innerHTML = html;
             if (searchHint) {
-                searchHint.hidden = items.length > 0;
+                searchHint.hidden = (profiles.length + content.length + reels.length) > 0;
                 searchHint.textContent = 'Natija topilmadi';
             }
         }).catch(function () {
+            if (seq !== igSearchSeq) return;
             if (searchHint) {
                 searchHint.hidden = false;
                 searchHint.textContent = 'Qidirishda xatolik yuz berdi';
@@ -565,4 +622,6 @@ window.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
-<script src="assets/js/tv.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/tv.js') ?: 1; ?>"></script>
+<script src="assets/js/tv-mode.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/tv-mode.js') ?: 1; ?>"></script>
+<script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/notifications.js') ?: 1; ?>"></script>
+<?php /* Eski `tv.js` spatial navigatsiyasi `tv-mode.js` ichiga ko'chirildi. */ ?>
