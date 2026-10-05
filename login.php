@@ -243,7 +243,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
 </head>
 <body>
     <div class="login-container">
-        <div class="logo"><img src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1; ?>" alt="W CINEMA"></div>
+        <div class="logo"><picture><source srcset="assets/img/logo.webp?v=<?php echo @filemtime(__DIR__ . '/assets/img/logo.webp') ?: 1; ?>" type="image/webp"><img src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1; ?>" alt="W CINEMA"></picture></div>
         <h1>W CINEMA</h1>
         <p>Kino · Anime · Multfilm katalogi</p>
 

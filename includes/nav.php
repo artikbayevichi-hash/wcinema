@@ -109,6 +109,22 @@ function ig_item($href, $key, $icon, $label, $active, $extra = '') {
 ?>
 <?php
 $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+// ============================================================================
+//  LOGO: WebP birinchi, PNG zaxira
+// ----------------------------------------------------------------------------
+//  logo.png 53 KB edi (sekin internetda ~2 s). WebP 12 KB — 4.4 barobar
+//  kichik. `<picture>` bilan zamonaviy brauzerlar WebP oladi, eskilari
+//  PNG ga qaytadi (shu sabab PNG fayl o'chirmaymiz).
+// ============================================================================
+function wc_logo_img($alt = '', $attrs = '') {
+    $webp = @filemtime(__DIR__ . '/../assets/img/logo.webp') ?: 1;
+    $png  = @filemtime(__DIR__ . '/../assets/img/logo.png') ?: 1;
+    $altEsc = htmlspecialchars($alt !== '' ? $alt : SITE_NAME);
+    return '<picture>'
+         . '<source srcset="assets/img/logo.webp?v=' . $webp . '" type="image/webp">'
+         . '<img src="assets/img/logo.png?v=' . $png . '" alt="' . $altEsc . '" ' . $attrs . '>'
+         . '</picture>';
+}
 ?>
 <script>
 (function () {
@@ -131,7 +147,7 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
 <!-- ============================== Desktop: yon panel ============================== -->
 <aside class="ig-side" id="igSide">
     <a class="ig-brand" href="index.php">
-        <img class="ig-logo" src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/../assets/img/logo.png') ?: 1; ?>" alt="<?php echo htmlspecialchars(SITE_NAME); ?>" width="32" height="32">
+        <?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?>
         <span class="ig-brand-text"><?php echo htmlspecialchars(SITE_NAME); ?></span>
     </a>
 
@@ -215,14 +231,14 @@ $tgBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')),
 
         <div class="ig-side-foot">
             © <?php echo date('Y'); ?> <?php echo htmlspecialchars(SITE_NAME); ?>
-            <span><img src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/../assets/img/logo.png') ?: 1; ?>" alt="" width="14" height="14" style="object-fit:contain;vertical-align:-2px;margin-right:4px">W CINEMA</span>
+            <span><?php echo wc_logo_img('', 'width="14" height="14" style="object-fit:contain;vertical-align:-2px;margin-right:4px"'); ?>W CINEMA</span>
         </div>
     </div>
 </aside>
 
 <!-- ============================== Telefon: yuqori panel ============================== -->
 <header class="ig-mobar">
-    <a class="ig-mobar-brand" href="index.php"><img class="ig-logo" src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/../assets/img/logo.png') ?: 1; ?>" alt="<?php echo htmlspecialchars(SITE_NAME); ?>" width="32" height="32"><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
+    <a class="ig-mobar-brand" href="index.php"><?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
     <div class="ig-mobar-actions">
         <?php /* Telefonda qidiruv yuqoridagi panelda emas - faqat pastki
                 navigatsiyada (Instagram uslubidagi markaziy "Qidiruv"). */ ?>

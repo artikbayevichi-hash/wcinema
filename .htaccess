@@ -29,6 +29,69 @@ AddDefaultCharset UTF-8
 AddType application/javascript .js
 AddType text/css .css
 
+# ============================================================= MAXFIY FAYLLAR
+#
+# DIQQAT: bu qoidalar .env va *.sql ni HTTP orqali BERISHNI taqiqlaydi.
+# `.gitignore` faqat Git'ga yuklanmasligini ta'minlaydi - lekin fayl
+# Apache orqali ALLACHON ochiq bo'lib qoladi (t.me bot tokeni va MTProto
+# API_ID/HASH ommaga ko'rinib turardi).
+#
+# `storage/`, `vendor/`, `uploads/posts/` allaqachon alohida .htaccess
+# bilan yopilgan. Bu qatorlar ildiz darajasidagi "bo'sh joy"ni yopadi.
+<IfModule mod_authz_core.c>
+  # .env va uning variantlari (env.txt, .env.local, ...)
+  <FilesMatch "^\.env|^\.env\..*$">
+    Require all denied
+  </FilesMatch>
+  # Bazа zaxiralari va sxemalar (parol hashlari sessiyalar bo'lishi mumkin)
+  <FilesMatch "\.(sql|sqldump|dump)$">
+    Require all denied
+  </FilesMatch>
+  # Bot holati va MTProto vaqtinchalik fayllari
+  <FilesMatch "^(bot_states\.json|bot_offset\.json|bot_offset\.txt|tg-url\.txt|.*\.pem)$">
+    Require all denied
+  </FilesMatch>
+  # Loglar (ichki xatolar, IP'lar, so'rovlar)
+  <FilesMatch "\.(log|ini)$">
+    Require all denied
+  </FilesMatch>
+  # Git ichki fayllari: HEAD/config/index va boshqalar orqali remote
+  # URL,-branch nomlari va butun tarix oqib chiqishi mumkin edi.
+  # README.md va LICENSE ochiq qoladi - ular maxfiy emas.
+  <FilesMatch "^\.(git|gitignore|env|kilo|ht)">
+    Require all denied
+  </FilesMatch>
+  # Muhim: `.htaccess` NING O'ZI ham rad etilmasin (u har so'rovda
+  # o'qiladi). Yuqoridagi `[^\.]` chegarasi `.htaccess` ni himoya qilmaydi.
+  <FilesMatch "^\.htaccess$">
+    Require all granted
+  </FilesMatch>
+</IfModule>
+
+# DIQQAT: papkalarni yopish uchun <DirectoryMatch> ISHLAMAYDI - u faqat
+# asosiy server konfiguratsiyasida (httpd.conf) ruxsat etiladi va .htaccess
+# da "not allowed here" xatosi beradi (butun sayt 500 bo'lib ketadi).
+# `storage/`, `vendor/`, `.git/`, `uploads/posts/` allaqachon o'z
+# .htaccess fayllari bilan yopilgan - ular uchun bu shart emas.
+<IfModule !mod_authz_core.c>
+  <FilesMatch "^\.env|^\.env\..*$">
+    Order deny,allow
+    Deny from all
+  </FilesMatch>
+  <FilesMatch "\.(sql|sqldump|dump)$">
+    Order deny,allow
+    Deny from all
+  </FilesMatch>
+  <FilesMatch "^(bot_states\.json|bot_offset\.json|bot_offset\.txt|tg-url\.txt|.*\.pem)$">
+    Order deny,allow
+    Deny from all
+  </FilesMatch>
+  <FilesMatch "\.(log|ini)$">
+    Order deny,allow
+    Deny from all
+  </FilesMatch>
+</IfModule>
+
 # ------------------------------------------------------------------- SIQISH
 #
 # GramJS asosan matndan iborat (JS kodi), shuning uchun gzip uni ~4 barobar

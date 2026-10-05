@@ -85,7 +85,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 </head>
 <body>
     <form class="adm-key" method="POST" action="admin-login.php?next=<?php echo urlencode($next); ?>">
-        <img src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1; ?>" alt="W CINEMA">
+        <picture><source srcset="assets/img/logo.webp?v=<?php echo @filemtime(__DIR__ . '/assets/img/logo.webp') ?: 1; ?>" type="image/webp"><img src="assets/img/logo.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1; ?>" alt="W CINEMA"></picture>
         <h1>Admin panel</h1>
         <p>Davom etish uchun admin kalitini kiriting.</p>
         <input type="hidden" name="next" value="<?php echo htmlspecialchars($next, ENT_QUOTES); ?>">

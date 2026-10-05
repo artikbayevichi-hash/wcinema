@@ -64,6 +64,24 @@ class TgResolve {
         if (empty($out['video']) && !empty($emb['video'])) {
             $out['video'] = $emb['video'];
         }
+        // -------------------------------------------------------------------
+        //  POSTER: embed widget'dan olamiz
+        // -------------------------------------------------------------------
+        //  Nima uchun shu yerda: `fetchPage()` oddiy t.me sahifasini
+        //  o'qiydi va Telegram 2025+ u yerda HAQIQIY rasm bermaydi —
+        //  faqat `og:image` da `data:image/svg+xml` (kulrang placeholder)
+        //  qo'yadi. Embed widget (`?embed=1&mode=tme`) esa haqiqiy
+        //  `og:image` (cdn*.telesco.pe) beradi.
+        //
+        //  Tekshirilgan farq:
+        //    https://t.me/wcinemauzz/4           -> og:image = data:image/svg (soxta)
+        //    https://t.me/wcinemauzz/4?embed=1  -> og:image = cdn4.telesco.pe/... (haqiqiy)
+        //
+        //  `probe()` 320x320 data-URI bo'sh rasm qaytaradi — uni filtrlaymiz,
+        //  aks holda reels yana qora kvadrat bo'lib qolardi.
+        if (empty($out['image']) && !empty($emb['image'])) {
+            $out['image'] = $emb['image'];
+        }
         $out['cached'] = false;
         $this->writeCache($key, $out);
         return $out;
@@ -85,7 +103,7 @@ class TgResolve {
      *   has_video - postda video widget bormi
      */
     private function fetchEmbed($url) {
-        $empty = ['has_post' => false, 'embed_ok' => false, 'media_big' => false, 'video' => null, 'has_video' => false];
+        $empty = ['has_post' => false, 'embed_ok' => false, 'media_big' => false, 'video' => null, 'has_video' => false, 'image' => null];
         $q = (string) parse_url($url, PHP_URL_QUERY);
         $frame = $url . ($q !== '' ? '&' : '?') . 'embed=1&mode=tme';
 
@@ -127,12 +145,29 @@ class TgResolve {
         $hasVideo = !empty($video)
             || (bool) preg_match('#class="[^"]*tgme_widget_message_video#i', $body);
 
+        // -------------------------------------------------------------------
+        //  Embed widget HAQIQIY poster beradi (oddiy sahifa bermaydi).
+        //  `data:image/svg+xml;base64,...` — bu Telegram'ning kulrang
+        //  placeholder'i (320x320 bo'sh rasm). Uni OLMAYMWEIZ, aks holda
+        //  reels "poster bor" deb o'ylab, lekin ko'rsatganda yana qora
+        //  kvadrat chiqadi.
+        // -------------------------------------------------------------------
+        $image = null;
+        if (preg_match('#<meta[^>]+property=["\']og:image["\'][^>]*>#i', $body, $meta)
+            && preg_match('#content=["\']([^"\']+)["\']#i', $meta[0], $m)) {
+            $val = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+            if (preg_match('#^https?://#i', $val)) {
+                $image = $val;
+            }
+        }
+
         return [
             'has_post'  => $hasPost,
             'embed_ok'  => $hasPost && !$blocked,
             'media_big' => $hasPost && $mediaBig,
             'video'     => $video,
             'has_video' => $hasVideo,
+            'image'     => $image,
         ];
     }
 
@@ -171,6 +206,12 @@ class TgResolve {
             if (preg_match('#<meta[^>]+property=["\']' . preg_quote($prop, '#') . '["\'][^>]*>#i', $body, $meta)
                 && preg_match('#content=["\']([^"\']+)["\']#i', $meta[0], $m)) {
                 $val = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+                // DIQQAT: `og:image` da Telegram `data:image/svg+xml;base64,...`
+                // (kulrang 320x320 placeholder) qo'yadi — bu HAQIQIY poster
+                // EMAS. Faqat `https?://` qabul qilamiz, aks holda reels
+                // "poster topildi" deb o'ylab, ko'rsatganda yana qora kvadrat
+                // chiqadi. Haqiqiy poster `?embed=1` variantida keladi
+                // (fetchEmbed) va u allaqachon tekshirilgan.
                 if (preg_match('#^https?://#i', $val)) {
                     $out[$field] = $val;
                 }
@@ -182,6 +223,44 @@ class TgResolve {
             $val = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
             if (preg_match('#^https?://#i', $val)) {
                 $out['video'] = $val;
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        //  KATTA VIDEO ("Media is too big") uchun POSTER
+        // ---------------------------------------------------------------------
+        //  Muammo: Telegram katta videolarni veb-sahifada ko'rsatmaydi —
+        //  `og:image`, `og:video` va `<video src>` BO'LMAYDI (faqat
+        //  `video_wrap` + "not_supported" + "Media is too big" qoladi).
+        //  Natijada reels poster'i `null` bo'lib, qora kvadrat chiqadi.
+        //
+        //  Yechim: `tgme_widget_message_video_thumb` elementida Telegram
+        //  kadrni `background-image` sifatida beradi — shuni olamiz.
+        //  Topilmasa `image` null qoladi (kod to'g'ri ishlaydi, faqat vizual
+        //  bo'sh bo'ladi — bu Telegram'ning cheklovi, bizning xatomamiz emas).
+        if (empty($out['image'])) {
+            // 1) video_thumb ichidagi background-image
+            if (preg_match('#tgme_widget_message_video_thumb[^>]*style=["\']([^"\']*)["\']#i', $body, $m)) {
+                $style = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+                if (preg_match('#url\([\'\"]?([^\)\'\"]+)#i', $style, $u)) {
+                    $val = html_entity_decode($u[1], ENT_QUOTES, 'UTF-8');
+                    if (preg_match('#^https?://#i', $val)) {
+                        $out['image'] = $val;
+                    }
+                }
+            }
+            // 2) butun sahifadagi birinchi background-image (thumbnail/poster)
+            if (empty($out['image'])
+                && preg_match('#tgme_widget_message[^>]*style=["\'][^"\']*background-image:url\([\'\"]?(https?://[^\)\'\"]+)#i', $body, $m)) {
+                $out['image'] = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+            }
+            // 3) <video poster="...">
+            if (empty($out['image'])
+                && preg_match('#<video[^>]+poster=["\']([^"\']+)["\']#i', $body, $m)) {
+                $val = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+                if (preg_match('#^https?://#i', $val)) {
+                    $out['image'] = $val;
+                }
             }
         }
 

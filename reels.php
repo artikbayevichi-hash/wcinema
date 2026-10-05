@@ -191,30 +191,67 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
         isAdmin: <?php echo $auth->isAdmin() ? 'true' : 'false'; ?>
     };
 </script>
-<script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
-<script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
-<script src="assets/vendor/lottie.min.js?v=<?php echo @filemtime(__DIR__ . '/assets/vendor/lottie.min.js') ?: 1; ?>"></script>
-<script src="assets/js/tg-voice.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-voice.js') ?: 1; ?>"></script>
-<script src="assets/js/tg-comments.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-comments.js') ?: 1; ?>"></script>
-<script src="assets/js/reels.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/reels.js') ?: 1; ?>"></script>
+<!-- ============================================================================
+     SCRIPT YUKLASH TARTIBI (tezlik uchun muhim)
+
+     DIQQAT: bu sahifada `tg-probe.js` (28 KB) va `lottie.min.js` (298 KB)
+     KERAK EMAS va avval boshqalan (render-blocking) yuklanardi:
+
+       * tg-probe.js  -> faqat `chat.php` da ishlatiladi (build/test-* da)
+       * lottie.min.js -> faqat `tg-comments.js` da, `.tgs` animatsiyali
+                         stiker ko'rsatilganda. Reels sahifada stiker
+                         maydoni umuman ochilmaydi.
+
+     Ikkalasi ham jami ~326 KB ni tejab beradi. `defer` esa qolgan
+     skriptlarni parallel yuklab, birinchi bo'lish chizishni kechiktirmaydi.
+
+     MUHIM: `reels.js` va `tg-stream.js` OCHILISHI kiritilgan bo'lishi shart -
+     ular boshqalar bilan tartibga bog'liq (`window.TgStream` `reels.js` dan
+     oldin tayyor bo'lishi kerak).
+     ========================================================================= -->
+<script src="assets/js/tv-mode.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tv-mode.js') ?: 1; ?>" defer></script>
+<script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/notifications.js') ?: 1; ?>" defer></script>
+<script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>" defer></script>
+<script src="assets/js/tg-voice.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-voice.js') ?: 1; ?>" defer></script>
+<script src="assets/js/tg-comments.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-comments.js') ?: 1; ?>" defer></script>
+<script src="assets/js/reels.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/reels.js') ?: 1; ?>" defer></script>
 <script>
     // Kanal postidan oqim uchun Service Worker'ni tayyorlaymiz.
     //
     // MUHIM: faqat `init()` YETMAYDI — u SW'ni o'rnatadi, lekin sahifani
     // boshqarishini KUTMAYDI. Agar SW tayyor bo'lmasa, birinchi reel
-    // bosilganda `ensureWorker()` ishga tushib 6 soniyagacha kutadi (yoki
+    // bosilganda `ensureWorker()` ishga tushib 6 soniyagacha kutadi (yora
     // sahifani bir marta qayta yuklaydi) — bu "video ochilmayapti" degan
     // taassurot beradi. `warm()` buni oldini oladi (reload qilmasdan).
-    if (window.TgStream) {
-        try { window.TgStream.init(); } catch (e) {}
-        if (window.TgStream.warm) {
-            try { window.TgStream.warm(); } catch (e) {}
+    //
+    // DIQQAT: yuqoridagi skriptlar `defer` bilan yuklanadi - ular HALI
+    // ishga tushmagan bo'lishi mumkin. Shuning uchun bu blok
+    // `DOMContentLoaded` dan keyin ishga tushadi va `TgStream`ni
+    // KUTMAYDI (u kech kelsa, `reels.js` o'z ishini qiladi).
+    function wcWarmUp() {
+        if (window.TgStream) {
+            try { window.TgStream.init(); } catch (e) {}
+            if (window.TgStream.warm) {
+                try { window.TgStream.warm(); } catch (e) {}
+            }
+            // GramJS + mavjud Telegram sessiyasini fonda isitamiz: birinchi
+            // reel bosilganda klient allaqachon ulangan bo'ladi.
+            if (window.TgStream.hasSession && window.TgStream.hasSession()) {
+                try { window.TgStream.verify().catch(function () {}); } catch (e) {}
+            }
+            return;
         }
-        // GramJS + mavjud Telegram sessiyasini fonda isitamiz: birinchi
-        // reel bosilganda klient allaqachon ulangan bo'ladi.
-        if (window.TgStream.hasSession && window.TgStream.hasSession()) {
-            try { window.TgStream.verify().catch(function () {}); } catch (e) {}
+        // `defer` skript hali kelmagan bo'lishi mumkin - biroz kutamiz
+        // (birdan ortiqcha emas: faqat 20 ms, keyin butunlay tashlab ketamiz).
+        if ((window.__wcWarmTries || 0) < 40) {
+            window.__wcWarmTries = (window.__wcWarmTries || 0) + 1;
+            setTimeout(wcWarmUp, 25);
         }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', wcWarmUp);
+    } else {
+        wcWarmUp();
     }
 </script>
 </body>
