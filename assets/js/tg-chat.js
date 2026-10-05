@@ -715,17 +715,14 @@
         html += '<button type="button" class="chat-sticker-set" data-i="' + i + '" title="' + esc(title) + '">'
               + esc(title) + '</button>';
       });
-      if (!shown) {
-        html = '<div class="chat-sticker-none">Topilmadi</div>';
-      }
-      wrap.innerHTML = html;
+      wrap.innerHTML = shown ? html : '<div class="chat-sticker-none">Topilmadi</div>';
       if (cnt) cnt.textContent = (stickerSetsCache || []).length
         ? (shown + ' / ' + stickerSetsCache.length) : '';
       wrap.scrollTop = 0;
       // Qidiruvda faqat bitta moslik qoldi - uni darhol ochamiz.
       if (q && shown === 1) {
         var only = wrap.querySelector('[data-i]');
-        if (only) { only.classList.add('on'); loadStickerSet(stickerSetsCache[Number(only.getAttribute('data-i'))]); }
+        if (only) only.click();     // `on` belgisi ham shu yerda qo'yiladi
       }
       return shown;
     }
@@ -738,16 +735,12 @@
         tmr = setTimeout(function () { paint(v); }, 130);
       });
       inp.addEventListener('keydown', function (e) {
+        // Escape -> panelni yopish (Telegramdagidek), Enter -> birinchi moslik.
+        if (e.key === 'Escape') { e.preventDefault(); closePicker(); return; }
         if (e.key !== 'Enter') return;
         e.preventDefault();
         var first = wrap && wrap.querySelector('[data-i]');
         if (first) first.click();
-      });
-      // Escape -> panelni yopish (Telegramdagidek).
-      inp.addEventListener('keydown', function (e) {
-        if (e.key !== 'Escape') return;
-        e.preventDefault();
-        closePicker();
       });
     }
 
