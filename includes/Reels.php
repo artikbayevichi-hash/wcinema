@@ -27,6 +27,7 @@ require_once __DIR__ . '/Catalog.php';
 require_once __DIR__ . '/TelegramBot.php';
 require_once __DIR__ . '/Notifications.php';
 require_once __DIR__ . '/Alerts.php';
+require_once __DIR__ . '/Blocks.php';
 
 class Reels {
 
@@ -48,6 +49,16 @@ class Reels {
             $this->alerts = new Alerts();
         }
         return $this->alerts;
+    }
+
+    /** Bloklar (lazy). */
+    private $blocks = null;
+
+    private function blocks() {
+        if ($this->blocks === null) {
+            $this->blocks = new Blocks();
+        }
+        return $this->blocks;
     }
 
     // =====================================================================
@@ -85,6 +96,16 @@ class Reels {
             $order = ($sort === 'top')
                 ? '(r.views_count * 10 + r.likes_count * 3) DESC, r.id DESC'
                 : 'r.id DESC';
+        }
+
+        // Bloklangan foydalanuvchilarning reelslari oqimda KO'RINMAYDI
+        // (ikkala tomon ham: meni bloklagan ham, meni bloklaganim ham).
+        $hidden = $this->blocks()->hiddenIds($userId);
+        if ($hidden) {
+            $ids = array_map('intval', array_keys($hidden));
+            $ph  = implode(',', array_fill(0, count($ids), '?'));
+            $where .= ' AND r.user_id NOT IN (' . $ph . ')';
+            $params = array_merge($params, $ids);
         }
 
         $sql = "SELECT r.*,
@@ -134,6 +155,14 @@ class Reels {
         );
         if (!$row) {
             return null;
+        }
+        // Blok: muallif ko'rayotgan foydalanuvchini (yoki aksincha) bloklagan
+        // bo'lsa, reel "topilmadi" bo'lib qaytariladi.
+        $authorId = (int) ($row['user_id'] ?? 0);
+        if ($authorId > 0 && $userId !== null && (int) $userId !== $authorId) {
+            if ($this->blocks()->isBlockedBetween($userId, $authorId)) {
+                return null;
+            }
         }
         $out = $this->decorate([$row], $userId);
         return $out[0] ?? null;
@@ -1661,6 +1690,16 @@ class Reels {
             } else {
                 $where .= ' AND r.format = ?';
                 $params[] = $format;
+            }
+        }
+
+        // Blok: profil egalaridan biri ko'rayotganni bloklagan bo'lsa —
+        // butun grid bo'sh qaytariladi (api/profile.php allaqachon `blocked`
+        // bayrog'ini beradi, bu qo'ldiq himiya).
+        $pid = (int) $profileUserId;
+        if ($pid > 0 && $viewerId !== null && (int) $viewerId !== $pid) {
+            if ($this->blocks()->isBlockedBetween($viewerId, $pid)) {
+                return [];
             }
         }
 

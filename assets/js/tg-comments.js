@@ -379,6 +379,12 @@
   }
 
   function messageText(m) {
+    // Kelgan xabarning `entities` ini HTML ga aylantiramiz (qalin, kursiv,
+    // kod, havola, spoiler, sitata...). `TgFormat` yuklanmagan bo'lsa
+    // oddiy matn ko'rsatiladi (xom shakl hech qachon innerHTML'ga
+    // tashlanmaydi).
+    var F = global.TgFormat;
+    if (F && F.render) return F.render(m.message || '', m.entities || []);
     var t = m.message || '';
     return esc(t).replace(/\n/g, '<br>');
   }
@@ -1367,8 +1373,40 @@
   }
 
   // ------------------------------------------------------------- yozish
-  function buildEntities(text) {
+  /**
+   * Yozilgan matnni Telegram `entities` ga aylantiradi:
+   *   1) `TgFormat` yengil markupni (`**qalin**`, `*kursiv*`, `>sitata`,
+   *      `kod`, `[nom](havola)`) o'ziga aylantiradi va belgilarni matndan
+   *      olib tashlaydi;
+   *   2) sof matnda `@username` topib, Telegram'ning `mention` entity'sini
+   *      qo'shamiz (bu markup offset'lari bilan emas, SOF matn offset'lari
+   *      bilan ishlaydi - shuning uchun `extraFn` ichidan).
+   * Natija `{ text, entities }`.
+   */
+  function composeText(text) {
+    var F = global.TgFormat;
+    if (!F || !F.parse) {
+      return { text: text, entities: buildMentions(text) };
+    }
+    var p = F.parse(text, function (plain) { return buildMentions(plain); });
     var Api = A();
+    var ents = [];
+    if (Api) {
+      (p.entities || []).forEach(function (e) {
+        // GrammJS oddiy obyektni ham qabul qiladi, lekin aniq klass
+        // yaratish ishonchliroq (schema tekshiruvi ishlaydi).
+        var Ctor = Api[e._];
+        if (typeof Ctor !== 'function') return;
+        try { ents.push(new Ctor(e)); } catch (err) { /* noto'g'ri maydon */ }
+      });
+    }
+    return { text: p.text, entities: ents.length ? ents : null };
+  }
+
+  /** @username -> InputMessageEntityMentionName (topilgan userlar uchun). */
+  function buildMentions(text) {
+    var Api = A();
+    if (!Api) return null;
     var ents = [];
     var re = /@([A-Za-z][A-Za-z0-9_]{3,31})/g;
     var m;
@@ -1432,12 +1470,12 @@
     text = (text || '').trim();
     if (!text) return Promise.resolve(false);
     if (!S.topicId) return Promise.reject(new Error('Izohlar yuklanmagan'));
-    var payload = { peer: S.peer, message: text };
-    var ents = buildEntities(text);
-    if (ents) payload.entities = ents;
+    var c = composeText(text);
+    var payload = { peer: S.peer, message: c.text };
+    if (c.entities) payload.entities = c.entities;
     S.expandRoot = S.replyTo || 0;
     return sendRaw(payload).then(function () {
-      reportNotify('comment', text);
+      reportNotify('comment', c.text);
       clearReply();
       bumpCount(S.topicId, 1);
       return reload();
@@ -1822,6 +1860,8 @@
     });
   }
   function init() {
+    // `||spoiler||` izohlari bosilish bilan ochiladi.
+    try { if (global.TgFormat) global.TgFormat.bindSpoilers(); } catch (e) {}
     initUI();
     var me = T() && T().me ? T().me() : null;
     if (me && me.id && !username()) askUsername();

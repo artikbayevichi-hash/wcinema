@@ -410,15 +410,37 @@
     return new A.InputReplyToMessage({ replyToMsgId: Number(topicId), topMsgId: Number(topicId) });
   }
 
+  /**
+   * Yozilgan matnni yuborishga tayyorlaydi: `TgFormat` markup belgilarini
+   * (`**qalin**`, `*kursiv*`, `>sitata`, `kod`, `[nom](havola)`) olib
+   * tashlab, ularning o'rniga Telegram `entities` qo'yadi.
+   * @return {{text: string, entities: Array|null}}
+   */
+  function composeText(text) {
+    var F = global.TgFormat;
+    if (!F || !F.parse) return { text: text, entities: null };
+    var p = F.parse(text);
+    var A = Api();
+    var ents = [];
+    (p.entities || []).forEach(function (e) {
+      var Ctor = A && A[e._];
+      if (typeof Ctor !== 'function') return;
+      try { ents.push(new Ctor(e)); } catch (err) { /* noto'g'ri maydon */ }
+    });
+    return { text: p.text, entities: ents.length ? ents : null };
+  }
+
   function sendText(text) {
     text = (text || '').trim();
     if (!text || !C.active || guardSend()) return Promise.resolve(false);
     var A = Api();
     var a = C.active;
-    return getClient().then(function (c) {
-      var base = { peer: a.peerEntity || C.roomPeer, message: text, randomId: M().randLong() };
+    var c = composeText(text);
+    return getClient().then(function (cl) {
+      var base = { peer: a.peerEntity || C.roomPeer, message: c.text, randomId: M().randLong() };
+      if (c.entities) base.entities = c.entities;
       if (a.type === 'room') base.replyTo = replyTo(a.topicId);
-      return c.invoke(new A.messages.SendMessage(base));
+      return cl.invoke(new A.messages.SendMessage(base));
     }).then(afterSend).catch(function (e) { toast('Yuborilmadi: ' + errMsg(e)); });
   }
 
@@ -426,10 +448,12 @@
     var A = Api();
     var a = C.active;
     if (!a || guardSend()) return Promise.resolve(false);
-    return getClient().then(function (c) {
-      var base = { peer: a.peerEntity || C.roomPeer, media: media, message: caption || '', randomId: M().randLong() };
+    var c = composeText(caption || '');
+    return getClient().then(function (cl) {
+      var base = { peer: a.peerEntity || C.roomPeer, media: media, message: c.text, randomId: M().randLong() };
+      if (c.entities) base.entities = c.entities;
       if (a.type === 'room') base.replyTo = replyTo(a.topicId);
-      return c.invoke(new A.messages.SendMedia(base));
+      return cl.invoke(new A.messages.SendMedia(base));
     });
   }
 
@@ -888,11 +912,102 @@
       }
       if (e.key !== 'Escape') return;
       if (C.voice && C.voice.isRecording()) { C.voice.cancel(); return; }
+      if (toggleFmt(false)) return;               // formatlash menyusi
       var p = picker();
       if (p && !p.hidden) { closePicker(); return; }
     });
 
+    initFmtMenu(input);
     initComposerVoice();
+  }
+
+  // ======================================================== FORMATLASH MENYUSI
+  /**
+   * "Aa" tugmasi: matn formatlash qo'llanishini ochadi. Satr bosilsa
+   * shu belgilar matn maydoniga qo'yiladi (kursor tanlangan matn ustida
+   * bo'lsa, o'sha qismga o'raladi).
+   */
+  function initFmtMenu(input) {
+    var btn = el('chatFmtBtn');
+    var menu = el('chatFmtMenu');
+    if (!btn || !menu) return;
+
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleFmt(menu.hidden);
+    });
+
+    menu.addEventListener('click', function (e) {
+      var row = e.target.closest ? e.target.closest('.chat-fmt-row') : null;
+      if (!row) return;
+      e.preventDefault();
+      applyFmt(row, input);
+      toggleFmt(false);
+      if (input) input.focus();
+    });
+
+    // Tashqariga bosilanda yopiladi.
+    document.addEventListener('click', function (e) {
+      if (menu.hidden) return;
+      if (menu.contains(e.target) || btn.contains(e.target)) return;
+      toggleFmt(false);
+    });
+  }
+
+  function toggleFmt(show) {
+    var btn = el('chatFmtBtn');
+    var menu = el('chatFmtMenu');
+    if (!btn || !menu) return false;
+    menu.hidden = !show;
+    btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    return !!show;
+  }
+
+  /**
+   * Menyudagi bir satrni matn maydoniga qo'yadi.
+   *
+   * Satr atributlari:
+   *   data-fmt    ochish belgisi  (`**`, `> ` ...);
+   *   data-close  yopish belgisi  (yo'q bo'lsa `data-fmt` ga teng);
+   *   data-demo   tanlanmagan bo'lsa qo'yiladigan namuna matni;
+   *   data-link   1 bo'lsa `[nom](https://)` shakli (havola).
+   *
+   * Agar matn maydonida biror narsa tanlangan bo'lsa, O'SHA qism o'raladi
+   * (namuna matni ishlatilmaydi) - bu Telegram'dagi kabi.
+   */
+  function applyFmt(row, input) {
+    if (!input) return;
+    var open  = row.getAttribute('data-fmt') || '';
+    var close = row.getAttribute('data-close');
+    if (close === null) close = open;
+    var isLink = row.getAttribute('data-link') === '1';
+
+    var v = input.value;
+    var s = input.selectionStart == null ? v.length : input.selectionStart;
+    var e = input.selectionEnd == null ? s : input.selectionEnd;
+    var sel = (e > s) ? v.slice(s, e) : '';
+    var ins;
+
+    if (isLink) {
+      ins = '[' + (sel || row.getAttribute('data-demo') || '') + '](https://)';
+    } else if (sel) {
+      ins = open + sel + close;
+    } else {
+      ins = open + (row.getAttribute('data-demo') || '') + close;
+    }
+
+    input.value = v.slice(0, s) + ins + v.slice(e);
+
+    if (isLink) {
+      // Havolani yozib bo'lish uchun `https://` qismini tanlab qo'yamiz.
+      var at = input.value.indexOf('https://', s);
+      if (at >= 0) input.setSelectionRange(at, at + 8);
+      else input.setSelectionRange(s + ins.length, s + ins.length);
+    } else {
+      var pos = s + ins.length;
+      input.setSelectionRange(pos, pos);
+    }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   /**
@@ -924,6 +1039,8 @@
   function bootstrap() {
     if (!M()) { try { console.warn('[tg-chat] TgMedia topilmadi'); } catch (e) {} }
     if (T() && T().me) { try { C.me = T().me(); } catch (e) {} }
+    // `||spoiler||` matnlari bosilish bilan ochiladi.
+    try { if (global.TgFormat) global.TgFormat.bindSpoilers(); } catch (e) {}
     initUI();
     loadRooms();
     loadContacts();

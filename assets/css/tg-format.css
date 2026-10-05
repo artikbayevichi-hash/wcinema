@@ -1,0 +1,113 @@
+/* ==========================================================================
+ * tg-format.css - Telegram xabar entitylarining ko'rinishi
+ * --------------------------------------------------------------------------
+ * `tg-format.js` matn ichidagi `entities` ni HTML ga aylantiradi
+ * (<b> <i> <u> <s> <code> <pre> <blockquote> <a> .tg-spoiler ...).
+ * Bu fayl ularga chiroyli va xavfsiz ko'rinish beradi.
+ *
+ * `chat.php` va `reels.php` da yuklanadi.
+ * ========================================================================== */
+
+/* ---------------------------------------------------------- asosiy teglar */
+/* `white-space: pre-wrap` konteyner ichida `<br>` bilan birga ketadi, shuning
+   uchun qator uzilishlari ikki marta chiqmasligi uchun `span` lar inline
+   qoldiriladi. */
+.reels-c-body code,
+.chat-txt code,
+.chat-cmd-c code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                 "Liberation Mono", monospace;
+    font-size: 0.92em;
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: rgba(127, 143, 168, 0.18);
+    color: #9ecbff;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.reels-c-body pre,
+.chat-txt pre {
+    display: block;
+    margin: 6px 0;
+    padding: 9px 11px;
+    border-radius: 10px;
+    border: 1px solid var(--line, #2a3140);
+    background: #0b0e14;
+    overflow-x: auto;
+    max-width: 100%;
+    text-align: left;
+}
+.reels-c-body pre code,
+.chat-txt pre code {
+    padding: 0;
+    background: none;
+    color: #d8e2f2;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre;
+}
+.reels-c-body pre::-webkit-scrollbar,
+.chat-txt pre::-webkit-scrollbar { height: 6px; }
+.reels-c-body pre::-webkit-scrollbar-thumb,
+.chat-txt pre::-webkit-scrollbar-thumb {
+    background: rgba(127, 143, 168, 0.4);
+    border-radius: 3px;
+}
+
+.reels-c-body blockquote,
+.chat-txt blockquote {
+    display: block;
+    margin: 6px 0;
+    padding: 2px 0 2px 10px;
+    border-left: 3px solid var(--accent, #2aabee);
+    color: var(--muted, #8b95a8);
+    font-style: italic;
+}
+
+/* ------------------------------------------------------------------ havola */
+.reels-c-body a,
+.chat-txt a {
+    color: var(--accent, #2aabee);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+.reels-c-body a:hover,
+.chat-txt a:hover { text-decoration: underline; }
+
+.tg-ment { font-weight: 600; }
+.tg-tag  { color: var(--accent, #2aabee); font-weight: 500; }
+.tg-cmd  { color: var(--accent, #2aabee); font-family: ui-monospace, monospace; }
+/* Havola sxemasi xavfsiz bo'lmasa (`javascript:` va h.k.) `render()` shu
+   elementni chiqaradi - u oddiy matn ko'rinishida qoladi. */
+.tg-link-plain { color: inherit; text-decoration: underline dotted; }
+
+/* ----------------------------------------------------------------- spoiler */
+.tg-spoiler {
+    display: inline;
+    border-radius: 4px;
+    background: currentColor;
+    color: inherit;
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+    -webkit-user-select: none;
+    user-select: none;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+/* Ochilmagan holat: matn "xira" ko'rinadi (Telegram uslubida). */
+.tg-spoiler:not(.is-open) {
+    color: transparent;
+    text-shadow: 0 0 7px rgba(232, 236, 243, 0.75);
+}
+.tg-spoiler.is-open,
+.tg-spoiler:hover { color: inherit; background: rgba(127, 143, 168, 0.16); }
+.tg-spoiler:focus-visible { outline: 2px solid var(--accent, #2aabee); outline-offset: 2px; }
+
+/* ============================================================ SMART TV rejimi
+ * TV da masofadan o'qilishi uchun formatlash elementlari ham kattalashadi. */
+.tv-mode .tg-spoiler { text-shadow: 0 0 12px rgba(232, 236, 243, 0.85); }
+.tv-mode .reels-c-body pre code,
+.tv-mode .chat-txt pre code { font-size: 16px; }
+.tv-mode .reels-c-body blockquote,
+.tv-mode .chat-txt blockquote { padding-left: 14px; font-size: 1.05em; }

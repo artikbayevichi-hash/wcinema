@@ -26,6 +26,7 @@ $NAV_ACTIVE = 'chat';
     <link rel="stylesheet" href="assets/css/instagram.css">
     <link rel="stylesheet" href="assets/css/reels.css">
     <link rel="stylesheet" href="assets/css/chat.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/chat.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/css/tg-format.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-format.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/voice.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/voice.css') ?: 1; ?>">
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
 </head>
@@ -69,6 +70,12 @@ $NAV_ACTIVE = 'chat';
         <div class="chat-picker" id="chatPicker" hidden></div>
 
         <form class="chat-composer" id="chatComposer" autocomplete="off">
+            <?php /* Matn formatlash qo'llanishi (bold/italic/kod/havola/...). */ ?>
+            <button type="button" class="chat-tool chat-tool-fmt" id="chatFmtBtn"
+                    aria-label="Matn formatlash" aria-expanded="false" aria-controls="chatFmtMenu"
+                    title="Matn formatlash">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.2 9.6 6.4a1.5 1.5 0 0 1 2.8 0L18 19.2"/><path d="M6.1 14.4h7.8"/><path d="M20.4 20.4v-5.6h1.5a2.8 2.8 0 0 1 0 5.6z"/></svg>
+            </button>
             <?php /* Telegram Desktop kabi: kompozitorning chapida BITTA tugma -
                     u emoji / stiker / GIF / rasm oynasini ochadi. */ ?>
             <button type="button" class="chat-tool" id="chatAttachBtn"
@@ -87,6 +94,37 @@ $NAV_ACTIVE = 'chat';
             </button>
             <input type="file" id="chatPhoto" accept="image/*" hidden>
         </form>
+
+        <?php /* Formatlash qo'llanishi. `tg-chat.js` uni ochadi/yopadi va
+                satrni bosilganda matn maydoniga qo'yadi. */ ?>
+        <div class="chat-fmt" id="chatFmtMenu" hidden role="menu" aria-label="Matn formatlash">
+            <div class="chat-fmt-title">Matn formatlash</div>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="**" data-demo="qalin matn">
+                <b>qalin</b><code>**qalin**</code>
+            </button>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="*" data-demo="kursiv matn">
+                <i>kursiv</i><code>*kursiv*</code>
+            </button>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="__" data-demo="ost osti">
+                <u>ost osti</u><code>__ost osti__</code>
+            </button>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="~~" data-demo="o'chirilgan">
+                <s>o'chirilgan</s><code>~~o'chirilgan~~</code>
+            </button>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="||" data-demo="yashirin matn">
+                <span class="tg-spoiler-demo">yashirin matn</span><code>||yashirin matn||</code>
+            </button>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="`" data-demo="kod">
+                <code>kod</code><code>`kod`</code>
+            </button>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="&gt; " data-close="" data-demo="sitata satri">
+                <span class="chat-fmt-quote">sitata satri</span><code>&gt; sitata</code>
+            </button>
+            <button type="button" class="chat-fmt-row" role="menuitem" data-fmt="" data-close="" data-demo="nom" data-link="1">
+                <a href="#" onclick="return false">nom</a><code>[nom](https://havola)</code>
+            </button>
+            <div class="chat-fmt-note">Matn yuborilgach belgilar yo'qoladi va haqiqiy formatga aylanadi.</div>
+        </div>
     </section>
 </main>
 
@@ -107,6 +145,7 @@ $NAV_ACTIVE = 'chat';
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script src="assets/vendor/lottie.min.js?v=<?php echo @filemtime(__DIR__ . '/assets/vendor/lottie.min.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-voice.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-voice.js') ?: 1; ?>"></script>
+<script src="assets/js/tg-format.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-format.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-comments.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-comments.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-emoji.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-emoji.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-chat.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-chat.js') ?: 1; ?>"></script>
