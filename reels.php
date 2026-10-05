@@ -107,27 +107,20 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
         </div>
         <div class="reels-comments-list" id="commentsList"></div>
 
-        <!-- Telegram vositalari: stiker / GIF / rasm yuborish.
-             Izohlar Telegram guruhida saqlanadi (tg-comments.js). -->
-        <div class="reels-c-tools" id="cTools" hidden>
-            <button type="button" class="reels-c-tool" id="cStickerBtn" title="Stiker" aria-label="Stiker">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 0-8 8c1.5 0 2.9-.4 4.1-1.1L20 20l-.9-4.1"/><path d="M8.5 14.5s1.2 1.5 3.5 1.5 3.5-1.5 3.5-1.5"/><path d="M9 9.5h.01M15 9.5h.01"/></svg>
-            </button>
-            <button type="button" class="reels-c-tool" id="cGifBtn" title="GIF" aria-label="GIF">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18"/><path d="M7 13h3v3H7z"/><path d="M14 13h3M14 16h2"/></svg>
-            </button>
-            <button type="button" class="reels-c-tool" id="cPhotoBtn" title="Rasm" aria-label="Rasm">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-4.5-4.5L7 20"/></svg>
-            </button>
-            <button type="button" class="reels-c-tool" id="cMentionBtn" title="Belgilash (@)" aria-label="Belgilash">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.9 7.9"/></svg>
-            </button>
-            <a class="reels-c-tool reels-c-tool-tg" id="cOpenTg" href="#" target="_blank" rel="noopener" title="Suhbatni ochish" aria-label="Suhbatni ochish" hidden>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6 2.2L11.2 20 21 3z"/><path d="m9 12.7 12-9.7"/></svg>
-            </a>
-            <input type="file" id="cPhoto" accept="image/*" hidden>
+        <!-- Telegram vositalari paneli: stiker / GIF / rasm / @ belgilash.
+             Izohlar Telegram guruhida saqlanadi (tg-comments.js).
+             Chat kabi: kompozitorda BITTA "biriktirish" tugmasi bor, u shu
+             panelni ochadi (ichida tablar). -->
+        <div class="reels-c-picker" id="cPicker" hidden>
+            <div class="reels-c-picker-tabs" id="cPickerTabs">
+                <button type="button" class="reels-c-picker-tab on" data-mode="sticker" title="Stiker">Stiker</button>
+                <button type="button" class="reels-c-picker-tab" data-mode="gif" title="GIF">GIF</button>
+                <button type="button" class="reels-c-picker-tab" data-mode="photo" title="Rasm">Rasm</button>
+                <button type="button" class="reels-c-picker-tab" data-mode="mention" title="Belgilash">@</button>
+                <button type="button" class="reels-c-picker-x" id="cPickerX" aria-label="Yopish">&times;</button>
+            </div>
+            <div class="reels-c-picker-panel" id="cPickerPanel"></div>
         </div>
-        <div class="reels-c-picker" id="cPicker" hidden></div>
 
         <div class="reels-c-replybar" id="cReplyBar" hidden>
             <span class="reels-c-replybar-av" id="cReplyAv"></span>
@@ -135,9 +128,23 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
             <button type="button" class="reels-c-replybar-x" id="cReplyCancel" aria-label="Bekor qilish">✕</button>
         </div>
 
+        <?php /* Izoh kompozitori — chat kompozitori bilan BIR XIL ko'rinadi:
+                 chapda "Aa" (formatlash) + bitta "biriktirish" tugmasi,
+                 keyin o'sadigan <textarea>, o'ngda doira yuborish/mikrofon. */ ?>
         <form class="reels-comments-form" id="commentForm" autocomplete="off">
-            <input class="reels-comments-input" id="commentInput" type="text"
-                   maxlength="1000" placeholder="Izoh yozing…" aria-label="Izoh">
+            <button type="button" class="reels-c-tool tg-fmt-btn" id="cFmtBtn"
+                    aria-label="Matn formatlash" aria-expanded="false" title="Matn formatlash">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.2 9.6 6.4a1.5 1.5 0 0 1 2.8 0L18 19.2"/><path d="M6.1 14.4h7.8"/><path d="M20.4 20.4v-5.6h1.5a2.8 2.8 0 0 1 0 5.6z"/></svg>
+            </button>
+            <button type="button" class="reels-c-tool" id="cAttachBtn"
+                    aria-label="Stiker, GIF, rasm va belgilash" aria-expanded="false" title="Stiker, GIF, rasm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M8.6 14.2c.9 1.2 2.1 1.8 3.4 1.8s2.5-.6 3.4-1.8"/><path d="M9.2 10h.01M14.8 10h.01"/></svg>
+            </button>
+            <textarea class="reels-comments-input" id="commentInput" rows="1"
+                      maxlength="1000" placeholder="Izoh yozing…" aria-label="Izoh"></textarea>
+            <a class="reels-c-tool reels-c-tool-tg" id="cOpenTg" href="#" target="_blank" rel="noopener" title="Suhbatni ochish" aria-label="Suhbatni ochish" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 3 10.5l6 2.2L11.2 20 21 3z"/><path d="m9 12.7 12-9.7"/></svg>
+            </a>
             <!-- Telegram uslubida: matn yo'q -> mikrofon, matn bor -> yuborish -->
             <button class="reels-comments-send" id="commentSend" type="submit" data-mode="mic"
                     aria-label="Ovozli xabar" title="Ovozli xabar">
@@ -145,6 +152,7 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
                 <span class="tv-send-clip" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 11.1 12 19.5a5 5 0 0 1-7.1-7.1l8.4-8.4a3.4 3.4 0 0 1 4.8 4.8l-8.3 8.3a1.8 1.8 0 0 1-2.5-2.5l7.6-7.6"/></svg></span>
                 <span class="tv-send-ico" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.5 11.15 19.9 4.3a.55.55 0 0 1 .72.7l-7 15.6a.55.55 0 0 1-1 .05l-2-5.6-5.55-1.95a.55.55 0 0 1-.07-.99z"/></svg></span>
             </button>
+            <input type="file" id="cPhoto" accept="image/*" hidden>
         </form>
     </div>
 </div>
@@ -178,7 +186,12 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
         },
         // Reels izohlari Telegram forum-guruhda saqlanadi (tg-comments.js).
         tgCommentsChat: <?php echo json_encode((string) TG_COMMENTS_CHAT); ?>,
-        tgCommentsUrl:  <?php echo json_encode((string) TG_COMMENTS_URL); ?>
+        tgCommentsUrl:  <?php echo json_encode((string) TG_COMMENTS_URL); ?>,
+        // `lottie.min.js` (298 KB) manzili. Bu sahifada skript teg sifatida
+        // YUKLANMAYDI — `tg-comments.js` uni faqat birinchi `.tgs` (animatsiyali)
+        // stiker topilganda `ensureLottie()` orqali yuklaydi. Izohlarda `.tgs`
+        // stiker bo'lsa, shu zahoti yuklanadi; bo'lmasa umuman yuklanmaydi.
+        tgLottie: <?php echo json_encode('assets/vendor/lottie.min.js?v=' . (@filemtime(__DIR__ . '/assets/vendor/lottie.min.js') ?: 1)); ?>
     };
     window.REELS = {
         userId: <?php echo $userId ? (int) $userId : 'null'; ?>,
@@ -199,9 +212,13 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
      KERAK EMAS va avval boshqalan (render-blocking) yuklanardi:
 
        * tg-probe.js  -> faqat `chat.php` da ishlatiladi (build/test-* da)
-       * lottie.min.js -> faqat `tg-comments.js` da, `.tgs` animatsiyali
-                         stiker ko'rsatilganda. Reels sahifada stiker
-                         maydoni umuman ochilmaydi.
+       * lottie.min.js -> `chat.php` da skript teg sifatida yuklanadi; bu
+                         sahifada esa `tg-comments.js` uni FAQAT birinchi
+                         `.tgs` (animatsiyali stiker) topilganda
+                         `ensureLottie()` orqali yuklaydi (APP.tgLottie).
+                         DIQQAT: shu "lazy load" ishlamay qolsa, izohlardagi
+                         stiker animatsiyasiz bo'lib, `.reels-c-media`ning
+                         `min-height: 96px` + shimmer foni ko'rinib qoladi.
 
      Ikkalasi ham jami ~326 KB ni tejab beradi. `defer` esa qolgan
      skriptlarni parallel yuklab, birinchi bo'lish chizishni kechiktirmaydi.

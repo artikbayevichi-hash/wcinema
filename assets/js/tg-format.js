@@ -478,12 +478,152 @@
     }, true);
   }
 
+  // ------------------------------------------------ formatlash qo'llanishi
+  // "Aa" tugmasi ochadigan menyu. Chat (`chat.php`) va reels izohlari
+  // (`reels.php`) bir xil ko'rinishi uchun markup JS da yaratiladi —
+  // ikkala PHP faylda ham nusxalamaslik kerak emas.
+
+  /**
+   * Menyuning HTML'i. Bir qator = bitta format.
+   *
+   *  data-fmt    ochish belgisi  (`**`, `> ` ...)
+   *  data-close  yopish belgisi  (yo'q bo'lsa `data-fmt` ga teng)
+   *  data-demo   tanlanmagan bo'lsa qo'yiladigan namuna matni
+   *  data-link   1 bo'lsa `[nom](https://)` shakli (havola)
+   */
+  function fmtMenuHtml() {
+    return '<div class="tg-fmt-title">Matn formatlash</div>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="**" data-demo="qalin matn">' +
+        '<b>qalin</b><code>**qalin**</code></button>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="*" data-demo="kursiv matn">' +
+        '<i>kursiv</i><code>*kursiv*</code></button>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="__" data-demo="ost osti">' +
+        '<u>ost osti</u><code>__ost osti__</code></button>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="~~" data-demo="o‘chirilgan">' +
+        '<s>o‘chirilgan</s><code>~~o‘chirilgan~~</code></button>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="||" data-demo="yashirin matn">' +
+        '<span class="tg-spoiler-demo">yashirin matn</span><code>||yashirin matn||</code></button>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="`" data-demo="kod">' +
+        '<code>kod</code><code>`kod`</code></button>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="&gt; " data-close="" data-demo="sitata satri">' +
+        '<span class="tg-fmt-quote">sitata satri</span><code>&gt; sitata</code></button>' +
+      '<button type="button" class="tg-fmt-row" role="menuitem" data-fmt="" data-close="" data-demo="nom" data-link="1">' +
+        '<a href="#" onclick="return false">nom</a><code>[nom](https://havola)</code></button>' +
+      '<div class="tg-fmt-note">Matn yuborilgach belgilar yo‘qoladi va haqiqiy formatga aylanadi.</div>';
+  }
+
+  /**
+   * Menyudagi bir satrni matn maydoniga qo'yadi.
+   *
+   * Agar maydonda biror narsa tanlangan bo'lsa, O'SHA qism o'raladi
+   * (namuna matni ishlatilmaydi) — bu Telegram'dagi kabi.
+   */
+  function applyFmt(row, input) {
+    if (!input || !row) return;
+    var open  = row.getAttribute('data-fmt') || '';
+    var close = row.getAttribute('data-close');
+    if (close === null) close = open;
+    var isLink = row.getAttribute('data-link') === '1';
+
+    var v = input.value;
+    var s = input.selectionStart == null ? v.length : input.selectionStart;
+    var e = input.selectionEnd == null ? s : input.selectionEnd;
+    var sel = (e > s) ? v.slice(s, e) : '';
+    var ins;
+
+    if (isLink) {
+      ins = '[' + (sel || row.getAttribute('data-demo') || '') + '](https://)';
+    } else if (sel) {
+      ins = open + sel + close;
+    } else {
+      ins = open + (row.getAttribute('data-demo') || '') + close;
+    }
+
+    input.value = v.slice(0, s) + ins + v.slice(e);
+
+    if (isLink) {
+      // Havolani yozib bo'lish uchun `https://` qismini tanlab qo'yamiz.
+      var at = input.value.indexOf('https://', s);
+      if (at >= 0) input.setSelectionRange(at, at + 8);
+      else input.setSelectionRange(s + ins.length, s + ins.length);
+    } else {
+      var pos = s + ins.length;
+      input.setSelectionRange(pos, pos);
+    }
+    try {
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (err) { /* eski brauzer — kichik muhim emas */ }
+  }
+
+  /**
+   * "Aa" tugmasini bog'lash va menyuni yaratish.
+   *
+   * @param btn    CSS selektor — tugma (`.xxx-fmt-btn`).
+   * @param input  CSS selektor — matn maydoni (`<textarea>`).
+   * @param host   CSS selektor — menyuning joylashadigan konteyner
+   *               (`position: relative` bo'lishi shart). Berilmasa
+   *               tugmaning `<form>`/ota konteyneri ishlatiladi.
+   * @returns {Object|null} `{ btn, menu, input, toggle }` yoki `null`.
+   */
+  function mountFmtMenu(btnSel, inputSel, hostSel) {
+    var doc = global.document;
+    if (!doc) return null;
+    var btn = typeof btnSel === 'string' ? doc.querySelector(btnSel) : btnSel;
+    var input = typeof inputSel === 'string' ? doc.querySelector(inputSel) : inputSel;
+    if (!btn || !input) return null;
+
+    var form = btn.closest ? btn.closest('form') : null;
+    var host = hostSel ? doc.querySelector(hostSel) : (form ? form.parentNode : btn.parentNode);
+    if (!host) return null;
+
+    var menu = doc.createElement('div');
+    menu.className = 'tg-fmt';
+    menu.hidden = true;
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Matn formatlash');
+    menu.innerHTML = fmtMenuHtml();
+    host.appendChild(menu);
+    if (btn.id) menu.id = btn.id + 'Menu';
+    if (btn.id) btn.setAttribute('aria-controls', menu.id);
+    btn.setAttribute('aria-expanded', 'false');
+
+    var toggle = function (show) {
+      menu.hidden = !show;
+      btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+      return !!show;
+    };
+
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggle(menu.hidden);
+    });
+    menu.addEventListener('click', function (e) {
+      var row = e.target.closest ? e.target.closest('.tg-fmt-row') : null;
+      if (!row) return;
+      e.preventDefault();
+      applyFmt(row, input);
+      toggle(false);
+      input.focus();
+    });
+    // Tashqariga bosilanda yopiladi.
+    doc.addEventListener('click', function (e) {
+      if (menu.hidden) return;
+      if (menu.contains(e.target) || btn.contains(e.target)) return;
+      toggle(false);
+    });
+
+    return { btn: btn, menu: menu, input: input, toggle: toggle };
+  }
+
   var TgFormat = {
     parse: parse,
     parseInline: parseInline,
     render: render,
     esc: esc,
-    bindSpoilers: bindSpoilers
+    bindSpoilers: bindSpoilers,
+    fmtMenuHtml: fmtMenuHtml,
+    applyFmt: applyFmt,
+    mountFmtMenu: mountFmtMenu
   };
 
   global.TgFormat = TgFormat;

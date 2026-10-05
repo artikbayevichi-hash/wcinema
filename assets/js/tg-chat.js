@@ -667,28 +667,99 @@
   }
 
   // -------------------------------------------------------------- 2) STIKER
+  // To'plamlar soni juda ko'p (o'nlablab, hattoki 200+). Bitta qatorli
+  // gorizontal lenta ularni amalda topib bo'lmaydi, shuning uchun:
+  //   * qidiruv maydoni (nom bo'yicha filtr);
+  //   * to'plamlar bir necha qatorga O'TADI va vertikal scroll qilinadi;
+  //   * nechta topilganini ko'rsatuvchi hisob.
+  var stickerSetsCache = null;
+
   function renderStickerPanel() {
     var b = pickerBody();
     if (!b) return;
-    b.innerHTML = '<div class="chat-sticker-sets" id="chatStickerSets"></div>'
+    b.innerHTML =
+        '<div class="chat-sticker-head">'
+      +   '<div class="chat-sticker-search">'
+      +     '<input id="chatStickerSearch" type="text" autocomplete="off" spellcheck="false"'
+      +       ' placeholder="To‘plam qidirish (masalan: Duck)…" aria-label="Stiker to‘plamlarini qidirish">'
+      +     '<span class="chat-sticker-count" id="chatStickerCount"></span>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="chat-sticker-sets" id="chatStickerSets"></div>'
       + '<div class="chat-sticker-body" id="chatStickerBody"><div class="chat-empty"><span class="spinner"></span></div></div>';
-    loadStickerCollections().then(function (sets) {
-      if (C.pickerMode !== 'sticker') return;
-      var wrap = el('chatStickerSets');
+
+    var wrap = el('chatStickerSets');
+    var inp  = el('chatStickerSearch');
+    var cnt  = el('chatStickerCount');
+
+    function paint(q) {
       if (!wrap) return;
-      if (!sets.length) { pickerStatus('Stiker topilmadi'); return; }
-      wrap.innerHTML = sets.map(function (s, i) {
-        return '<button type="button" class="chat-sticker-set" data-i="' + i + '">' + esc(s.title || 'Set') + '</button>';
-      }).join('');
-      wrap.onclick = function (e) {
+      q = String(q || '').trim().toLowerCase();
+      var html = '', shown = 0;
+      (stickerSetsCache || []).forEach(function (s, i) {
+        var title = s.title || 'Set';
+        // Qidiruv: to'plam nomi va "so'nggi" belgisi.
+        if (q && title.toLowerCase().indexOf(q) < 0) return;
+        shown++;
+        html += '<button type="button" class="chat-sticker-set" data-i="' + i + '" title="' + esc(title) + '">'
+              + esc(title) + '</button>';
+      });
+      if (!shown) {
+        html = '<div class="chat-sticker-none">Topilmadi</div>';
+      }
+      wrap.innerHTML = html;
+      if (cnt) cnt.textContent = (stickerSetsCache || []).length
+        ? (shown + ' / ' + stickerSetsCache.length) : '';
+      wrap.scrollTop = 0;
+      // Qidiruvda faqat bitta moslik qoldi - uni darhol ochamiz.
+      if (q && shown === 1) {
+        var only = wrap.querySelector('[data-i]');
+        if (only) { only.classList.add('on'); loadStickerSet(stickerSetsCache[Number(only.getAttribute('data-i'))]); }
+      }
+      return shown;
+    }
+
+    if (inp) {
+      var tmr = null;
+      inp.addEventListener('input', function () {
+        if (tmr) clearTimeout(tmr);
+        var v = inp.value;
+        tmr = setTimeout(function () { paint(v); }, 130);
+      });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var first = wrap && wrap.querySelector('[data-i]');
+        if (first) first.click();
+      });
+      // Escape -> panelni yopish (Telegramdagidek).
+      inp.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        e.preventDefault();
+        closePicker();
+      });
+    }
+
+    if (wrap) {
+      wrap.addEventListener('click', function (e) {
         var btn = e.target.closest && e.target.closest('[data-i]');
         if (!btn) return;
         Array.prototype.forEach.call(wrap.querySelectorAll('.chat-sticker-set'), function (x) { x.classList.remove('on'); });
         btn.classList.add('on');
-        loadStickerSet(sets[Number(btn.getAttribute('data-i'))]);
-      };
-      var first = wrap.querySelector('.chat-sticker-set');
-      if (first) { first.classList.add('on'); loadStickerSet(sets[0]); }
+        loadStickerSet(stickerSetsCache[Number(btn.getAttribute('data-i'))]);
+      });
+    }
+
+    var done = stickerSetsCache ? Promise.resolve(stickerSetsCache) : loadStickerCollections();
+    done.then(function (sets) {
+      if (C.pickerMode !== 'sticker') return;
+      stickerSetsCache = sets;
+      if (!sets.length) { pickerStatus('Stiker topilmadi'); return; }
+      var shown = paint(inp ? inp.value : '');
+      if (shown !== 1) {
+        var first = wrap && wrap.querySelector('[data-i]');
+        if (first) { first.classList.add('on'); loadStickerSet(sets[Number(first.getAttribute('data-i'))]); }
+      }
     }).catch(function (e) {
       if (C.pickerMode !== 'sticker') return;
       // Xatoni faqat stiker maydoniga yozamiz - to'plamlar qatori joyida qoladi.
@@ -922,92 +993,28 @@
   }
 
   // ======================================================== FORMATLASH MENYUSI
+  var fmtCtl = null;
+
   /**
    * "Aa" tugmasi: matn formatlash qo'llanishini ochadi. Satr bosilsa
    * shu belgilar matn maydoniga qo'yiladi (kursor tanlangan matn ustida
    * bo'lsa, o'sha qismga o'raladi).
+   *
+   * Menyuning HTML'i va mantiqi `tg-format.js` da (`TgFormat.mountFmtMenu`),
+   * chunki reels izohlari (`reels.php`) ham xuddi shuni ishlatadi.
    */
   function initFmtMenu(input) {
-    var btn = el('chatFmtBtn');
-    var menu = el('chatFmtMenu');
-    if (!btn || !menu) return;
-
-    btn.addEventListener('click', function (e) {
-      e.preventDefault();
-      toggleFmt(menu.hidden);
-    });
-
-    menu.addEventListener('click', function (e) {
-      var row = e.target.closest ? e.target.closest('.chat-fmt-row') : null;
-      if (!row) return;
-      e.preventDefault();
-      applyFmt(row, input);
-      toggleFmt(false);
-      if (input) input.focus();
-    });
-
-    // Tashqariga bosilanda yopiladi.
-    document.addEventListener('click', function (e) {
-      if (menu.hidden) return;
-      if (menu.contains(e.target) || btn.contains(e.target)) return;
-      toggleFmt(false);
-    });
+    var F = global.TgFormat;
+    if (!F || !F.mountFmtMenu) return null;
+    fmtCtl = F.mountFmtMenu('#chatFmtBtn', input || '#chatInput', '#chatThread');
+    return fmtCtl;
   }
 
+  /** Menyuni ochish/yopish. `false` berilsa va menyu ochiq bo'lsa `true`
+   *  qaytaradi (Esc/panel ochilishidan oldin tekshirish uchun). */
   function toggleFmt(show) {
-    var btn = el('chatFmtBtn');
-    var menu = el('chatFmtMenu');
-    if (!btn || !menu) return false;
-    menu.hidden = !show;
-    btn.setAttribute('aria-expanded', show ? 'true' : 'false');
-    return !!show;
-  }
-
-  /**
-   * Menyudagi bir satrni matn maydoniga qo'yadi.
-   *
-   * Satr atributlari:
-   *   data-fmt    ochish belgisi  (`**`, `> ` ...);
-   *   data-close  yopish belgisi  (yo'q bo'lsa `data-fmt` ga teng);
-   *   data-demo   tanlanmagan bo'lsa qo'yiladigan namuna matni;
-   *   data-link   1 bo'lsa `[nom](https://)` shakli (havola).
-   *
-   * Agar matn maydonida biror narsa tanlangan bo'lsa, O'SHA qism o'raladi
-   * (namuna matni ishlatilmaydi) - bu Telegram'dagi kabi.
-   */
-  function applyFmt(row, input) {
-    if (!input) return;
-    var open  = row.getAttribute('data-fmt') || '';
-    var close = row.getAttribute('data-close');
-    if (close === null) close = open;
-    var isLink = row.getAttribute('data-link') === '1';
-
-    var v = input.value;
-    var s = input.selectionStart == null ? v.length : input.selectionStart;
-    var e = input.selectionEnd == null ? s : input.selectionEnd;
-    var sel = (e > s) ? v.slice(s, e) : '';
-    var ins;
-
-    if (isLink) {
-      ins = '[' + (sel || row.getAttribute('data-demo') || '') + '](https://)';
-    } else if (sel) {
-      ins = open + sel + close;
-    } else {
-      ins = open + (row.getAttribute('data-demo') || '') + close;
-    }
-
-    input.value = v.slice(0, s) + ins + v.slice(e);
-
-    if (isLink) {
-      // Havolani yozib bo'lish uchun `https://` qismini tanlab qo'yamiz.
-      var at = input.value.indexOf('https://', s);
-      if (at >= 0) input.setSelectionRange(at, at + 8);
-      else input.setSelectionRange(s + ins.length, s + ins.length);
-    } else {
-      var pos = s + ins.length;
-      input.setSelectionRange(pos, pos);
-    }
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    if (!fmtCtl) return false;
+    return fmtCtl.toggle(show);
   }
 
   /**

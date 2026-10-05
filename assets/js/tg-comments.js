@@ -17,6 +17,12 @@
   var CHAT_URL = (global.APP && global.APP.tgCommentsUrl) || '';
   var BASE     = (global.APP && global.APP.base) || '';
 
+  // `lottie.min.js` (298 KB) manzili. `chat.php` da skript teg sifatida
+  // yuklanadi; `reels.php` da esa `ensureLottie()` orqali FAQAT `.tgs`
+  // animatsiyali stiker topilganda yuklanadi (sahifa ochilishini
+  // og'irmaslik uchun).
+  var LOTTIE_URL = (global.APP && global.APP.tgLottie) || 'assets/vendor/lottie.min.js';
+
   var S = {
     reel: null,
     topicId: 0,
@@ -688,6 +694,15 @@
     var ph = node && node.parentNode && node.parentNode.querySelector('.reels-c-media-fail');
     if (ph) { ph.hidden = false; ph.textContent = msg ? ('Ko‘rsatib bo‘lmadi: ' + msg) : 'Ko‘rsatib bo‘lmadi'; }
   }
+  // Yuklash butunlay imkonsiz bo'lganda: naqshni to'liq YO'Q qilamiz, faqat
+  // "Ko'rsatib bo'lmadi" yozuvi qoladi. Aks holda `.reels-c-sticker`ning
+  // `min-height` va `.reels-tgs`ning `aspect-ratio`si bo'sh kvadrat qoldiradi.
+  function markFail(node, msg) {
+    showFail(node, msg);
+    if (!node || !node.closest) return;
+    var box = node.closest('.reels-c-sticker, .reels-c-media');
+    if (box) box.setAttribute('data-fail', '1');
+  }
   function playIfVideo(node) {
     if (node && node.tagName === 'VIDEO') {
       try { var p = node.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
@@ -771,31 +786,73 @@
       mime: obj.mimeType || ''
     };
   }
+  // ---- `lottie.min.js` ni TALAB bo'yicha yuklash ------------------------
+  // `.tgs` — bu gzip'langan Lottie JSON; uni chizish uchun `lottie` kerak
+  // (298 KB). Lekin u faqat `.tgs` stikeri bo'lganda kerak bo'ladi:
+  //   * `chat.php` — skript teg sifatida `defer` bilan yuklanadi;
+  //   * `reels.php` — SAHIFA ochilishida emas, faqat birinchi `.tgs`
+  //     paydo bo'lganda shu yerda yuklanadi.
+  // Bu shart emas edi: `global.lottie` yo'q bo'lsa, stiker animatsiyasiz
+  // (bo'sh kvadrat = "orqa fon yaratilib qolib") qolib ketardi.
+  var lottieWait = null;
+  function ensureLottie() {
+    if (global.lottie) return Promise.resolve(true);
+    if (lottieWait) return lottieWait;
+    if (!global.document) { lottieWait = Promise.resolve(false); return lottieWait; }
+    lottieWait = new Promise(function (resolve) {
+      var s = global.document.createElement('script');
+      s.src = LOTTIE_URL;
+      s.async = true;
+      s.onload = function () { resolve(!!global.lottie); };
+      s.onerror = function () { resolve(false); };
+      (global.document.head || global.document.documentElement).appendChild(s);
+    });
+    return lottieWait;
+  }
   function tgsFallback(host, d) {
-    // Lottie ishlamasa — statik thumbnail ko'rsatamiz.
-    var job = resolveLoc(d);          // TGS uchun thumbnail qaytaradi
-    if (!job || !host) return;
-    function put(u8) {
+    // Lottie ishlamasa yoki yuklanolmasa — statik thumbnail ko'rsatamiz.
+    // Hech narsa chiqsa ham bo'sh kvadrat QOLMASIN (`.reels-c-sticker`ning
+    // `min-height` sababli ochilib qoladigan "orqa fon" effekti beradi).
+    if (!host) return;
+    function giveUp(msg) {
+      host.innerHTML = '';
+      markFail(host, msg);
+    }
+    function put(u8, mime) {
+      if (!u8 || !u8.length) { giveUp('stiker bo‘sh'); return; }
       host.innerHTML = '';
       var im = document.createElement('img');
       im.className = 'reels-tgs-img'; im.alt = '';
-      im.src = blobUrl(u8, job.mime || 'image/webp');
+      im.src = blobUrl(u8, mime || 'image/webp');
       host.appendChild(im);
       markLoad(im, 'ready');
     }
-    if (job.inline && job.inline.length) { put(job.inline); return; }
-    if (!job.size) return;
+    var job = resolveLoc(d);          // TGS uchun thumbnail qaytaradi
+    if (!job) { giveUp('stiker topilmadi'); return; }
+    if (job.inline && job.inline.length) { put(job.inline, job.mime); return; }
+    if (!job.size) { giveUp('hajm noma’lum'); return; }
     getClient().then(function (c) { return readAll(c, job.loc, job.dcId, job.size); })
-      .then(put).catch(function () {});
+      .then(function (u8) { put(u8, job.mime); })
+      .catch(function () { giveUp('stiker yuklanmadi'); });
   }
   function downloadTgs(host, d) {
     if (!host) return Promise.resolve();
-    if (!global.lottie) { tgsFallback(host, d); return Promise.resolve(); }
     var job = fullDocLoc(d);
     if (!job || !job.size) { tgsFallback(host, d); return Promise.resolve(); }
     if (job.size > MEDIA_MAX) { tgsFallback(host, d); return Promise.resolve(); }
-    return getClient().then(function (client) {
-      return readAll(client, job.loc, job.dcId, job.size);
+    // `.tgs` yuklanayotgan paytdagi shimmer ("skelet") cheksiz davom etmasin:
+    // 12 s ichida tayyor bo'lmasa — bo'sh kvadrat o'rniga "Ko'rsatib bo'lmadi".
+    var t = global.setTimeout(function () {
+      if (host.getAttribute && host.getAttribute('data-ready') === '1') return;
+      if (!host.isConnected) return;
+      markFail(host, 'stiker yuklanmadi');
+    }, 12000);
+    // `lottie.min.js` faqat shu yerda (birinchi `.tgs` da) yuklanadi.
+    return ensureLottie().then(function (ok) {
+      if (!ok) throw new Error('Lottie yuklanmadi');
+      return getClient().then(function (client) {
+        return readAll(client, job.loc, job.dcId, job.size);
+      });
     }).then(function (buf) {
       if (!buf || !buf.length) throw new Error('bo‘sh fayl');
       return gunzip(buf);
@@ -816,8 +873,10 @@
       host.__anim = anim;
       markLoad(host, 'ready');
       observePlay(host);
+      if (global.clearTimeout) global.clearTimeout(t);
     }).catch(function (e) {
       try { console.warn('[tg-comments] tgs yuklanmadi:', errMsg(e)); } catch (er) {}
+      if (global.clearTimeout) global.clearTimeout(t);
       tgsFallback(host, d);
     });
   }
@@ -1590,8 +1649,7 @@
     S.reel = null;
     S.topicId = 0;
     S.peer = null;
-    var picker = el('cPicker');
-    if (picker) { picker.hidden = true; picker.innerHTML = ''; }
+    closePicker();
   }
 
   // ----------------------------------------------------- reply / o'chirish
@@ -1879,30 +1937,36 @@
     if (uiReady) return;
     uiReady = true;
 
-    var tools = el('cTools');
-    if (tools) tools.hidden = !enabled();
+    // Chat kabi: kompozitorda BITTA "biriktirish" tugmasi bor. U panelni
+    // ochadi, panel ichida esa Stiker / GIF / Rasm / @ tablari.
+    var ab = el('cAttachBtn');
+    if (ab) ab.addEventListener('click', function (e) {
+      e.preventDefault();
+      openPanel(S.pickerMode || 'sticker');
+    });
 
-    var sb = el('cStickerBtn');
-    if (sb) sb.addEventListener('click', function (e) { e.preventDefault(); toggleSticker(); });
+    var tabs = el('cPickerTabs');
+    if (tabs) tabs.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('#cPickerX')) { closePicker(); return; }
+      var b = e.target.closest && e.target.closest('[data-mode]');
+      if (!b) return;
+      switchTab(b.getAttribute('data-mode'));
+    });
 
-    var gb = el('cGifBtn');
-    if (gb) gb.addEventListener('click', function (e) { e.preventDefault(); toggleGif(); });
+    // "Aa" — matn formatlash qo'llanishi (chatdagi kabi).
+    var F = global.TgFormat;
+    if (F && F.mountFmtMenu) F.mountFmtMenu('#cFmtBtn', '#commentInput', '.reels-comments-box');
 
-    var pb = el('cPhotoBtn');
     var pf = el('cPhoto');
-    if (pb && pf) pb.addEventListener('click', function (e) { e.preventDefault(); pf.click(); });
     if (pf) pf.addEventListener('change', function () {
       var f = pf.files && pf.files[0];
       pf.value = '';
       if (!f) return;
-      pickerOpen('media', 'Rasm yuborilmoqda…');
+      pickerOpen('photo', 'Rasm yuborilmoqda…');
       sendPhoto(f).then(function () { closePicker(); }).catch(function (e) {
         pickerStatus('Xatolik: ' + esc(errMsg(e)));
       });
     });
-
-    var mb = el('cMentionBtn');
-    if (mb) mb.addEventListener('click', function (e) { e.preventDefault(); toggleMention(); });
 
     var rc = el('cReplyCancel');
     if (rc) rc.addEventListener('click', function (e) { e.preventDefault(); cancelReply(); });
@@ -1943,20 +2007,71 @@
     });
   }
 
-  function picker() { return el('cPicker'); }
+  function pickerBox() { return el('cPicker'); }
+  function panel() { return el('cPickerPanel'); }
   function pickerBody() { return el('cPickerBody'); }
 
   function closePicker() {
-    var p = picker();
-    if (p) { p.hidden = true; p.removeAttribute('data-mode'); p.innerHTML = ''; }
+    var box = pickerBox();
+    if (box) { box.hidden = true; box.removeAttribute('data-mode'); }
+    var p = panel();
+    if (p) p.innerHTML = '';
+    var ab = el('cAttachBtn');
+    if (ab) ab.setAttribute('aria-expanded', 'false');
+  }
+
+  /**
+   * Panelni ochadi va `mode` tabini faollashtiradi. Chatdagi kabi bitta
+   * "biriktirish" tugmasi barcha vositalarni (stiker / GIF / rasm / @)
+   * shu bitta oynada ochadi.
+   */
+  function openPanel(mode) {
+    var box = pickerBox();
+    if (!box) return;
+    if (box.getAttribute('data-mode') === mode && !box.hidden) { closePicker(); return; }
+    S.pickerMode = mode;
+    var ab = el('cAttachBtn');
+    if (ab) ab.setAttribute('aria-expanded', 'true');
+    if (mode === 'sticker')  { toggleSticker();  return; }
+    if (mode === 'gif')      { toggleGif();      return; }
+    if (mode === 'mention')  { toggleMention();  return; }
+    if (mode === 'photo')    { pickPhoto();      return; }
+  }
+
+  /** Panelni ochilgan holda aynan `mode` tabini ko'rsatadi (tab bosilganda). */
+  function switchTab(mode) {
+    var box = pickerBox();
+    if (!box) return;
+    if (box.getAttribute('data-mode') === mode && !box.hidden) { renderTabs(mode); return; }
+    openPanel(mode);
+  }
+
+  function renderTabs(mode) {
+    var tabs = el('cPickerTabs');
+    if (!tabs) return;
+    Array.prototype.forEach.call(tabs.querySelectorAll('[data-mode]'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-mode') === mode);
+    });
+  }
+
+  function pickPhoto() {
+    var box = pickerBox();
+    var f = el('cPhoto');
+    if (!f) return;
+    // Tab faollashtiriladi (fayl tanlangandan keyin `pickerOpen('photo', ...)`
+    // panel ichida "Yuborilmoqda..." holatini ko'rsatadi).
+    if (box) { box.setAttribute('data-mode', 'photo'); renderTabs('photo'); }
+    try { f.click(); } catch (e) {}
   }
 
   function pickerOpen(mode, statusHtml) {
-    var p = picker();
-    if (!p) return;
-    p.hidden = false;
-    p.setAttribute('data-mode', mode);
-    p.innerHTML = '<div class="reels-c-picker-body" id="cPickerBody">' + (statusHtml || '') + '</div>';
+    var box = pickerBox();
+    if (!box) return;
+    box.hidden = false;
+    box.setAttribute('data-mode', mode);
+    renderTabs(mode);
+    var p = panel();
+    if (p) p.innerHTML = '<div class="reels-c-picker-body" id="cPickerBody">' + (statusHtml || '') + '</div>';
   }
 
   function pickerStatus(html) {
@@ -2009,11 +2124,13 @@
   }
 
   function toggleSticker() {
-    var p = picker();
+    var box = pickerBox();
+    if (!box) return;
+    box.hidden = false;
+    box.setAttribute('data-mode', 'sticker');
+    renderTabs('sticker');
+    var p = panel();
     if (!p) return;
-    if (!p.hidden && p.getAttribute('data-mode') === 'sticker') { closePicker(); return; }
-    p.hidden = false;
-    p.setAttribute('data-mode', 'sticker');
     p.innerHTML = '<div class="reels-c-picker-head">Stikerlar</div>'
       + '<div class="reels-c-sticker-sets" id="cStickerSets"></div>'
       + '<div class="reels-c-picker-body" id="cPickerBody"><div class="reels-c-empty"><span class="spinner"></span></div></div>';
@@ -2185,11 +2302,13 @@
   }
 
   function toggleGif() {
-    var p = picker();
+    var box = pickerBox();
+    if (!box) return;
+    box.hidden = false;
+    box.setAttribute('data-mode', 'gif');
+    renderTabs('gif');
+    var p = panel();
     if (!p) return;
-    if (!p.hidden && p.getAttribute('data-mode') === 'gif') { closePicker(); return; }
-    p.hidden = false;
-    p.setAttribute('data-mode', 'gif');
     p.innerHTML = '<div class="reels-c-picker-head">GIF</div>'
       + '<div class="reels-c-gif-search">'
       + '<input id="cGifInput" type="text" placeholder="Qidirish (masalan: cat)…" autocomplete="off"></div>'
@@ -2229,11 +2348,13 @@
   }
 
   function toggleMention() {
-    var p = picker();
+    var box = pickerBox();
+    if (!box) return;
+    box.hidden = false;
+    box.setAttribute('data-mode', 'mention');
+    renderTabs('mention');
+    var p = panel();
     if (!p) return;
-    if (!p.hidden && p.getAttribute('data-mode') === 'mention') { closePicker(); return; }
-    p.hidden = false;
-    p.setAttribute('data-mode', 'mention');
     var list = [];
     for (var k in S.users) {
       var u = S.users[k];

@@ -19,25 +19,9 @@
 .tv-send-clip svg { width: 21px; height: 21px; }
 .tv-send-ico svg { width: 21px; height: 21px; }
 
-/* Izohlarda: matn yo'q bo'lganda yumshoq doira (mikrofon), matn bor bo'lganda
-   ko'k doira (yuborish) — chat kompozitori bilan bir xil ko'rinish. */
-.reels-comments-send {
-    display: flex; align-items: center; justify-content: center;
-    width: 40px; padding: 0;
-}
-.reels-comments-send[data-mode="mic"],
-.reels-comments-send[data-mode="attach"] {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--line);
-    width: 40px;
-    padding: 0;
-}
-.reels-comments-send[data-mode="mic"]:hover,
-.reels-comments-send[data-mode="attach"]:hover {
-    background: var(--card-2);
-    color: var(--text);
-}
+/* Izoh kompozitorining yuborish/mikrofon tugmasi endi `reels.css` da —
+   chat kompozitori bilan BIR XIL (`border: 0`, 40x40 doira). Bu faylda
+   faqat ikonka o'lchamlari qoldiriladi. */
 .reels-comments-send[data-mode="mic"] .tv-send-mic svg { width: 21px; height: 21px; }
 .reels-comments-send[data-mode="attach"] .tv-send-clip svg { width: 20px; height: 20px; }
 .reels-comments-send[data-mode="send"] .tv-send-ico svg { width: 20px; height: 20px; }

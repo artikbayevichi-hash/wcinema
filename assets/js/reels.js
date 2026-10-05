@@ -874,9 +874,7 @@
         const list = document.getElementById('commentsList');
         if (list) list.innerHTML = '<div class="reels-c-loading"><span class="spinner"></span></div>';
         const input = document.getElementById('commentInput');
-        if (input) input.value = '';
-        const tools = document.getElementById('cTools');
-        if (tools) tools.hidden = !tgCommentsOn();
+        if (input) { input.value = ''; input.style.height = 'auto'; }
         modal.hidden = false;
         if (tgCommentsOn()) {
             // Izohlar Telegram forum-guruhda (MTProto orqali).
@@ -937,8 +935,27 @@
         const body = (input && input.value ? input.value : '').trim();
         if (!body) return;
         const sent = await postComment(body);
-        if (sent && input) input.value = '';
+        if (sent && input) { input.value = ''; input.style.height = 'auto'; }
     });
+
+    // Kompozitor matn maydoni matn uzunligiga qarab O'SADI (chat kabi).
+    const cinput = document.getElementById('commentInput');
+    if (cinput) {
+        cinput.addEventListener('input', (e) => {
+            const t = e.target;
+            t.style.height = 'auto';
+            t.style.height = Math.min(120, t.scrollHeight) + 'px';
+        });
+        // Shift+Enter -> qator uzilishi; Enter -> yuborish.
+        cinput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.shiftKey) return;
+            e.preventDefault();
+            const f = e.target.form;
+            if (!f) return;
+            if (f.requestSubmit) f.requestSubmit();
+            else f.dispatchEvent(new Event('submit', { cancelable: true }));
+        });
+    }
 
     document.addEventListener('click', async (e) => {
         const del = e.target.closest && e.target.closest('[data-del-comment]');
