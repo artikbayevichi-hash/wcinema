@@ -65,6 +65,7 @@ $selected = null;
 $playback = null;
 $genres   = [];
 $related  = [];
+$relatedHasMore = false;
 $progress = null;
 $hasPlaylist = false;
 
@@ -142,9 +143,20 @@ if ($item) {
         ];
     }
 
-    // "Boshqa kinolar, animelar va multfilmlar" - O'NG PANEL uchun
-    // (qismlar bo'lsa ular ostida, bo'lmasa o'zida).
-    foreach ($catalog->getRelated($item, 14) as $r) {
+    /* Yon paneldagi aralash tavsiyalar - YouTube uslubidagi LAZY LOAD.
+     *
+     * Barchasini bir marta yubarmaslik kerak: sahifa tez ochilishi uchun
+     * faqat BIR sahifa (RELATED_PAGE_SIZE) yuboriladi, qolgani
+     * `api/related.php` orqali foydalanuvchi pastga tushganda keladi.
+     *
+     * `has_more` uchun `limit + 1` so'raymiz: qo'shimcha qator bo'lsa yana
+     * sahifa bor (qo'shimcha `COUNT(*)` so'rovi kerak bo'lmaydi). */
+    $relRows     = $catalog->getRelated($item, RELATED_PAGE_SIZE + 1, 0);
+    $relatedHasMore = count($relRows) > RELATED_PAGE_SIZE;
+    if ($relatedHasMore) {
+        array_pop($relRows);
+    }
+    foreach ($relRows as $r) {
         $related[] = $catalog->toPublicArray($r, $userId);
     }
 
@@ -175,6 +187,10 @@ $WATCH = [
     'progress'  => $progress,
     'hasPlaylist' => $hasPlaylist,
     'related'   => $related,
+    // Lazy load uchun holat: nechta yuklandi, yana bormi.
+    'relatedOffset'   => count($related),
+    'relatedHasMore'  => $relatedHasMore,
+    'relatedPageSize' => RELATED_PAGE_SIZE,
 ];
 
 $NAV_ACTIVE = 'home';
@@ -202,6 +218,30 @@ $NAV_ACTIVE = 'home';
     <link rel="stylesheet" href="assets/css/tg-format.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-format.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/voice.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/voice.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/watch.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/watch.css') ?: 1; ?>">
+    <?php /* GramJS bundle'ni OLDINDAN yuklash (735 KB siqilgan).
+
+        Bu sahifadagi eng katta va eng sekin kutiladigan manba. Odatda u
+        `tg-stream.js` dan KEYIN, `<body>` oxiridagi inline qizdirish bloki
+        ishga tushgandagina so'raladi — ya'ni 8 ta CSS, 45 KB HTML va
+        `tg-probe.js` (29 KB) parser'dan o'tguncha kutadi.
+
+        Preload shu kutishni yo'q qiladi: yuklab olish HTML bilan PARALLEL
+        boshlanadi. Manzil `tg-stream.js` dagi `bundleGz()` hosil qiladigan
+        manzil bilan AYNAN bir xil bo'lishi shart (`window.APP.base` +
+        `/assets/js/tg-client.bundle.js.gz`), aks holda brauzer keshdan
+        topa olmaydi va fayl IKKI MARTA yuklanadi — shuning uchun bu yerdagi
+        `base` ham `$WATCH['base']` dan olinadi, qo'lda yozilmaydi.
+
+        `crossorigin="anonymous"` shart, chunki `loadBundle()` faylni
+        `fetch(url, { credentials: 'same-origin' })` bilan oladi. Preload
+        rejimi shunga mos kelmasa brauzer keshni ishlatmaydi.
+
+        CSS'lardan KEYIN qo'yilgan: uslublar render'ni bloklagani uchun
+        ular birinchi bo'lib o'tishi kerak, aks holda sahifa ko'rinishi
+        kechikadi. Bu sahifaga kirish uchun MTProto kaliti shart
+        (`includes/nav.php` dagi guard), ya'ni bundle BEKOR yuklanmaydi. */ ?>
+    <link rel="preload" as="fetch" crossorigin="anonymous"
+          href="<?php echo htmlspecialchars($WATCH['base'], ENT_QUOTES); ?>/assets/js/tg-client.bundle.js.gz">
 </head>
 <body class="ig-shell watch-body">
 
@@ -221,7 +261,7 @@ $NAV_ACTIVE = 'home';
     <?php /* YouTube uslubidagi 2 USTUNLI freymvork (batafsil watch.css):
                CHAP  (~73%) -> video + sarlavha/statistika + IZOHLAR
                O'NG  (~27%) -> QISMLAR (faqat anime/serial) va uning ostida
-                               "Boshqa kinolar, animelar va multfilmlar"
+                               aralash tavsiyalar (sarlavhasiz, lazy load)
 
              Yon panel HAR DOIM chiziladi. Kino/multfilmda qismlar bloki
              `hidden` bo'ladi va tavsiyalar butun o'ng ustunni egallaydi -
@@ -314,11 +354,19 @@ $NAV_ACTIVE = 'home';
                   `hidden` = faqat kino/multfilmda; shunda panel butunlay
                   tavsiyalarga qoladi. Ro'yxat VERTIKAL skroll qilinadi
                   (`max-height` bilan cheklangan - panel ekrandan oshmasin).
-               2) `#watchSideRecBlock` — "Boshqa kinolar, animelar va
-                  multfilmlar" aralash tavsiyalar. HAR DOIM ko'rinadi:
-                  qismlar bo'lsa ularning ostida, bo'lmasa o'zida.
+                  Tepasida QISM RAQAMI kiritish maydoni: raqam yozilib
+                  Enter bosilsa, shu qism darhol ochiladi (YouTube playlist
+                  "jump to episode" odati).
 
-             Ikkalasi ham o'z ichida alohida aylantiriladi (watch.css). -->
+               2) `#watchSideRecBlock` — aralash tavsiyalar (kino + anime +
+                  multfilm). SARLAVHASI YO'Q (YouTube'dagi kabi ro'yxat
+                  sarlavhasiz) va ICHKI SKROLLI YO'Q: u izohlar bilan birga
+                  sahifa bo'ylab pastga ketadi. Pastga tushgan sayin
+                  `IntersectionObserver` orqali keyingi sahifa yuklanadi
+                  (`api/related.php`) - shuning uchun ro'yxat uzayib boradi.
+
+             Ikkala blok ham `watch.css` da: qismlar vertikal skroll bilan,
+             tavsiyalar esa oqimda (o'z ichida aylantirilmaydi). -->
         <aside class="watch-side" id="watchSide">
 
             <section class="watch-side-block watch-side-eps"
@@ -326,16 +374,25 @@ $NAV_ACTIVE = 'home';
                 <header class="watch-side-head">
                     <div class="watch-side-title" id="watchSideTitle">Qismlar</div>
                     <div class="watch-side-count" id="watchSideCount"></div>
+                    <form class="watch-ep-find" id="watchEpFind" autocomplete="off">
+                        <span class="watch-ep-find-ic" aria-hidden="true">🔎</span>
+                        <input class="watch-ep-find-in" id="watchEpFindInput" type="text"
+                               inputmode="numeric" placeholder="Qism raqami…"
+                               aria-label="Qism raqamini yozing va Enter bosing"
+                               maxlength="6">
+                        <button class="watch-ep-find-go" type="submit" aria-label="Shu qismga o'tish">↵</button>
+                    </form>
                 </header>
                 <div class="watch-side-list" id="watchSideList"></div>
             </section>
 
             <section class="watch-side-block watch-side-rec" id="watchSideRecBlock">
-                <header class="watch-side-head">
-                    <div class="watch-side-title">Boshqa kinolar, animelar va multfilmlar</div>
-                    <div class="watch-side-count" id="watchSideRecCount">kino · anime · multfilm</div>
-                </header>
                 <div class="watch-side-list" id="watchSideRecList"></div>
+                <!-- Lazy load "ruxsat beruvchi": ko'rinishga kirganda
+                     `api/related.php` dan keyingi sahifa so'raladi. -->
+                <div class="watch-rec-more" id="watchRecMore" hidden>
+                    <span class="watch-rec-spin" aria-hidden="true"></span>
+                </div>
             </section>
 
         </aside>
@@ -386,8 +443,50 @@ $NAV_ACTIVE = 'home';
 </script>
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
-<script src="assets/js/tv-mode.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tv-mode.js') ?: 1; ?>" defer></script>
-<script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/notifications.js') ?: 1; ?>" defer></script>
+<script>
+    // Telegram quvurini SHU YERDA — qolgan skriptlardan OLDIN — qizdiramiz.
+    //
+    // Nima uchun aynan bu joy: videoni ochadigan `watch.js` `DOMContentLoaded`
+    // ni kutadi, u esa ostidagi 6 ta skript (~210 KB) yuklanib bo'lgachgina
+    // yonadi. Quyidagi uch ish esa ularga bog'liq emas va eng og'ir qismi
+    // (GramJS bundle 735 KB + Telegram DC'ga ulanish) aynan shu kutish
+    // oynasida bemalol ulguradi:
+    //
+    //   init()   — Service Worker'ni ro'yxatdan o'tkazadi (reload QILMAYDI).
+    //   warm()   — SW'ni sahifaga "homiylash" qiladi. Bu muhim: aks holda
+    //              birinchi marta video ochilganda `ensureWorker()` sahifani
+    //              QAYTA YUKLAYDI (brauzer qoidasi: yangi o'rnatilgan SW o'z
+    //              sahifasini keyingi yuklanishdagina boshqaradi).
+    //   verify() — GramJS'ni yuklab, saqlangan kalit bilan Telegram'ga jim
+    //              ulanadi (`getMe`). Login oqimini BOSHLAMAYDI: kalit yo'q
+    //              yoki yaroqsiz bo'lsa shunchaki reject qiladi va uni
+    //              pastda ushlaymiz — haqiqiy kirishni `mount()` o'zi haladi.
+    //
+    // `index.php`, `reels.php` va `chat.php` da bu allaqachon bor edi; videolar
+    // alohida `watch.php` sahifasiga ko'chirilgach bu sahifa e'tibordan
+    // chiqib qolgan. Uchala chaqiruv ham ichki holatni (`S.reg`,
+    // `S.connecting`) bir marta ishlatadi, shuning uchun keyinroq `mount()`
+    // ularni takrorlamaydi — tayyor natijani oladi.
+    if (window.TgStream) {
+        try { window.TgStream.init(); } catch (e) {}
+        if (window.TgStream.warm) { try { window.TgStream.warm(); } catch (e) {} }
+        if (window.TgStream.hasSession && window.TgStream.hasSession()) {
+            try { window.TgStream.verify().catch(function () {}); } catch (e) {}
+        }
+    }
+</script>
+<?php /* OLIB TASHLANGAN: tv-mode.js va notifications.js (defer)
+
+   Ikkalasi allaqachon `includes/nav.php` da yuklanadi (bu sahifa uni
+   208-qatorda majburiy `require` qiladi). Ikki marta yuklash faqat ~30 KB
+   va parse vaqtini yo'qotish emas edi — ikkala modul ham himoyasiz IIFE,
+   ya'ni `boot()` / `init()` IKKI MARTA ishlar va D-Pad tugmalari ikki
+   marta ulanib, bitta bosishda fokus ikki qadam surilardi.
+
+   Yo'qotish yo'q: ikkala modul ham `document.readyState === 'loading'`
+   bo'lsa `DOMContentLoaded` ni kutadi, shuning uchun nav.php nusxasi ham
+   aynan shu vaqtda ishga tushadi — faqat yuklab olish va parse biroz
+   oldinroq sodir bo'ladi. */ ?>
 <script src="assets/js/tg-voice.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-voice.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-format.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-format.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-emoji.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-emoji.js') ?: 1; ?>"></script>

@@ -7,9 +7,11 @@
      2) Izohlar - `tg-comments.js` moduli (stiker/emoji/GIF/rasm/@ + like,
         reply, o'chirish). Faqat mavzu endpointi boshqa (`api/video-topic.php`).
      3) Yon panel (YouTube kanal sahifasi kabi, ikki blok):
-        - QISMLAR (faqat serial/anime, vertikal skroll);
-        - "Boshqa kinolar, animelar va multfilmlar" aralash tavsiyalar -
-          qismlar bo'lsa ularning ostida, bo'lmasa yon panelning o'zida.
+        - QISMLAR (faqat serial/anime, vertikal skroll) + qism raqami
+          kiritish maydoni (Enter -> shu qismga sakrash);
+        - aralash tavsiyalar - SARLAVHASIZ, ichki skrollsiz; izohlar
+          bilan birga pastga ketadi va `IntersectionObserver` orqali
+          pastga tushgan sayin keyingi sahifa yuklanadi (`api/related.php`).
 
     DIQQAT: bu sahifada CHAT yo'q (`tg-chat.js` ham yuklanmaydi) - chat
     alohida `chat.php` sahifasida.
@@ -37,6 +39,12 @@
     selectedId: Number(W.selectedId) || 0,
     playback:  W.playback || null,
     related:   W.related || [],
+    // Lazy load holati: nechta yuklandi, yana bormi, so'rov yuborilayotganmi.
+    // Boshlang'ich ma'lumot `watch.php` dan keladi (bir sahifa), qolgani
+    // `api/related.php` dan - foydalanuvchi pastga tushganda.
+    relOffset: Number(W.relatedOffset) || 0,
+    relMore:   !!W.relatedHasMore,
+    relBusy:   false,
     genres:    W.genres || [],
     // Yon panelda nima ko'rinadi: qismlar (true) yoki tavsiyalar (false).
     // `hasPlaylist` serverda hisoblanadi (film -> tavsiyalar, anime -> qismlar).
@@ -591,20 +599,25 @@
   /* Yon panel YouTube kanal sahifasi kabi IKKI blokdan iborat:
 
        1) `watchSideEpBlock`  - QISMLAR. Faqat serial/animedda
-                                  (`hasPlaylist`); o'z ichida vertikal skroll.
-       2) `watchSideRecBlock` - "Boshqa kinolar, animelar va multfilmlar".
-                                  Har doim ko'rinadi: qismlar bo'lsa
-                                  ularning ostida, yo'q bo'lsa yon panelning
-                                  o'zida (kino/multfilm).
+                                  (`hasPlaylist`); o'z ichida vertikal
+                                  skroll. Tepasida qism raqami kiritish
+                                  maydoni (`.watch-ep-find`).
+       2) `watchSideRecBlock` - aralash tavsiyalar (kino + anime +
+                                  multfilm). SARLAVHASI YO'Q va ichki
+                                  skrolli yo'q: izohlar bilan birga
+                                  sahifa bo'ylab pastga ketadi.
 
      Film/multfilmda 1-blok `hidden` bo'ladi, 2-blok butun joyni oladi -
-     bo'sh o'ng ustun hech qachon qolmaydi. */
+     bo'sh o'ng ustun hech qachon qolmaydi.
+
+     Tavsiyalar LAZY LOAD qilinadi: dastlab `watch.php` bir sahifani
+     beradi, qolgani `loadMoreRelated()` orqali (`api/related.php`)
+     foydalanuvchi ro'yxat oxiriga yetganda yuklanadi. */
   function renderSide() {
     var epBlock = el('watchSideEpBlock');
     var list    = el('watchSideList');
     var count   = el('watchSideCount');
     var recList = el('watchSideRecList');
-    var recCnt  = el('watchSideRecCount');
 
     // --- 1) Qismlar
     if (list) {
@@ -612,24 +625,180 @@
         if (count) count.textContent = S.episodes.length + ' ta';
         list.innerHTML = S.episodes.length
           ? S.episodes.map(epRow).join('')
-          : '<div class="watch-side-empty">Qismlar hali qo‘shilmagan</div>';
+          : '<div class="watch-side-empty">Qismlar hali qo\u2018shilmagan</div>';
       } else {
         list.innerHTML = '';
       }
     }
     if (epBlock) epBlock.hidden = !S.sideEpisodes;
 
-    // --- 2) Tavsiyalar
+    // --- 2) Tavsiyalar (sarlavhasiz, YouTube sidebar uslubida)
     if (recList) {
       recList.innerHTML = S.related.length
         ? S.related.map(recRow).join('')
-        : '<div class="watch-side-empty">Hozircha tavsiya yo‘q</div>';
+        : '<div class="watch-side-empty">Hozircha tavsiya yo\u2018q</div>';
     }
-    if (recCnt) {
-      recCnt.textContent = S.related.length
-        ? S.related.length + ' ta · kino · anime · multfilm'
-        : 'kino · anime · multfilm';
+    syncRecMore();
+  }
+
+  /* O'quvchi (spinner) ko'rinishini holatga moslaydi: faqat "yana bor"
+     degan paytdagina ko'rinadi. */
+  function syncRecMore() {
+    var more = el('watchRecMore');
+    if (!more) return;
+    more.hidden = !(S.relMore && !S.relBusy);
+  }
+
+  /** Keyingi sahifa tavsiyalarni yuklaydi (YouTube uslubidagi lazy load). */
+  function loadMoreRelated() {
+    // Qayta-qayta so'rov yuborilmasin (sentinel ko'rinishda tursa).
+    if (!S.relMore || S.relBusy) return;
+    // chegaraga urish himoyasi: cheksiz o'sishni to'xtatamiz.
+    if (S.related.length >= 60) { S.relMore = false; syncRecMore(); return; }
+    S.relBusy = true;
+    syncRecMore();
+
+    api('/api/related.php?id=' + encodeURIComponent(D.id)
+        + '&offset=' + encodeURIComponent(S.relOffset))
+      .then(function (d) {
+        var items = d.items || [];
+        // Joriy kontent tasoddan qaytib kelsa, uni ko'rsatmaymiz.
+        var fresh = items.filter(function (c) { return Number(c.id) !== Number(D.id); });
+        S.related = S.related.concat(fresh);
+        S.relOffset += items.length;
+        S.relMore   = !!d.has_more && items.length > 0;
+        var recList  = el('watchSideRecList');
+        if (recList && fresh.length) {
+          var empty = recList.querySelector('.watch-side-empty');
+          if (empty) empty.remove();
+          recList.insertAdjacentHTML('beforeend', fresh.map(recRow).join(''));
+        }
+      })
+      .catch(function () {
+        // Xatoda "yana bor" ni o'chiriramiz - aks holda har scroll'da
+        // bir xil so'rov takrorlanib, spinner o'zi osilib qolardi.
+        S.relMore = false;
+      })
+      .finally(function () {
+        S.relBusy = false;
+        syncRecMore();
+        /* Ro'yxat uzaydi. Agar sentinel endi ham ekranda qolsa
+           (foydalanuvchi allaqachon sahifa pastida turibdi, yoki
+           bitta qadamda ko'p qator sig'di) - davom ettiramiz.
+           Aks holda keyingi `scroll` hodisasi bilan yuklanardi, lekin
+           foydalanuvchi qo'lda scroll qilmasa (touchpad, D-Pad)
+           ro'yxat yarim bo'lib qolardi. */
+        if (S.relMore && recMoreNear()) {
+          setTimeout(loadMoreRelated, 220);
+        }
+      });
+  }
+
+  /** Sentinel ekrana yaqinlashdimi? (ikkala usul ham shuni tekshiradi) */
+  function recMoreNear() {
+    var more = el('watchRecMore');
+    if (!more) return false;
+    var r = more.getBoundingClientRect();
+    var vh = global.innerHeight || document.documentElement.clientHeight;
+    // 400px - foydalanuvchi scroll boshganda ham vaqtincha bo'sh joy bo'ladi
+    return r.top <= vh + 400 && r.bottom >= -400;
+  }
+
+  /** Sentinel ko'rinishga yaqinlashganda keyingi sahifani yuklaydi. */
+  function initRecObserver() {
+    var more = el('watchRecMore');
+    if (!more) return;
+    syncRecMore();
+    if (!S.relMore) return;
+
+    // 1) Asosiy usul: IntersectionObserver (barcha zamonaviy brauzerlar).
+    if (typeof global.IntersectionObserver === 'function') {
+      var io = new global.IntersectionObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (entries[i].isIntersecting) loadMoreRelated();
+        }
+      }, { rootMargin: '400px 0px' });
+      io.observe(more);
     }
+
+    /* 2) Zaxira usul: `scroll` hodisasi + o'lcham o'zgarishi.
+       Ba'zi muhitlarda (ayrim TV brauzerlari, WebView'lar, avtomatlashtirilgan
+       muhitlar) `IntersectionObserver` callback umuman yuborilmaydi - shunda
+       ro'yxat to'liq bo'lib qolmaydi. `scroll` bilan xuddi shu natijaga
+       erishamiz.
+
+       Throttle uchun `requestAnimationFrame` emas, `setTimeout` ishlatiladi:
+       rAF yashirin (background) tab'lar va avtomatlashtirilgan muhitlarda
+       butunlay ishlamaydi - u holda zaxira yo'limiz ham o'lib qolardi.
+       120ms chastota foydalanuvchi uchun sezilmaydi. */
+    var ticking = false;
+    function check() {
+      if (ticking) return;
+      ticking = true;
+      setTimeout(function () {
+        ticking = false;
+        if (S.relMore && !S.relBusy && recMoreNear()) loadMoreRelated();
+      }, 120);
+    }
+    global.addEventListener('scroll', check, { passive: true });
+    global.addEventListener('resize', check, { passive: true });
+
+    // Sahifa allaqachon pastda bo'lsa (qaytib kelganda) - darhol tekshiramiz.
+    check();
+  }
+
+  /* --------------------------------------------------------- QISM RAQAMI
+     YouTube playlist'idagi "jump to episode" odati: maydonga raqam
+     yoziladi, Enter bosiladi -> shu qism darhol ochiladi. Kiritish
+     paytida ro'yxat ham filtrlanadi (faqat mos qismlar qoladi) -
+     YouTube'dagi playlist qidiruviga o'xshaydi. */
+  function epMatches(e, q) {
+    if (!q) return true;
+    return String(e.number) === q
+        || String(e.id) === q
+        || (e.title || '').toLowerCase().indexOf(q) !== -1;
+  }
+
+  /** Kiritilgan so'zga mos qismlarni ko'rsatadi (bo'sh -> to'liq ro'yxat). */
+  function filterEpisodes() {
+    var list = el('watchSideList');
+    if (!list || !S.sideEpisodes) return;
+    var inp = el('watchEpFindInput');
+    var raw = inp ? inp.value.trim() : '';
+    var q = raw.toLowerCase();
+    var rows = q
+      ? S.episodes.filter(function (e) { return epMatches(e, q); })
+      : S.episodes;
+    list.innerHTML = rows.length
+      ? rows.map(epRow).join('')
+      : '<div class="watch-side-empty">' + esc(raw) + ' topilmadi</div>';
+  }
+
+  function initEpFind() {
+    var form = el('watchEpFind');
+    var inp  = el('watchEpFindInput');
+    if (!form || !inp) return;
+
+    inp.addEventListener('input', filterEpisodes);
+    // iOS "x" tugmasi - ikkala holatda ham filtr yangilanadi.
+    inp.addEventListener('search', filterEpisodes);
+
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var raw = inp.value.trim();
+      var q = raw.toLowerCase();
+      if (!q) return;
+      var ep = q ? S.episodes.filter(function (e) { return epMatches(e, q); })[0] : null;
+      if (!ep) {
+        toast('"' + raw + '" qismi topilmadi');
+        return;
+      }
+      // Maydoni tozalab, ro'yxatni to'liq holatga qaytaramiz.
+      inp.value = '';
+      filterEpisodes();
+      inp.blur();
+      switchEpisode(Number(ep.id) || 0);
+    });
   }
 
   // ================================================================= IZOH
@@ -780,6 +949,8 @@
     renderSide();
     mountPlayer();
     bindSideClicks();
+    initEpFind();
+    initRecObserver();
     initComments();
 
     // Qism almashtirilganda skroll yuqoriga qaytadi.
@@ -817,6 +988,8 @@
     state: S,
     mountPlayer: mountPlayer,
     renderSide: renderSide,
+    loadMoreRelated: loadMoreRelated,
+    filterEpisodes: filterEpisodes,
     switchEpisode: switchEpisode
   };
 })(window);

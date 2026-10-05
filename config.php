@@ -300,6 +300,16 @@ define('CATALOG_PAGE_SIZE', 24);
 // Boshlang'ich ekranda ko'rsatiladigan film/qismlar soni
 define('CATALOG_HOME_LIMIT', 12);
 
+// ---------------------------------------------------------------------------
+// Ko'rish sahifasi (watch.php) yon panelidagi tavsiyalar
+// ---------------------------------------------------------------------------
+// YouTube uslubidagi lazy load: `watch.php` dastlab shuncha tavsiya yuboradi,
+// qolgani `api/related.php` orqali foydalanuvchi pastga tushganda keladi.
+define('RELATED_PAGE_SIZE', 5);
+
+// Umurida eng ko'p nechta yuklanishi mumkin ( chegaraga urish himoyasi)
+define('RELATED_MAX_ITEMS', 60);
+
 // Faqat mashhur (views bo'yicha) kontentni oldinga o'tkazish
 define('TRENDING_MIN_VIEWS', 1);
 

@@ -198,9 +198,11 @@ class Catalog {
      *
      * @param array|int $content  Kontent qatori yoki uning ID'si
      * @param int       $limit    Qancha tavsiya kerak
+     * @param int       $offset   Qayerdan boshlash (YouTube uslubidagi
+     *                             "pastga tushsa yana yuklanadi" uchun)
      * @return array  `listContent()` formatidagi satrlar
      */
-    public function getRelated($content, $limit = 12) {
+    public function getRelated($content, $limit = 12, $offset = 0) {
         if (is_numeric($content)) {
             $content = $this->getContent((int) $content);
         }
@@ -209,7 +211,8 @@ class Catalog {
         }
         $selfId     = (int) $content['id'];
         $categoryId = (int) ($content['category_id'] ?? 0);
-        $limit = max(1, (int) $limit);
+        $limit  = max(1, (int) $limit);
+        $offset = max(0, (int) $offset);
 
         // `same_cat` - o'xshash avval, qolganlari keyin. Reyting bo'yicha
         // aralashlik shu sababli buzilmaydi.
@@ -222,17 +225,22 @@ class Catalog {
              WHERE c.id <> ?
                AND c.status = 'published'
              ORDER BY same_cat ASC, c.rating DESC, c.views DESC, c.id DESC
-             LIMIT ?",
-            [$categoryId, $selfId, $limit]
+             LIMIT ? OFFSET ?",
+            [$categoryId, $selfId, $limit, $offset]
         );
 
-        if (!$rows) {
+        /* Zaxira yo'l: bitta ham tavsiya topilmasa (baza juda kichik) -
+           mashhurlarni qaytaramiz. `offset` bu yerda ham hisobga olinadi,
+           aks holda har sahifada bir xil qatorlar qaytadi va foydalanuvchi
+           "pastga tushsa ham o'zgarish yo'q" deb o'ylaydi. */
+        if (!$rows && $offset === 0) {
             $rows = array_values(array_filter(
-                $this->listContent(['sort' => 'popular', 'limit' => $limit]),
+                $this->listContent(['sort' => 'popular', 'limit' => $limit + $offset]),
                 function ($c) use ($selfId) {
                     return (int) $c['id'] !== $selfId;
                 }
             ));
+            $rows = array_slice($rows, $offset, $limit);
         }
         return $rows;
     }

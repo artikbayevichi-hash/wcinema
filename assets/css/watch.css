@@ -193,33 +193,29 @@
     1) `.watch-side-eps` -> "Qismlar" kassetasi.
        FAQAT anime/serial (`hasPlaylist`); kino/multfilmda blok butunlay
        `hidden` bo'ladi. Ro'yxat VERTIKAL skroll qilinadi va balandligi
-       `max-height` bilan cheklangan (panel oshib ketmasin).
-    2) `.watch-side-rec` -> "Boshqa kinolar, animelar va multfilmlar".
-       Har doim ko'rinadi: qismlar bo'lsa ularning OSTIDA, qismlar
-       bo'lmasa - to'g'ridan-to'g'ri panelli.
+       `max-height` bilan cheklangan (panel ekrandan oshmasin).
+       Tepasida qism raqami kiritish maydoni (`.watch-ep-find`).
 
-  Panel o'zi sticky va ekran balandligiga sig'adigan; har bir blok o'z
-  ro'yxatini ALOHIDA aylantiradi.
+    2) `.watch-side-rec` -> aralash tavsiyalar (kino + anime + multfilm).
+       SARLAVHASI va ICHKI SKROLLI YO'Q: ro'yxat izohlar bilan birga
+       sahifa bo'ylab pastga ketadi (YouTube'dagi kabi), foydalanuvchi
+       pastga tushgan sayin `watch.js` keyingi sahifani yuklaydi
+       (`api/related.php`) va ro'yxat uzayib boradi.
+
+  Panel o'zi sticky EMAS - aylanmaydi, aks holda izohlar bilan birga
+  pastga ketishi to'xtagan bo'lardi.
 */
 .watch-side {
-    position: sticky; top: 12px;
-    max-height: calc(100dvh - 24px);
     display: flex; flex-direction: column;
     background: var(--bg-2);
     border: 1px solid var(--line);
     border-radius: 14px;
     overflow: hidden;
 }
-/* Blok ichida sarlavha (qimirilmaydi) + skroll ro'yxat. */
 .watch-side-block {
     display: flex; flex-direction: column;
-    min-height: 0; overflow: hidden;
+    min-height: 0;
 }
-/* Qismlar bloki - kasseta balandligi ekranning yarmini oshirmaydi. */
-.watch-side-eps { flex: 0 1 auto; }
-/* Tavsiyalar bloki qolgan bo'sh joyni oladi (qismlar bo'lmasa - butun panel). */
-.watch-side-rec { flex: 1 1 auto; }
-/* Qismlar bloki yashirilganda chegara chizig'i kerak emas. */
 .watch-side-eps[hidden] { display: none; }
 /* chegarasi faqat ikkala blok KO'RINSA (kino/multfilmda faqat bitta blok -
    u holda chegara panelning o'z chegarasi bilan ustma-ust tushardi). */
@@ -232,22 +228,71 @@
 .watch-side-title { font-size: 14.5px; font-weight: 800; color: var(--text); }
 .watch-side-count { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-/* Asosiy talab: balandga-pastga skroll. */
+/* --- QISM RAQAMI kiritish maydoni -------------------------------
+   YouTube playlist'idagi "jump to episode" odati: foydalanuvchi raqam
+   yozadi va Enter bosadi -> shu qism darhol ochiladi. Kiritish
+   paytida ro'yxat ham filtrlanadi (mos qismlar qoladi). */
+.watch-ep-find {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 9px; padding: 0 8px 0 9px;
+    height: 34px; border-radius: 10px;
+    background: var(--card-2); border: 1px solid var(--line);
+    transition: border-color .14s ease, background .14s ease;
+}
+.watch-ep-find:focus-within {
+    border-color: var(--accent);
+    background: var(--card);
+}
+.watch-ep-find-ic { font-size: 13px; opacity: .65; flex: 0 0 auto; }
+.watch-ep-find-in {
+    flex: 1 1 auto; min-width: 0;
+    background: none; border: 0; outline: none;
+    color: var(--text); font: inherit; font-size: 13px; font-weight: 600;
+    font-family: inherit;
+}
+.watch-ep-find-in::placeholder { color: var(--muted); font-weight: 500; }
+.watch-ep-find-go {
+    flex: 0 0 auto; width: 22px; height: 22px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 7px; cursor: pointer;
+    background: var(--line); color: var(--muted);
+    font-size: 13px; font-weight: 800; line-height: 1;
+    font-family: inherit;
+    transition: background .13s ease, color .13s ease;
+}
+.watch-ep-find-go:hover { background: var(--accent); color: #fff; }
+
+/* Asosiy talab: qismlar ro'yxati balandga-pastga aylanadi. */
 .watch-side-list {
-    flex: 1 1 auto; min-height: 0;
-    overflow-y: auto; -webkit-overflow-scrolling: touch;
     padding: 8px;
     display: flex; flex-direction: column; gap: 6px;
-    scrollbar-width: thin;
 }
 /* Qismlar kassetasi: max-height + vertikal skroll (YouTube playlist oynasi). */
-.watch-side-eps .watch-side-list { max-height: min(46dvh, 430px); }
-/* Tavsiyalar bloki qolgan bo'sh joyni oladi. */
-.watch-side-rec .watch-side-list { max-height: none; }
-.watch-side-list::-webkit-scrollbar { width: 6px; }
-.watch-side-list::-webkit-scrollbar-thumb {
+.watch-side-eps .watch-side-list {
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    max-height: min(46dvh, 430px);
+    scrollbar-width: thin;
+}
+.watch-side-eps .watch-side-list::-webkit-scrollbar { width: 6px; }
+.watch-side-eps .watch-side-list::-webkit-scrollbar-thumb {
     background: var(--line); border-radius: 99px;
 }
+/* Tavsiyalar: ICHKI SKROLL YO'Q - oqimda o'sadi, sahifa bilan birga
+   aylanadi (izohlar kabi). */
+.watch-side-rec .watch-side-list { overflow: visible; max-height: none; }
+
+/* --- Lazy load indikatori (`IntersectionObserver` nishoni) --------- */
+.watch-rec-more {
+    display: flex; align-items: center; justify-content: center;
+    padding: 14px 0 16px;
+}
+.watch-rec-more[hidden] { display: none; }
+.watch-rec-spin {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2.5px solid var(--line); border-top-color: var(--accent);
+    animation: watch-spin .7s linear infinite;
+}
+@keyframes watch-spin { to { transform: rotate(360deg); } }
 
 /* --- Qism (episod) qatori: YouTube playlist kabi --- */
 .watch-ep {
@@ -292,10 +337,12 @@
 }
 .watch-ep-seen { color: var(--accent); font-weight: 700; }
 
-/* --- Yon paneldagi TAVSIYA qatori (aralash kino/anime/multfilm) --- */
+/* --- Yon paneldagi TAVSIYA qatori (aralash kino/anime/multfilm) ---
+   Hajmlar oldingisiga nisbatan KATTALASHTIRILGAN (YouTube sidebar
+   qatorlariga yaqin): rasm 146px, sarlavha 14.5px, meta 12.5px. */
 .watch-rec {
-    display: flex; gap: 9px; align-items: center;
-    padding: 6px; border-radius: 11px;
+    display: flex; gap: 10px; align-items: center;
+    padding: 7px; border-radius: 11px;
     background: transparent; border: 1px solid transparent;
     cursor: pointer; font-family: inherit; text-align: left; width: 100%;
     color: var(--text);
@@ -304,18 +351,18 @@
 }
 .watch-rec:hover { background: var(--card-2); }
 .watch-rec-thumb {
-    flex: 0 0 auto; width: 118px; aspect-ratio: 16 / 9;
-    border-radius: 8px; overflow: hidden;
+    flex: 0 0 auto; width: 146px; aspect-ratio: 16 / 9;
+    border-radius: 9px; overflow: hidden;
     background: var(--card-2); position: relative;
 }
 .watch-rec-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .watch-rec-text { flex: 1 1 auto; min-width: 0; }
 .watch-rec-ttl {
-    font-size: 12.8px; font-weight: 700; line-height: 1.3;
+    font-size: 14.5px; font-weight: 700; line-height: 1.32;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden; word-break: break-word;
 }
-.watch-rec-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.watch-rec-meta { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 
 .watch-side-empty {
     padding: 26px 14px; text-align: center;
@@ -327,11 +374,11 @@
    panel statik bo'lib, sahifa oxirida (order: 2) ko'rinadi. */
 @media (max-width: 1040px) {
     .watch-grid { grid-template-columns: minmax(0, 1fr); }
-    /* Mobil'da panel sticky emas va balandlik cheklovisiz - ichki skroll
-       mobil'da qulay bo'lmaydi. */
-    .watch-side { position: static; max-height: none; order: 2; }
+    /* Mobil'da panel ikkinchi ustunga (izohlardan keyin) tushadi. */
+    .watch-side { order: 2; }
+    /* Qismlar kassetasi mobil'da ham vertikal skroll qoladi - 100+ qismli
+       serialda butun ro'yxat ekranni to'ldirib yuboradi. */
     .watch-side-eps .watch-side-list { max-height: 60dvh; }
-    .watch-side-rec .watch-side-list { max-height: none; }
 }
 @media (max-width: 560px) {
     .ig-page.watch-page { padding: 10px; }
@@ -339,7 +386,10 @@
     .watch-player { border-radius: 10px; }
     .watch-side-head { padding: 10px 12px; }
     .watch-comments-list { max-height: 460px; }
-    .watch-side-eps .watch-side-list { max-height: none; }
+    /* Tor ekranda kenglik kam bo'lgani uchun rasm ham kichrayadi. */
+    .watch-rec-thumb { width: 132px; }
+    .watch-rec-ttl { font-size: 13.5px; }
+    .watch-rec-meta { font-size: 12px; }
 }
 
 /* ============================================================ SMART TV */
@@ -356,14 +406,19 @@
 .tv-mode .watch-side-title { font-size: 19px; }
 .tv-mode .watch-side-count { font-size: 14px; }
 .tv-mode .watch-side-head { padding: 16px 18px; }
+/* Qism raqami maydoni pult bilan boshqariladi: input fokus oladi,
+   `.watch-ep-find-go` esa Enter o'rniga bosiladi. */
+.tv-mode .watch-ep-find { height: 44px; }
+.tv-mode .watch-ep-find-in { font-size: 16px; }
+.tv-mode .watch-ep-find-go { width: 30px; height: 30px; font-size: 16px; }
 .tv-mode .watch-ep,
 .tv-mode .watch-rec { padding: 10px; }
 .tv-mode .watch-ep-thumb { width: 150px; }
-.tv-mode .watch-rec-thumb { width: 168px; }
+.tv-mode .watch-rec-thumb { width: 200px; }
 .tv-mode .watch-ep-ttl,
-.tv-mode .watch-rec-ttl { font-size: 15px; }
+.tv-mode .watch-rec-ttl { font-size: 16px; }
 .tv-mode .watch-ep-meta,
-.tv-mode .watch-rec-meta { font-size: 13px; }
+.tv-mode .watch-rec-meta { font-size: 14px; }
 /* Fokus halqasi kartochkadagi kabi ko'rinarli bo'lishi uchun rasmga ham
    chegara qo'yamiz (`tv.css` dagi umumiy `:focus` chizig'i yetarli, lekin
    pult bilan qadam qadam yurishda ajralishi qulay). */
