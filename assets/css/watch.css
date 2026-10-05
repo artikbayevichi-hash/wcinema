@@ -279,6 +279,19 @@
         padding: 0;
         box-shadow: none;
     }
+
+    /* --- TAYYORLASH PANELI (`.tgs-prep`) — ixchamlashtirish.
+       Panel pastda shisha qatlamda turadi (QISM 6), lekin uning
+       uzun IZOH matni (`.tgs-prep-note`) telefon ekranida shisha
+       yuzani deyarli butunlay yopib qo'yadi: o'lchilgan holda panel
+       117px chiqib, pleerning yarimdan ko'prog'ini (pleer atigi
+       218px) egallab ketar edi.
+
+       Endi faqat SARLAVHA + progress chizig'i qoladi (~64px) —
+       foydalanuvchi video maydonini ko'rib tursin, aylanuvchi
+       indikator va foiz esa saqlanadi. --- */
+    .watch-player .tgs-prep { padding: 10px 12px; }
+    .watch-player .tgs-prep-note { display: none; }
 }
 
 /* Pleer QUTISI — kengligi 42rem dan kichik bo'lsa (anibla kabi):
@@ -758,11 +771,29 @@
    Natijada poster faqat yuqoridagi yarimda ko'rinib, pasti QORA
    bo'sh qolardi.
 
-   `height: 100%` konteynerni butun pleer qutisiga cho'zadi —
-   endi butun maydon poster bilan to'ldiriladi, ya'ni "video pleer"
-   butunlay ko'rinadi. `min-height: 0` — telefon landscape qilinsa
-   pleer 110px dan baland bo'lmagan holatda 180px li `min-height`
-   uni haddan tashqari kengaytirmasin.
+   `min-height: 100%` konteynerni kamida pleer qutisi balandligida
+   ushlab turadi — endi butun maydon poster bilan to'ldiriladi, ya'ni
+   "video pleer" butunlay ko'rinadi.
+
+   >>> NIMA UCHUN `height: 100%` EMAS, `min-height: 100%`? <<<
+   Bu yerda avval `height: 100%` yozilgan edi va video butunlay
+   IJORO BO'LMADI. Sababi `.tgs` ichidagi bloklar soni O'ZGARADI:
+
+       renderPlayer()          → .udp-player
+       renderAdaptivePlayer()  → .udp-player + .tgs-prep + .tgs-foot
+       renderCta()             → .tgs-cta
+
+   `height: 100%` konteynerni pleer balandligiga MAJBURLAB bog'ladi.
+   Usta-jakshi qatorlar sig'maganda flex siqilish (`flex-shrink`)
+   `.udp-player`ni ham ezadi: 219px qutida u ~155px ga (ba'zan 0 ga)
+   tushib qoladi. Natija — `<video>` balandligi 0, boshqaruv tugmalari
+   ko'rinmaydi, foydalanuvchi "video ijro bo'lmayapti" deb qoladi;
+   aslida konvertatsiya ishlayvergan, 2 daqiqadan keyin o'z-o'zidan
+   boshlaydi.
+
+   `min-height` faqat O'SDIRADI, hech narsani siqmaydi: kontent
+   katta bo'lsa konteyner o'sib ketadi (`.watch-player` ning
+   `overflow:hidden` uni kesadi — bu avvalgidek holat).
 
    `border-radius: 0` — MUHIM. `tg-stream.css` da `.tgs` ning burchagi
    12px, `.watch-player` niki esa telefonda 0. Agar o'sha 12px qolsa,
@@ -770,7 +801,60 @@
    ko'rinib turardi. Kesishni `.watch-player` ning o'z `overflow:hidden`
    + `border-radius` qiladi — shuning uchun ichki qatlam burchaksiz
    bo'lishi SHART. */
-.watch-player .tgs { height: 100%; min-height: 0; border-radius: 0; }
+.watch-player .tgs { min-height: 100%; border-radius: 0; }
+
+/* `.udp-player` ga siqilishni TAQIQLAYMIZ.
+   `.tgs .udp-player { flex: 1 1 auto }` — `flex-shrink: 1` bilan.
+   Yonma-yon boshqa bloklar (`renderAdaptivePlayer()` da `.tgs-prep`)
+   sig'maganda sharoj shu yerda `<video>`ni siqadi: 517px qutida u
+   366px ga tushib qoladi — ya'ni nisbat buzilib, odatda QORA
+   bo'sh joylar paydo bo'ladi. `flex-shrink: 0` bilan pleer har doim
+   o'z `aspect-ratio: 16/9` balandligini saqlaydi.
+
+   LEKIN bu o'zi yetarli emas: `.tgs-prep` hamon oqimda (flow) bo'lsa,
+   u pleer qutisidan tashqariga tushib QOLIB KETADI (yuqorida
+   o'lchangan: `top = 527px`, pleer balandligi 517px — ya'ni umuman
+   ko'rinmaydi). Foydalanuvchi uzoq konvertatsiya paytida faqat
+   qora ekranni ko'radi va "video umuman ishlamayapti" deb o'ylaydi.
+
+   YECHIM: `.tgs-prep` ni keyingi qatlamga — ONAJ QATLAM qilib
+   ko'chirish (pastda). */
+.watch-player .tgs .udp-player { flex-shrink: 0; }
+
+/* ==================================================================
+   TAYYORLASH PANELI — VIDEO USTIGA SHISHA QATLAM
+   ------------------------------------------------------------------
+   Yuqoridagi muammoni hal qiladi: panel endi flex-ega qator emas,
+   balki `.tgs` ning ABSOLYUT o'rnida (`.tgs` `position:absolute`
+   bo'lgani uchun u positioning konteyneri bo'ladi). Natijada:
+
+     • `<video>` to'liq 16/9 balandlikda qoladi  (flex-shrink: 0)
+     • panel esa pleerning PASTKI CHEKKASI ustida shisha bilan turadi
+       — xuddi YouTube/Anibla'dagi "buffering" ko'rinishi
+
+   `z-index: 20` — `.udp-controls` ning 18 dan baland, shuning uchun
+   ustma-ust tushmaydi.
+   ================================================================== */
+.watch-player .tgs-prep {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 20;
+    margin: 0;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, .12);
+    background: rgba(8, 11, 17, .72);
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+    backdrop-filter: blur(16px) saturate(1.5);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+/* Tayyorlash paytida boshqaruv tugmalari kerak emas (video
+   hali o'ynatilmaydi) — aks holda ikkala qatlam ustma-ust tushadi. */
+.watch-player .tgs:has(.tgs-prep) .udp-controls {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
 
 /* Markazda — ∞ animatsiyasi (yuqoridagi kabi BLUR bilan).
    `.tgs-body` markazga yig'ilgan bo'lgani uchun `::before` orqali
