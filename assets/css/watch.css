@@ -619,6 +619,189 @@
     .watch-rec-meta { font-size: 12px; }
 }
 
+/* ==================================================================
+   TELEGRAM YUKLANISH QATLAMI — "yuklanayotgan" ko'rinish
+   ==================================================================
+
+   VAZIFA (foydalanuvchi so'rovi):
+     1) Cheksizlikka o'xshagan yuklanish animatsiyasiga (∞) BLUR qo'shish
+     2) Videoga bosilganda chiqadigan yozuvlarning YO'Q bo'lishi:
+          "Telegram ulagichi tayyorlanmoqda…", "Telegram'dan yuklanmoqda…",
+          "Format tekshirilmoqda…", "Tayyorlanmoqda…"
+     3) Pastdagi mayda yozuvlarning olib tashlanishi:
+          "MP4" · "avc1 · 942 MB · serverdan 0 bayt" · "15 MB"
+        va ularning o'rniga "YUKLANAYOTGANDek" ko'rinish
+     4) Yuklanayotgan paytda VIDEO PLEER ko'rinib tursin (poster + oyna)
+
+   NIMA UCHUN FAQAT `.watch-player` OSTIDA:
+     Bu qatlam `tg-stream.js` umumiy — u index / reels / profil sahifalarida
+     ham ishlatiladi. Bizning o'zgarishlarimiz faqat KO'RISH sahifasida
+     ko'rinishi kerak, shuning uchun har bir selektor `.watch-player` bilan
+     boshlanadi. Boshqa sahifalarning playeri umuman tegilmaydi.
+
+   QISM 1 — ∞ ANIMATSIYASIGA BLUR
+     `player.css:74` dagi `.udp-loading-img` — `loading-infinity.gif`
+     (loading.io "Infinity" spinner). Uning filtri faqat OQ rang beradi:
+        brightness(0) invert(1) sepia(1) hue-rotate(170deg) saturate(6)
+     Biz shuni ZARANG yorug'lik (glow) bilan kuchaytiramiz va o'ziga xos
+     BLUR qo'shamiz — boshqaruv paneli kabi "shisha" taassuroti uchun:
+
+        blur(0.6px)  →  kontur biroz yumaloqlanadi, shisha effekti
+        drop-shadow  →  ikki qatlamli yorug'lik halo (ichki va tashqi)
+
+     `blur()` `drop-shadow()` dan OLDIN keladi — shunda soya ham yumaloq
+     konturdan olinadi (aks holda soya aniq chekkada qolardi).
+     ================================================================== */
+.watch-player .udp-loading-img {
+    filter: brightness(0) invert(1) sepia(1) hue-rotate(170deg) saturate(6)
+            blur(0.6px)
+            drop-shadow(0 0 6px rgba(111, 200, 242, 0.55))
+            drop-shadow(0 0 18px rgba(42, 171, 238, 0.38));
+}
+/* `loading-infinity.gif` yuklanib bo'lmagan (bekor qilingan) holatda
+   ko'rinadigan oddiy halqa ham xuddi shunday yumaloq bo'lsin. */
+.watch-player .udp-spinner {
+    filter: blur(0.5px) drop-shadow(0 0 6px rgba(111, 200, 242, 0.45));
+}
+
+/* ==================================================================
+   QISM 2 — YUKLANISH YOZUVLARI KO'RINMASIN
+   ------------------------------------------------------------------
+   `.tgs-status` — "Telegram ulagichi tayyorlanmoqda…", "Telegram'dan
+   yuklanmoqda…", "Format tekshirilmoqda…", "Tayyorlanmoqda…" hamda
+   pastdagi `.tgs-note` ogohlantirishi shu yerda chiqadi.
+
+   DIQQAT: haqiqiy XATO va OGOHLANTIRISH (`<span class="tgs-warn">` /
+   `<span class="tgs-err">`) ham shu `.tgs-status` ICHIga yoziladi. Ularni
+   ham yashirsak, foydalanuvchi SW tayyor emas degan holatda nima
+   bo'layotganini umuman bilmay qolardi. Shu sabab `:has()` bilan
+   "faqat odatiy yuklanish yozuvlari" yashiriladi, xato/ogohlantirish
+   esa o'z joyida qoladi:
+
+       .tgs-status                       → yashiriladi
+       .tgs-status:has(.tgs-warn/:err)   → KO'RINADI
+
+   `:has()` Chrome 105+, Safari 15.4+, Firefox 121+ da ishlaydi.
+   ================================================================== */
+.watch-player .tgs-status { display: none; }
+.watch-player .tgs-status:has(.tgs-warn),
+.watch-player .tgs-status:has(.tgs-err) { display: block; }
+
+/* ==================================================================
+   QISM 3 — PASTDAKI MAYDA YOZUVLAR OLIB TASHLANDI
+   ------------------------------------------------------------------
+   `.tgs-foot` — "MP4" · "avc1 · 942 MB · serverdan 0 bayt" ·
+   "Telegram'dan: 15 MB" qatori. Bular TEXNIK ma'lumot: foydalanuvchi
+   uchun hech qanday foyda yo'q, faqat chalg'itadi.
+
+   Yashirilgach `<video>` butun qutini egallaydi (`.tgs .udp-player`
+   `flex: 1 1 auto` bo'lgani uchun qoldi joyni to'ldiradi) — ya'ni
+   pastdagi bo'sh qora chiziq ham yo'qoladi.
+   ================================================================== */
+.watch-player .tgs-foot { display: none; }
+
+/* ==================================================================
+   QISM 4 — "YUKLANAYOTGANDek" KO'RINISH
+   ------------------------------------------------------------------
+   `.tgs-bar` — yuqoridagi 3px chiziq. `progress()` uning enini haqiqiy
+   foizga qo'yadi, lekin 942 MB faylda bir necha soniyada foiz
+   deyarli 0 bo'ladi — foydalanuvchi "turgandek" ko'radi.
+
+   Shu sabab ustiga ANIONIK (aniqlanmagan) yugurish qo'shamiz: chiziq
+   doimiy o'qdan o'ngga surilib boradi — bu odatdagani "yuklanmoqda"
+   degan umumiy til. Haqiqiy `.tgs-prog` (foiz) ustida qoladi va
+   uning ustidan o'tib turadi.
+
+   Yana ikki tuzatish:
+     • `.tgs-bar` ga `overflow: hidden` — `.tgs-prog` ichidagi "12%"
+       matni 3px balandlikdan SIBIB chiqib ketmasligi kerak.
+     • `text-indent: -9999px` — o'sha matnni butunlay ko'rinmas qiladi
+       (CSS orqali, JS ga tegmasdan).
+   ================================================================== */
+.watch-player .tgs-bar {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.10);
+    overflow: hidden;
+}
+.watch-player .tgs-prog {
+    text-indent: -9999px;                 /* "12%" yozuvi ko'rinmasin */
+    background: linear-gradient(90deg, #2aabee, #4fc3f7);
+    box-shadow: 0 0 8px rgba(79, 195, 247, 0.55);
+    position: relative;
+}
+/* Anionik yugurish — "yuklanmoqda" harakati */
+.watch-player .tgs-bar::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 38%;
+    background: linear-gradient(90deg,
+        rgba(111, 200, 242, 0) 0%,
+        rgba(111, 200, 242, 0.85) 50%,
+        rgba(111, 200, 242, 0) 100%);
+    animation: watch-tgs-sweep 1.25s ease-in-out infinite;
+}
+@keyframes watch-tgs-sweep {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(365%); }   /* 38% + 100% = chiziq oxirigacha */
+}
+
+/* ==================================================================
+   QISM 5 — YUKLANAYOTGAN PAYTDA VIDEO PLEER KO'RINSIN
+   ------------------------------------------------------------------
+   `.tgs` — bu yerda poster FONI bilan to'ladi (`tg-stream.js`
+   `posterBg()` orqali `background-image` qo'yadi). Lekin konteyner
+   balandligi ICHKI kontentdan olinardi: `.tgs-body` faqat 3px chiziq +
+   (yashirilgan) yozuv + 20px padding = ~110px, pleer esa 219px.
+   Natijada poster faqat yuqoridagi yarimda ko'rinib, pasti QORA
+   bo'sh qolardi.
+
+   `height: 100%` konteynerni butun pleer qutisiga cho'zadi —
+   endi butun maydon poster bilan to'ldiriladi, ya'ni "video pleer"
+   butunlay ko'rinadi. `min-height: 0` — telefon landscape qilinsa
+   pleer 110px dan baland bo'lmagan holatda 180px li `min-height`
+   uni haddan tashqari kengaytirmasin.
+
+   `border-radius: 0` — MUHIM. `tg-stream.css` da `.tgs` ning burchagi
+   12px, `.watch-player` niki esa telefonda 0. Agar o'sha 12px qolsa,
+   poster burchaklari kesilib, to'rt burchakda QORA uchburchaklar
+   ko'rinib turardi. Kesishni `.watch-player` ning o'z `overflow:hidden`
+   + `border-radius` qiladi — shuning uchun ichki qatlam burchaksiz
+   bo'lishi SHART. */
+.watch-player .tgs { height: 100%; min-height: 0; border-radius: 0; }
+
+/* Markazda — ∞ animatsiyasi (yuqoridagi kabi BLUR bilan).
+   `.tgs-body` markazga yig'ilgan bo'lgani uchun `::before` orqali
+   qo'shiladi: JS ga tegilmaydi, `tg-stream.js` boshqa sahifalarda
+   o'zgarmay qoladi.
+
+   QR (kirish) yoki 2FA parol maydoni ochilganda bu indicator
+   ko'rinmasin — ularning o'rnini olmasin. */
+.watch-player .tgs-body::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 72px;
+    height: 72px;
+    background: url("../loading-infinity.gif") center / contain no-repeat;
+    filter: brightness(0) invert(1) sepia(1) hue-rotate(170deg) saturate(6)
+            blur(0.6px)
+            drop-shadow(0 0 6px rgba(111, 200, 242, 0.55))
+            drop-shadow(0 0 18px rgba(42, 171, 238, 0.38));
+    pointer-events: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.watch-player .tgs-body:has(.tgs-qr:not([hidden]))::before,
+.watch-player .tgs-body:has(.tgs-pwd:not([hidden]))::before { display: none; }
+
+/* QR / 2FA bo'lganda chiziq ham to'xtasin (ortiqcha harakatsizlik kerak emas).
+   `.tgs-bar` `.tgs-body` ning AKA-UKASI (sibling) — shuning uchun `:has()`
+   `.tgs` (konteyner) da bo'lishi kerak, `.tgs-body` da emas. */
+.watch-player .tgs:has(.tgs-qr:not([hidden])) .tgs-bar::after,
+.watch-player .tgs:has(.tgs-pwd:not([hidden])) .tgs-bar::after { display: none; }
+
 /* ============================================================ SMART TV */
 .tv-mode .watch-player { border-radius: 10px; }
 .tv-mode .watch-title { font-size: 27px; }
