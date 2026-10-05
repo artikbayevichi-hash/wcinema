@@ -206,7 +206,7 @@
             : '';
 
         const src = r.source ? `
-            <a class="reels-source" href="index.php?c=${r.source.content_id}${
+            <a class="reels-source" href="watch.php?c=${r.source.content_id}${
                 r.source.episode ? '&e=' + r.source.episode : ''}#t=${
                 (r.playback && r.playback.start) || 0}">
                 📺 ${esc(r.source.title)}${r.source.episode_no

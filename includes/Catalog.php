@@ -747,7 +747,7 @@ class Catalog {
                 'type'       => 'like',
                 'title'      => 'Yangi like',
                 'message'    => $item['title'],
-                'target_url' => SITE_URL . '/index.php?c=' . (int) $contentId,
+                'target_url' => SITE_URL . '/watch.php?c=' . (int) $contentId,
             ]);
         }
 

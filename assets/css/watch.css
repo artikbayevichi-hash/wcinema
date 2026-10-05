@@ -1,0 +1,351 @@
+/* ==========================================================================
+   watch.css - YouTube uslubidagi ko'rish sahifasi
+   ==========================================================================
+   Tuzilma:
+     .watch-grid     -> chap (video + izoh + chat) | o'ng (qismlar/tavsiyalar)
+     .watch-side-list-> VERTIKAL skroll (qismlar yoki aralash tavsiyalar)
+     .watch-related  -> eng pastda aralash kinolar/animalar/multfilmlar
+
+   Izohlar va chat uchun `reels.css` / `chat.css` dagi tayyor uslublar
+   ishlatiladi - bu fayl faqat shu sahifaga xos o'lcham va joylashuvni
+   beradi (chunki reels izohlari modalda, bu yerda esa oqimda).
+   ========================================================================== */
+
+.ig-page.watch-page { max-width: 1560px; margin: 0 auto; padding: 14px; }
+
+/* ------------------------------------------------------------------ 404 */
+.watch-404 {
+    text-align: center; padding: 70px 20px;
+}
+.watch-404 h1 { font-size: 22px; margin: 0 0 8px; }
+.watch-404 p  { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+.watch-404-btn {
+    display: inline-block; padding: 11px 20px; border-radius: 12px;
+    background: var(--accent); color: #fff; font-weight: 700;
+    font-size: 14px; text-decoration: none;
+}
+
+/* ================================================================= GRID */
+.watch-grid {
+    display: grid;
+    /* Yon panel YouTube'dekidek: o'ngdan torroq. `minmax(0,1fr)` shu
+       sababli video ichida chiqib ketmaydi (grid default `auto` bo'lishi
+       kerak edi - u `<video>` kengligini siqib yuboradi). */
+    grid-template-columns: minmax(0, 1fr) 372px;
+    gap: 18px;
+    align-items: start;
+}
+.watch-main { min-width: 0; }
+
+/* ================================================================ VIDEO */
+.watch-player {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 14px;
+    overflow: hidden;
+    position: relative;
+}
+/* ichidagi `.player-wrap` ham 100% balandlikda bo'lishi kerak */
+.watch-player .player-wrap {
+    width: 100%; height: 100%; border-radius: 0;
+    /* `style.css` dagi hover transform player ichida "sakrash" effekti
+       beradi - YouTube'da esa yo'q. */
+    transform: none !important;
+}
+.watch-player .udp-player { width: 100%; height: 100%; border-radius: 0; }
+.watch-player .udp-player video { width: 100%; height: 100%; }
+.watch-player iframe { width: 100%; height: 100%; border: 0; }
+.watch-player .nv-msg {
+    color: var(--muted); font-size: 15px; text-align: center;
+    padding: 24px 16px;
+}
+/* Telegram CDN playeri: `tg-stream.js` o'z `<video>` sini shu konteynerga
+   qo'yadi, shuning uchun u mutlaq joylashishi kerak. */
+.watch-player > .watch-tg { position: absolute; inset: 0; }
+/* Reels dagi ogohlantirish (.reels-warn) ham shu konteynerda bo'lishi mumkin */
+.watch-player .reels-warn {
+    position: absolute; left: 10px; right: 10px; top: 10px; z-index: 6;
+}
+
+/* ======================================================== SARLAVHA / AMALLAR */
+.watch-head { margin: 14px 0 0; }
+.watch-title {
+    font-size: 21px; font-weight: 800; line-height: 1.25;
+    margin: 0 0 6px; color: var(--text);
+}
+.watch-sub {
+    font-size: 13px; color: var(--muted);
+    display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+}
+.watch-sub .watch-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line);
+    font-size: 12px; color: var(--text); font-weight: 600;
+}
+.watch-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;
+}
+.watch-act {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 15px; border-radius: 999px;
+    background: var(--card-2); border: 1px solid var(--line);
+    color: var(--text); font-size: 13.5px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: background .14s ease, border-color .14s ease, transform .12s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.watch-act:hover  { background: var(--line); }
+.watch-act:active { transform: scale(.97); }
+.watch-act.on     { background: var(--accent); border-color: var(--accent); color: #fff; }
+.watch-act.busy   { opacity: .6; pointer-events: none; }
+.watch-act svg    { width: 17px; height: 17px; flex: 0 0 auto; }
+
+/* ============================================================ TAQSIF */
+.watch-desc {
+    margin-top: 14px; padding: 13px 15px;
+    background: var(--card); border-radius: 13px;
+    border: 1px solid var(--line);
+}
+.watch-desc-txt {
+    font-size: 13.5px; color: var(--text); line-height: 1.55;
+    white-space: pre-wrap; margin: 0;
+}
+.watch-desc-genres {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px;
+    padding-top: 11px; border-top: 1px solid var(--line);
+}
+.watch-desc-genres a {
+    font-size: 12px; font-weight: 600; text-decoration: none;
+    color: var(--accent); background: rgba(42, 171, 238, .12);
+    border: 1px solid rgba(42, 171, 238, .3);
+    padding: 3px 10px; border-radius: 999px;
+}
+.watch-desc-more {
+    margin-top: 10px; background: none; border: 0; cursor: pointer;
+    color: var(--text); font-weight: 800; font-size: 12.5px;
+    font-family: inherit; padding: 0;
+}
+
+/* ======================================================= IZOH / CHAT BLOKI */
+.watch-block { margin-top: 22px; }
+.watch-block-h {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 16px; font-weight: 800; margin: 0 0 12px;
+    color: var(--text);
+}
+.watch-block-h svg { width: 19px; height: 19px; color: var(--muted); }
+
+/* Izohlar reels modalidagi `.reels-comments-box` ichida edi. Bu yerda
+   modal yo'q - ro'yxat to'g'ridan-to'g'ri oqimda, shuning uchun balandligi
+   cheksiz va foni shaffof.
+
+   `.watch-comments-wrap` `position: relative` bo'lishi SHART: formatlash
+   menyusi (`.tg-fmt`) `bottom: 58px` da absolute joylashadi va o'z
+   konteyneriga (`.reels-comments-box` yoki `.chat-thread`) bog'lanadi. */
+.watch-comments-wrap { position: relative; }
+.watch-comments-list {
+    border: 0;
+    border-radius: 13px 13px 0 0;
+    background: var(--card);
+    padding: 4px;
+    max-height: 620px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.watch-comments-list:empty { display: none; }
+.watch-comments-wrap .reels-comments-form {
+    border: 1px solid var(--line); border-top: 0;
+    border-radius: 0 0 13px 13px;
+    background: var(--bg-2);
+}
+
+/* Chat oqimi - chat.php dagi kabi, lekin balandlik cheklangan */
+.watch-chat-rooms {
+    display: flex; gap: 8px; overflow-x: auto;
+    padding: 0 0 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+    scrollbar-width: none;
+}
+.watch-chat-rooms::-webkit-scrollbar { display: none; }
+.watch-chat-rooms .chat-room {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 14px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line);
+    cursor: pointer; font-family: inherit;
+    color: var(--text); font-size: 13px; font-weight: 700;
+}
+.watch-chat-rooms .chat-room.on {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.watch-chat-rooms .chat-room-ico { font-size: 15px; }
+.watch-chat-thread {
+    display: flex;
+    flex-direction: column;
+    height: 460px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-2);
+    overflow: hidden;
+}
+/* "orqaga" tugmasi bu sahifada kerak emas: xona hech qachon yopilmaydi,
+   faqat boshqa xonaga o'tiladi. */
+.watch-chat-thread .chat-back { display: none; }
+.watch-chat-thread .chat-thead { flex: 0 0 auto; }
+.watch-chat-thread .chat-feed  { flex: 1 1 auto; min-height: 0; }
+.watch-chat-thread .chat-picker { position: static; flex: 0 0 auto; }
+.watch-chat-thread .chat-composer { flex: 0 0 auto; }
+
+/* =========================================================== O'NG PANEL */
+.watch-side {
+    position: sticky; top: 12px;
+    max-height: calc(100dvh - 24px);
+    display: flex; flex-direction: column;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+}
+.watch-side-head {
+    flex: 0 0 auto; padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+}
+.watch-side-title { font-size: 14.5px; font-weight: 800; color: var(--text); }
+.watch-side-count { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* Asosiy talab: balandga-pastga skroll. */
+.watch-side-list {
+    flex: 1 1 auto; min-height: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 8px;
+    display: flex; flex-direction: column; gap: 6px;
+    scrollbar-width: thin;
+}
+.watch-side-list::-webkit-scrollbar { width: 6px; }
+.watch-side-list::-webkit-scrollbar-thumb {
+    background: var(--line); border-radius: 99px;
+}
+
+/* --- Qism (episod) qatori: YouTube kalleksiyasidagi kabi --- */
+.watch-ep {
+    display: flex; gap: 10px; align-items: center;
+    padding: 7px; border-radius: 12px;
+    background: transparent; border: 1px solid transparent;
+    cursor: pointer; font-family: inherit; text-align: left; width: 100%;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+    transition: background .13s ease;
+}
+.watch-ep:hover { background: var(--card-2); }
+.watch-ep.on {
+    background: var(--card); border-color: var(--accent);
+}
+.watch-ep-num {
+    flex: 0 0 auto; width: 26px; text-align: center;
+    font-size: 13px; font-weight: 800; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+.watch-ep.on .watch-ep-num { color: var(--accent); }
+.watch-ep-thumb {
+    flex: 0 0 auto; width: 104px; aspect-ratio: 16 / 9;
+    border-radius: 8px; overflow: hidden;
+    background: var(--card-2); position: relative;
+}
+.watch-ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.watch-ep-fb { font-size: 20px; }
+.watch-ep-dur {
+    position: absolute; right: 3px; bottom: 3px;
+    background: rgba(0, 0, 0, .82); color: #fff;
+    font-size: 10.5px; font-weight: 700;
+    padding: 1px 4px; border-radius: 4px;
+}
+.watch-ep-text { flex: 1 1 auto; min-width: 0; }
+.watch-ep-ttl {
+    font-size: 13px; font-weight: 700; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-word;
+}
+.watch-ep-meta {
+    font-size: 11.5px; color: var(--muted); margin-top: 3px;
+    display: flex; flex-wrap: wrap; gap: 4px 8px;
+}
+.watch-ep-seen { color: var(--accent); font-weight: 700; }
+
+/* --- Yon paneldagi TAVSIYA qatori (qismlar bo'lmasa) --- */
+.watch-rec {
+    display: flex; gap: 9px; align-items: center;
+    padding: 6px; border-radius: 11px;
+    background: transparent; border: 1px solid transparent;
+    cursor: pointer; font-family: inherit; text-align: left; width: 100%;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+    transition: background .13s ease;
+}
+.watch-rec:hover { background: var(--card-2); }
+.watch-rec-thumb {
+    flex: 0 0 auto; width: 118px; aspect-ratio: 16 / 9;
+    border-radius: 8px; overflow: hidden;
+    background: var(--card-2); position: relative;
+}
+.watch-rec-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.watch-rec-text { flex: 1 1 auto; min-width: 0; }
+.watch-rec-ttl {
+    font-size: 12.8px; font-weight: 700; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-word;
+}
+.watch-rec-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+.watch-side-empty {
+    padding: 26px 14px; text-align: center;
+    font-size: 13px; color: var(--muted);
+}
+
+/* ================================================ PASTKI ARALASH TAVSIYALAR */
+.watch-related { margin-top: 30px; }
+.watch-related-h { font-size: 17px; font-weight: 800; margin: 0 0 14px; }
+.watch-related-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    gap: 18px 14px;
+}
+/* Karta bosh sahifadagi kabi `.card.yt-card` - stil allaqachon `style.css` da */
+.watch-related-row .yt-title {
+    -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ================================================================ MOBIL */
+@media (max-width: 1040px) {
+    .watch-grid { grid-template-columns: minmax(0, 1fr); }
+    .watch-side {
+        position: static; max-height: none;
+        order: 2;
+    }
+    /* Yon panel endi skronsiz - balandlik cheklovini olib tashlaymiz,
+       aks holda ichki skroll mobil'da qulay bo'lmaydi. */
+    .watch-side-list { max-height: 60dvh; }
+    .watch-related { margin-top: 24px; }
+}
+@media (max-width: 560px) {
+    .ig-page.watch-page { padding: 10px; }
+    .watch-title { font-size: 17px; }
+    .watch-player { border-radius: 10px; }
+    .watch-related-row { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 10px; }
+    .watch-comments-list { max-height: 460px; }
+    .watch-chat-thread { height: 400px; }
+    .watch-side-list { max-height: none; }
+}
+
+/* ============================================================ SMART TV */
+.tv-mode .watch-player { border-radius: 10px; }
+.tv-mode .watch-title { font-size: 27px; }
+.tv-mode .watch-block-h { font-size: 21px; }
+/* TV da skrollbar yashiriladi (boshqa joylardagi kabi) */
+.tv-mode .watch-side-list { scrollbar-width: none; }
+.tv-mode .watch-side-list::-webkit-scrollbar { display: none; }
+.tv-mode .watch-comments-list { max-height: 70dvh; }
+.tv-mode .watch-chat-thread { height: 66dvh; }

@@ -534,7 +534,7 @@ window.addEventListener('DOMContentLoaded', function () {
         if (c.is_series && (c.episodes || c.total_episodes)) {
             sub.push((c.episodes || c.total_episodes) + ' qism');
         }
-        return '<a class="ig-sres" href="index.php?c=' + (parseInt(c.id, 10) || 0) + '">'
+        return '<a class="ig-sres" href="watch.php?c=' + (parseInt(c.id, 10) || 0) + '">'
              + '<div class="ig-sres-thumb">' + poster + '</div>'
              + '<div class="ig-sres-title">' + igEsc(c.title) + '</div>'
              + (sub.length ? '<div class="ig-sres-sub">' + igEsc(sub.join(' · ')) + '</div>' : '')

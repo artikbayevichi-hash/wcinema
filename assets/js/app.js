@@ -349,7 +349,7 @@
         if (t) t.textContent = item.title || 'Davom etish';
         const link = $('#contFloatLink');
         if (link) {
-            link.href = base + '/index.php?c=' + encodeURIComponent(item.id)
+            link.href = base + '/watch.php?c=' + encodeURIComponent(item.id)
                 + (item.ep ? '&e=' + encodeURIComponent(item.ep) : '');
         }
         box.hidden = false;
@@ -570,7 +570,7 @@
             const nx = (i >= 0 && d.episodes[i + 1]) ? d.episodes[i + 1] : null;
             if (nx) {
                 next = {
-                    href: base + '/index.php?c=' + c.id + '&e=' + nx.id,
+                    href: base + '/watch.php?c=' + c.id + '&e=' + nx.id,
                     label: (nx.number || nx.id) + '-qism'
                 };
             }
@@ -1097,7 +1097,7 @@
         // Ulashish
         const shareBtn = $('#actShare');
         if (shareBtn) shareBtn.onclick = async () => {
-            const url = base + '/index.php?c=' + c.id + (sel ? '&e=' + sel.id : '');
+            const url = base + '/watch.php?c=' + c.id + (sel ? '&e=' + sel.id : '');
             const text = c.title;
             try {
                 if (navigator.share) {
@@ -1446,13 +1446,32 @@
         return false;
     }
 
+    /**
+     * Karta bosilganda alohida "ko'rish" sahifasi ochiladi (watch.php).
+     *
+     * Nima uchun endi modal emas? YouTube'da videoning o'z manzili bor:
+     * "havolani nusxalash" ishlaydi, orqaga qaytish ham, qismni
+     * almashtirish ham. Modal bunda bitta xabar bo'lib qolardi - uning
+     * manzili yo'q edi.
+     *
+     * DIQQAT: modal kodi (`openContent`, `playerHTML`, `openTrimmer`)
+     * O'CHIRILMAGAN - u hali ham ishlaydi va `index.php?c=..` eski
+     * havolalari uchun saqlanadi (pastda `replace` bilan yo'naltiriladi).
+     */
+    function goWatch(contentId, episodeId) {
+        previewStop();
+        const e = parseInt(episodeId, 10) || 0;
+        location.href = base + '/watch.php?c=' + encodeURIComponent(contentId)
+            + (e ? '&e=' + e : '');
+    }
+
     // ---------------------------------------------------------------- hodisalar
     function wire() {
-        // Kartalar -> modal
+        // Kartalar -> watch.php (alohida sahifa, YouTube uslubi).
         document.addEventListener('click', (e) => {
             const card = e.target.closest('.card');
             if (card && card.dataset.id) {
-                openContent(card.dataset.id, card.dataset.ep || 0);
+                goWatch(card.dataset.id, card.dataset.ep || 0);
                 return;
             }
             if (e.target.closest('[data-close]')) {
@@ -1565,7 +1584,10 @@
         loadHome();
 
         if (APP.contentId > 0) {
-            openContent(APP.contentId, APP.episodeId || 0);
+            // Eski chuqur havola (`index.php?c=..&e=..`) endi video
+            // sahifasini ochadi. `replace` - orqaga bosilganda foydalanuvchi
+            // shu katalog sahifasiga qaytadi (modal emas).
+            goWatch(APP.contentId, APP.episodeId || 0);
         }
     });
 })();

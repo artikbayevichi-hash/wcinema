@@ -328,7 +328,7 @@ function savedCell(c) {
         ? `<img loading="lazy" src="${esc(c.poster)}" alt="">`
         : `<div class="pf-cell-ph">🎬</div>`;
     return `
-        <a class="pf-cell" href="index.php?c=${c.id}">
+        <a class="pf-cell" href="watch.php?c=${c.id}">
             <div class="pf-cell-media">
                 ${poster}
                 <div class="pf-cell-meta">${esc((c.category || '').slice(0, 14))}</div>
@@ -533,7 +533,7 @@ function localCell(c) {
         : `<div class="pf-cell-ph">🎬</div>`;
     const sub = String(c.category || c.year || '').slice(0, 14);
     return `
-        <a class="pf-cell" href="index.php?c=${encodeURIComponent(c.id)}">
+        <a class="pf-cell" href="watch.php?c=${encodeURIComponent(c.id)}">
             <div class="pf-cell-media">
                 ${poster}
                 ${sub ? `<div class="pf-cell-meta">${esc(sub)}</div>` : ''}

@@ -16,13 +16,21 @@ $botUrl   = 'https://t.me/' . $botName;
 $miniApp  = MINI_APP_URL;
 $stats    = $catalog->getStats();
 
-// Chuqur havola: /index.php?c=12&e=45 (yoki faqat e=45 — kontent avtomatik topiladi)
-$initialContentId = (int) ($_GET['c'] ?? 0);
-$initialEpisodeId = (int) ($_GET['e'] ?? 0);
-if ($initialContentId <= 0 && $initialEpisodeId > 0) {
-    $epRow = $catalog->getEpisode($initialEpisodeId);
-    if ($epRow) {
-        $initialContentId = (int) $epRow['content_id'];
+// Eski chuqur havola: /index.php?c=12&e=45 (yoki faqat e=45 — kontent avtomatik
+// topiladi). Videolar endi alohida `watch.php` sahifasida ochiladi, shuning
+// uchun bu havola shu yerga yo'naltiriladi (serverda, JS dan tezroq).
+if ((int) ($_GET['c'] ?? 0) > 0 || (int) ($_GET['e'] ?? 0) > 0) {
+    $cId = (int) ($_GET['c'] ?? 0);
+    $eId = (int) ($_GET['e'] ?? 0);
+    if ($cId <= 0 && $eId > 0) {
+        $epRow = $catalog->getEpisode($eId);
+        if ($epRow) {
+            $cId = (int) $epRow['content_id'];
+        }
+    }
+    if ($cId > 0) {
+        header('Location: watch.php?c=' . $cId . ($eId > 0 ? '&e=' . $eId : ''), true, 302);
+        exit;
     }
 }
 
@@ -31,14 +39,10 @@ $pageTitle = SITE_NAME;
 $pageDesc  = 'Kino, anime va multfilmlar katalogi. Tomosha qiling va saqlang.';
 $pageImage = '';
 $pageUrl   = SITE_URL . '/index.php';
-if ($initialContentId > 0 && $item = $catalog->getContent($initialContentId)) {
-    $pageTitle = $item['title'] . ' — ' . SITE_NAME;
-    $pageImage = Catalog::posterSrc($item['poster'] ?: '') ?: $item['banner_url'] ?: '';
-    // og:image mutlaq manzil bo'lishi shart — relative API yo'lini to'ldiramiz
-    if (strpos((string) $pageImage, 'api/tg-resolve.php') === 0) {
-        $pageImage = SITE_URL . '/' . $pageImage;
-    }
-}
+// DIQQAT: kontentga xos `og:image` endi bu yerda yo'q - `?c=` bilan kelgan
+// so'rovlar yuqorida `watch.php` ga yo'naltiriladi, u o'z meta-taglarini
+// o'zi qo'yadi. (Sahifa `?c=` siz ochilganda hech qanday video havolasi
+// yo'q demak - katalog uchun umumiy ta'rif to'g'ri.)
 $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
     ? $pageImage : '';
 ?>
@@ -185,8 +189,10 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
         botUrl: <?php echo json_encode($botUrl); ?>,
         miniApp: <?php echo json_encode($miniApp); ?>,
         isAdmin: <?php echo $auth->isAdmin() ? 'true' : 'false'; ?>,
-        contentId: <?php echo $initialContentId; ?>,
-        episodeId: <?php echo $initialEpisodeId; ?>,
+        // Videolar endi `watch.php` sahifasida ochiladi, shuning uchun bu
+        // sahifada `?c=`/`?e=` bo'lmaydi (yuqorida `watch.php` ga yo'naltiriladi).
+        contentId: 0,
+        episodeId: 0,
         siteName: <?php echo json_encode(SITE_NAME); ?>,
         // Telegram CDN player uchun. Bu kalitlar FAQAT Telegram'ning
         // ommaviy API identifikatorlari (Telegram Web'ning o'zgartirmasdan
@@ -198,9 +204,29 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
         reels: { maxUploadMb: <?php echo (int) REEL_MAX_UPLOAD_MB; ?>, maxLengthSec: <?php echo (int) REEL_MAX_LENGTH; ?> }
     };
 </script>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+<!--
+  OLIB TASHLANGAN: tashqi hls.js CDN skripti (cdn.jsdelivr.net/npm/hls.js@1)
+
+  Nima uchun: bu UCHINCHI TOMON CDN'iga sinhron so'rov edi - 620 KB va
+  o'lchovda 0.9-1.4 soniya (TLS handshake'ning o'zi 0.4-0.95 s). Sinhron
+  skript `DOMContentLoaded` ni ushlab turadi, `app.js` va `player.js` esa
+  aynan shu hodisada ishga tushadi. Ya'ni butun katalog interfeysi
+  jsdelivr javobini kutardi - hatto foydalanuvchi HLS umuman ko'rmasa ham.
+
+  Yo'qotish yo'q: `player.js` dagi `startHls()` hls.js'ni O'ZI lazy yuklaydi
+  (`if (!window.Hls)` -> shu CDN manzilidan), faqat haqiqatan `.m3u8` manba
+  ochilganda. Narx esa kamayadi: 620 KB har sahifa ko'rishidan -> faqat birinchi
+  HLS ijrosiga.
+-->
 <script src="assets/js/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/player.js') ?: 1; ?>"></script>
-<script src="assets/js/reels.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/reels.js') ?: 1; ?>"></script>
+<!--
+  OLIB TASHLANGAN: assets/js/reels.js
+
+  Nima uchun: u `getElementById('reelsTrack')` natijasi bo'lmasa darhol
+  `return` qiladi. Bu sahifada `#reelsTrack` YO'Q, shuning uchun fayl
+  yuklanib bo'lgach hech narsa qilmasdi - 12 KB (gzip) va parse vaqti
+  bekor sarflanardi.
+-->
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>

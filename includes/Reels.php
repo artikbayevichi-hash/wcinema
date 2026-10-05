@@ -212,7 +212,7 @@ class Reels {
                 $cta = [
                     'label' => '🎬 To‘liq qismni tomosha qilish ('
                                . $this->fmtTime((int) $r['start_time']) . ' dan)',
-                    'url'   => 'index.php?c=' . (int) $r['content_id']
+                    'url'   => 'watch.php?c=' . (int) $r['content_id']
                                . ($r['episode_id'] ? '&e=' . (int) $r['episode_id'] : '')
                                . '#t=' . (int) $r['start_time'],
                     'start' => (int) $r['start_time'],

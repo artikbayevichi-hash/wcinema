@@ -220,7 +220,7 @@ class TelegramDelivery {
     // Embed manbalar uchun: faqat havola
     // -------------------------------------------------------------------------
     private function sendLink($userId, $contentId, $episodeId, $telegramId, $item, $parent, $playback) {
-        $link = SITE_URL . '/index.php?c=' . (int) $contentId
+        $link = SITE_URL . '/watch.php?c=' . (int) $contentId
               . ($episodeId > 0 ? '&e=' . (int) $episodeId : '');
 
         $text  = $this->buildCaption($item, $parent) . "\n\n";

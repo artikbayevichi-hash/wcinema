@@ -3,7 +3,7 @@
 // history.php - "Tarix" (YouTube uslubidagi Kutubxona bo'limi)
 // ============================================================================
 // Ko'rish tarixi: `watch_progress` (davom etish) asosida. Ya'ni foydalanuvchi
-// to'xtatgan/ko'rgan kontentlar. Har bir karta index.php?c=ID&e=EID ochadi.
+// to'xtatgan/ko'rgan kontentlar. Har bir karta watch.php?c=ID&e=EID ochadi.
 //
 // DIQQAT: bu ro'yxat PHP hisobiga (users jadvali) bog'langan — bot / Mini App
 // orqali kirgan foydalanuvchilar uchun ishlaydi. Faqat MTProto (brauzer)
@@ -67,7 +67,7 @@ $items = $catalog->getContinueWatching($userId, 200);
         <div class="sv-grid">
             <?php foreach ($items as $c): ?>
                 <a class="sv-cell"
-                   href="index.php?c=<?php echo (int) $c['content_id']; ?><?php echo (int) $c['episode_id'] > 0 ? '&e=' . (int) $c['episode_id'] : ''; ?>"
+                   href="watch.php?c=<?php echo (int) $c['content_id']; ?><?php echo (int) $c['episode_id'] > 0 ? '&e=' . (int) $c['episode_id'] : ''; ?>"
                    title="<?php echo esc($c['title'] ?? ''); ?>">
                     <div class="sv-media">
                         <?php if (!empty($c['poster'])): ?>

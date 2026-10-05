@@ -3,7 +3,7 @@
 // saved.php - Instagram uslubidagi "Saqlanganlar" (watchlist) sahifasi
 // ============================================================================
 // Saqlangan kontent - 3 ustunli kvadrat grid (Instagram profili kabi).
-// Har bir karta bosilganda index.php?c=ID (film/qism) ochiladi.
+// Har bir karta bosilganda watch.php?c=ID (film/qism) ochiladi.
 //
 // Kirish talab qilinadi.
 // ============================================================================
@@ -64,7 +64,7 @@ $items = $catalog->getWatchlist($userId, 200);
     <?php else: ?>
         <div class="sv-grid">
             <?php foreach ($items as $c): ?>
-                <a class="sv-cell" href="index.php?c=<?php echo (int) $c['id']; ?>"
+                <a class="sv-cell" href="watch.php?c=<?php echo (int) $c['id']; ?>"
                    title="<?php echo esc($c['title'] ?? ''); ?>">
                     <div class="sv-media">
                         <?php if (!empty($c['poster'])): ?>
