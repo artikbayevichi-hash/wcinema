@@ -67,6 +67,17 @@
     border-radius: 14px;
     overflow: hidden;
     position: relative;
+    /* --- CONTAINER QUERY manbai -----------------------------------------
+       anibla.uz ham aynan shunday qiladi: boshqaruv panelining
+       ko'rinishi EKRAN kengligiga emas, PLEER QUTISINING kengligiga
+       bog'lanadi (`container: media-root / inline-size` + `@container
+       media-root (width > 42rem)`).
+       Bu bizga ham kerak: telefon landscape qilinsa yoki kompyuterning
+       tor ustuni bo'lsa, panel o'sha qutiga to'g'ri ko'rinishni oladi.
+       `inline-size` contain xavfsiz: `.watch-player` kengligi `width:100%`
+       dan keladi, ya'ni ichki kontentdan bog'liq emas. */
+    container-type: inline-size;
+    container-name: wpl;
 }
 /* ichidagi `.player-wrap` ham 100% balandlikda bo'lishi kerak */
 .watch-player .player-wrap {
@@ -122,6 +133,185 @@
    ostida — boshqa sahifalardagi player tegilmaydi. */
 .watch-player .udp-seek-track {
     background: rgba(255, 255, 255, .2);
+}
+
+/* ==================================================================
+   MOBIL VIDEO PLAYER — anibla.uz dagi TELEFON ko'rinishiga 1:1
+   (o'lchamlari ham ularnikiga aniq teng)
+
+   Nima uchun CONTAINER QUERY, oddiy @media emas?
+   anibla.uz boshqaruv panelini EKRAN kengligiga emas, PLEER QUTISINING
+   kengligiga ulaydi: `@container media-root (width > 42rem)` (42rem = 672px).
+   Bizda ham shu chegara — 42rem:
+     • telefon portrait  (quti tor) → MOBIL ko'rinish: 2 qator, panel 100px
+     • telefon landscape (quti keng) → DESKTOP ko'rinish: 1 qator, panel 64px
+     • kompyuterning tor ustuni        → kengligi bo'yicha to'g'ri tanlanadi
+   Element o'lchamlari esa ANIQ px (36x36 tugma, 4px chiziq, 13px vaqt) —
+   ekran kattalashsa ham o'zgar MAYDI.
+
+   Anibla.uz dagi o'lchovlar (brauzerda o'lchab, `72*16` dan):
+     panel            left/right/bottom 8px · radius 24px · padding 6px
+                      umumiy balandlik 100px = 6 + 32 (vaqt) + 56 (tugma) + 6
+     vaqt qatori      order:-1 (TEPADA) · to'liq eni · gap 12px · padX 10px
+     chiziq           tegish zonasi 32px · chiziqcha 4px · yumaloq · oq 20%
+     tugmalar         36x36 · doira · ikonka 18px · bosilganda 0.9
+     sifat tugmasi    56x56 kvadrat  ← shuning uchun qator 56px baland
+     vaqt matni       13px
+     video            object-fit: contain (bo'sh joyda qora chiziq)
+     gradient         linear-gradient(0deg, .5, .3 50%, 0)
+   ================================================================== */
+@container wpl (max-width: 42rem) {
+
+    /* --- VIDEO: bo'sh joyda qora chiziq qoladi (anibla kabi "contain").
+       Desktop'da `cover` — chiziq chiqmaydi. O'zgartirilgan joyi yo'q.
+       `.player-wrap` selektorga qo'shiladi chunki `player.css:800` dagi
+       `.player-wrap.has-video-container .udp-player video` (0,3,1)
+       `cover !important` bilan keladi — undan kuchli bo'lishi kerak. --- */
+    .watch-player .player-wrap .udp-player video,
+    .watch-player .udp-player video { object-fit: contain !important; }
+
+    /* --- GRADIENT: boshqaruv paneli ustidan o'tadigan qoraytirish.
+       anibla `.media-overlay`: linear-gradient(0deg, .5, .3, 0).
+       Faqat boshqaruv paneli ko'rinib turganda paydo bo'ladi. --- */
+    .watch-player .udp-player::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 12;                 /* titlebar(15) va panel(18) ostida */
+        pointer-events: none;
+        background: linear-gradient(0deg,
+            rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.3) 50%, rgba(0, 0, 0, 0));
+        opacity: 0;
+        transition: opacity 0.15s ease-out;
+    }
+    .watch-player .udp-player:hover::after,
+    .watch-player .udp-player.udp-ui-visible::after,
+    .watch-player .udp-player.udp-paused::after,
+    .watch-player .udp-player.is-loading::after { opacity: 1; }
+
+    /* --- BOSHQARUV PANELI: markazda emas, to'liq eni (8px chekka) --- */
+    .watch-player .udp-controls {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        width: auto;
+        max-width: none;
+        transform: none;
+        padding: 6px;
+        gap: 0;
+        border: none;
+        border-radius: 24px;
+    }
+
+    /* --- 1-QATOR (yuqorida): VAQT + CHIZIQ, to'liq eni --- */
+    .watch-player .udp-controls-row2 {
+        order: -1;                   /* desktopda pastda, telefonda tepada */
+        width: 100%;
+        height: 32px;
+        gap: 12px;
+        padding: 0 10px;
+    }
+    .watch-player .udp-time {
+        font-size: 13px;
+        min-width: 31px;
+        line-height: 20px;
+    }
+    .watch-player .udp-seek { height: 32px; min-width: 0; }
+    .watch-player .udp-seek-track {
+        height: 4px;
+        border-radius: 999px;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+    }
+    .watch-player .udp-seek:hover .udp-seek-track { height: 4px; }
+    .watch-player .udp-seek-thumb { width: 10px; height: 10px; }
+
+    /* --- 2-QATOR (pastda): TUGMALAR — chapda o'ynash, o'ngda boshqalar --- */
+    .watch-player .udp-controls-row1 {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0;
+        height: 56px;
+    }
+    .watch-player .udp-controls-row1-left,
+    .watch-player .udp-controls-row1-right {
+        display: flex;
+        align-items: center;
+        gap: 1.2px;
+    }
+    .watch-player .udp-controls-row1-center { order: 0; }  /* o'yin — birinchi */
+    .watch-player .udp-controls-row1-left   { order: 1; }  /* ovoz — uning yonida */
+    .watch-player .udp-controls-row1-right  { order: 2; }  /* sifat/pip/ekran — o'ngda */
+
+    /* Tugmalar: 36x36, doira, bosilganda 0.9 ga kichrayadi */
+    .watch-player .udp-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+    }
+    .watch-player .udp-btn:active { transform: scale(0.9); }
+    .watch-player .udp-btn svg { width: 18px; height: 18px; }
+
+    /* Ovoz slayderi — balandligi teginish uchun yetarli */
+    .watch-player .udp-volume { gap: 6px; }
+    .watch-player .udp-volume-bar { width: 56px; }
+
+    /* Sifat/o'rnatish tugmasi — anibla kabi 56x56 kvadrat (shu sabab
+       butun qator 56px baland bo'ladi). Ikonka tepada, "HD" yorlig'i ostida. */
+    .watch-player .udp-settings {
+        order: -1;
+        width: 56px;
+        height: 56px;
+        flex-direction: column;
+        gap: 3px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.1);
+    }
+    .watch-player .udp-settings:hover { background: rgba(255, 255, 255, 0.16); }
+    .watch-player .udp-quality-label {
+        position: static;
+        min-width: 0;
+        font-size: 9px;
+        font-weight: 800;
+        color: rgba(255, 255, 255, 0.92);
+        background: none;
+        border-radius: 0;
+        padding: 0;
+        box-shadow: none;
+    }
+}
+
+/* Pleer QUTISI — kengligi 42rem dan kichik bo'lsa (anibla kabi):
+     • burchak 0
+     • sahifa chetlariga to'liq tegib turadi (full-bleed)
+   `@container` ichida konteynerning O'ZIGA qoida yozib bo'lmaydi,
+   shuning uchun bu yerda ekran kengligi bo'yicha. */
+@media (max-width: 42rem) {
+    .watch-player {
+        border-radius: 0;
+        margin-left: -14px;
+        margin-right: -14px;
+        width: calc(100% + 28px);
+    }
+    /* `player.css:744` dagi `width: calc(100% + 32px) !important` full-bleed
+       haqiqiyda KESISH berardi: `.watch-player` `overflow: hidden` bo'lgani
+       uchun chetlaridagi 16px yopqib qolardi — video ham, boshqaruv paneli ham
+       kesilib chiqardi (panel pleerdan 16px kengroq bo'lib qolardi).
+       Endi full-bleed yuqoridagi `.watch-player` da bajariladi, shuning uchun
+       bu yerda bekor qilinadi. */
+    .watch-player .player-wrap.has-video-container {
+        width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+}
+@media (max-width: 560px) {
+    /* Sahifa chet bo'shligi 14px dan 10px ga kamayadi — shunga mos. */
+    .watch-player {
+        margin-left: -10px;
+        margin-right: -10px;
+        width: calc(100% + 20px);
+    }
 }
 
 /* ======================================================== SARLAVHA / AMALLAR */
@@ -417,7 +607,10 @@
 @media (max-width: 560px) {
     .ig-page.watch-page { padding: 10px; }
     .watch-title { font-size: 17px; }
-    .watch-player { border-radius: 10px; }
+    /* `.watch-player` burchagi endi yuqoridagi `@media (max-width: 42rem)`
+       qoidasi bilan boshqariladi (mobil pleer anibla kabi burchaksiz).
+       Bu yerda qo'yilmadi — aks holda u keyingi qoida bo'lib, mobil
+       ko'rinishni bosib ketardi. */
     .watch-side-head { padding: 10px 12px; }
     .watch-comments-list { max-height: 460px; }
     /* Tor ekranda kenglik kam bo'lgani uchun rasm ham kichrayadi. */
