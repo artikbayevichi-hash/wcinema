@@ -111,6 +111,19 @@
     -webkit-backdrop-filter: blur(16px) saturate(1.5);
 }
 
+/* --- Izoh chizig'ining YUKLANMAGAN qismi (#30343d) edi ------------------
+   To'q kul rang chiziq qora ko'rinar edi — "video hali kelmagan" joyi
+   ko'rinmasdi. Anibla.uz da aynan shu yer `white/20` ishlatiladi, shu
+   bizga ham mos keladi:
+     yuklanmagan qism  : rgba(255, 255, 255, .2)   ← endi yorqinroq
+     yuklangan qism    : rgba(255, 255, 255, .3)   (`.udp-seek-buffer`)
+     ko'rilgan qism    : #fff                        (`.udp-seek-progress`)
+   Uchala daraja bir-biridan aniq farq qiladi. Faqat `.watch-player`
+   ostida — boshqa sahifalardagi player tegilmaydi. */
+.watch-player .udp-seek-track {
+    background: rgba(255, 255, 255, .2);
+}
+
 /* ======================================================== SARLAVHA / AMALLAR */
 .watch-head { margin: 14px 0 0; }
 .watch-title {
