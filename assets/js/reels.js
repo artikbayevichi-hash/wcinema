@@ -143,7 +143,11 @@
             const start = (pb.start > 0)
                 ? ` onloadedmetadata="this.currentTime=${Number(pb.start) || 0}"`
                 : '';
-            media = `<video src="${esc(pb.url)}" ${start}
+            // Poster atributi: kadr kelguncha bo'sh qora kvadrat ko'rinib
+            // turmasligi uchun (Telegram videolari uchun esa `tg-stream.js`
+            // konteynerning o'ziga fon qo'yadi).
+            const pst = pb.poster ? ` poster="${esc(pb.poster)}"` : '';
+            media = `<video src="${esc(pb.url)}" ${start}${pst}
                              playsinline loop preload="metadata"
                              ${pb.seek ? 'controls' : ''}
                              ontouchstart="tapPlay(this, event)"></video>`;
@@ -353,13 +357,19 @@
             deep:    box.dataset.deep || '',
             poster:  box.dataset.poster || '',
             onReady: function () {
-                schedulePrefetch(i);
+                // Joriy video o'ynab boshlagan ekan — endi trafik bo'sh.
+                // Shuning uchun bu yerda CHUQUR oldindan yuklashni
+                // yoqamiz: keyingi reel uchun 1 MB bayt ham fonga olinadi.
+                schedulePrefetch(i, true);
                 attachVideo(i);
             }
         });
     }
 
-    function schedulePrefetch(i) {
+    // `deep` — true bo'lsa, faqat metama'lumat emas, faylning birinchi 1 MB
+    // bayti ham oldindan olinadi (bosh baytlar keshiga). Bu faqat joriy
+    // video o'ynab boshlagan paytda chaqiriladi — trafik bo'sh bo'lgani uchun.
+    function schedulePrefetch(i, deep) {
         if (i !== state.active) return;
         const took = Date.now() - (state.mountStartedAt || Date.now());
         if (took > 20000) return;
@@ -377,7 +387,8 @@
             channel: ch,
             post: post,
             url: box.dataset.url || '',
-            deep: box.dataset.deep || ''
+            deep: box.dataset.deep || '',
+            bytes: !!deep
         });
     }
 
@@ -403,6 +414,14 @@
                 try { window.TgStream.stop(); } catch (e) {}
                 tg.dataset.mounted = '';
                 tg.innerHTML = '';
+                // To'xtatilgan slayd bo'sh qora bo'lib qolmasin — posteri
+                // qoladigan qilib konteyner foniga qo'yamiz.
+                const ps = tg.dataset.poster || '';
+                if (ps) {
+                    tg.style.backgroundImage = `url("${ps.replace(/\\/g, '/').replace(/"/g, '%22')}")`;
+                    tg.style.backgroundSize = 'cover';
+                    tg.style.backgroundPosition = 'center center';
+                }
             }
         });
     }
@@ -415,6 +434,13 @@
 
         pauseAll(i);
         playAt(i);
+
+        // Keyingi slaydni DARHOL tayyorlaymiz (faqat metama'lumot: Telegram'dan
+        // xabar topib, formatni tekshirib qo'yamiz). Foydalanuvchi keyingi
+        // reelga o'tganda `findDoc` + `probe` qayta ishlamaydi — shu zahoti
+        // ochiladi. Chuqur (1 MB bayt) oldindan yuklash esa joriy video
+        // o'ynab boshlagan paytda `onReady` orqali alohida chaqiriladi.
+        if (changed) schedulePrefetch(i);
 
         if (scroll && state.slideEls[i]) {
             state.slideEls[i].scrollIntoView({ behavior: 'auto', block: 'start' });

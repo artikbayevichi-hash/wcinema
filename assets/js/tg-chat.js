@@ -602,10 +602,17 @@
     if (t === 'gif')     renderGifPanel();
   }
 
+  /** Stiker panelidan keyin boshqa tabga o'tilganda `is-sticker` qolmasin. */
+  function clearStickerMode() {
+    var b = pickerBody();
+    if (b) b.classList.remove('is-sticker');
+  }
+
   // --------------------------------------------------------------- 1) EMOJI
   function renderEmojiPanel() {
     var b = pickerBody();
     if (!b) return;
+    clearStickerMode();
     var secs = (global.TgEmoji && TgEmoji.sections()) || [];
     b.innerHTML = secs.map(function (g, gi) {
       var key = g.name === 'So‘nggi' ? 'recent' : 'g' + gi;
@@ -677,6 +684,10 @@
   function renderStickerPanel() {
     var b = pickerBody();
     if (!b) return;
+    // Qidiruv + to'plamlar qatori DOIM ko'rinib tursin, faqat stikerlar
+    // grid'i scroll qilinsin (ichki scroll qo'shilib ketmasligi uchun
+    // tashqi konteyner skrolga yopiladi).
+    b.classList.add('is-sticker');
     b.innerHTML =
         '<div class="chat-sticker-head">'
       +   '<div class="chat-sticker-search">'
@@ -845,6 +856,7 @@
   function renderGifPanel() {
     var b = pickerBody();
     if (!b) return;
+    clearStickerMode();
     b.innerHTML = '<div class="chat-gif-search"><input id="chatGifQuery" type="text" placeholder="GIF qidirish…" autocomplete="off"></div>'
       + '<div class="chat-gif-body" id="chatGifBody"><div class="chat-empty"><span class="spinner"></span></div></div>';
     var inp = el('chatGifQuery');

@@ -2071,7 +2071,10 @@
     box.setAttribute('data-mode', mode);
     renderTabs(mode);
     var p = panel();
-    if (p) p.innerHTML = '<div class="reels-c-picker-body" id="cPickerBody">' + (statusHtml || '') + '</div>';
+    if (p) {
+      p.classList.remove('is-sticker');
+      p.innerHTML = '<div class="reels-c-picker-body" id="cPickerBody">' + (statusHtml || '') + '</div>';
+    }
   }
 
   function pickerStatus(html) {
@@ -2131,25 +2134,64 @@
     renderTabs('sticker');
     var p = panel();
     if (!p) return;
-    p.innerHTML = '<div class="reels-c-picker-head">Stikerlar</div>'
+    // To'plamlar 200+ bo'lishi mumkin -> qidiruv maydoni + ko'p qatorli
+    // (vertikal scroll) ro'yxat (chatdagi kabi).
+    p.classList.add('is-sticker');
+    p.innerHTML =
+        '<div class="reels-c-sticker-head">'
+      +   '<div class="reels-c-sticker-search">'
+      +     '<input id="cStickerSearch" type="text" autocomplete="off" spellcheck="false"'
+      +       ' placeholder="To‘plam qidirish (masalan: Duck)…" aria-label="Stiker to‘plamlarini qidirish">'
+      +     '<span class="reels-c-sticker-count" id="cStickerCount"></span>'
+      +   '</div>'
+      + '</div>'
       + '<div class="reels-c-sticker-sets" id="cStickerSets"></div>'
       + '<div class="reels-c-picker-body" id="cPickerBody"><div class="reels-c-empty"><span class="spinner"></span></div></div>';
 
-    Promise.all([stickerSetsPromise(), loadRecentStickers()]).then(function (r) {
-      var sets = r[0] || [], recent = r[1] || [];
-      var wrap = el('cStickerSets');
-      if (!wrap) return;
-      if (!sets.length && !recent.length) { pickerStatus('Stiker topilmadi'); return; }
+    var wrap = el('cStickerSets');
+    var sinp = el('cStickerSearch');
+    var scnt = el('cStickerCount');
+    var items = [];
 
-      // Tugmalar: avval "So'nggi", keyin featured + o'rnatilgan to'plamlar.
-      var items = [];
-      if (recent.length) items.push({ title: 'So‘nggi', recent: recent });
-      sets.forEach(function (s) { items.push({ title: s.title || 'Set', set: s }); });
+    // Tugmalar: avval "So'nggi", keyin featured + o'rnatilgan to'plamlar.
+    function paint(q) {
+      if (!wrap) return 0;
+      q = String(q || '').trim().toLowerCase();
+      var html = '', shown = 0;
+      items.forEach(function (it, i) {
+        var title = it.title || 'Set';
+        if (q && title.toLowerCase().indexOf(q) < 0) return;
+        shown++;
+        html += '<button type="button" class="reels-c-sticker-set" data-i="' + i + '" title="' + esc(title) + '">'
+              + esc(title) + '</button>';
+      });
+      wrap.innerHTML = shown ? html : '<div class="reels-c-sticker-none">Topilmadi</div>';
+      if (scnt) scnt.textContent = items.length ? (shown + ' / ' + items.length) : '';
+      wrap.scrollTop = 0;
+      if (q && shown === 1) {
+        var only = wrap.querySelector('[data-i]');
+        if (only) only.click();
+      }
+      return shown;
+    }
 
-      wrap.innerHTML = items.map(function (it, i) {
-        return '<button type="button" class="reels-c-sticker-set" data-i="' + i + '">'
-          + esc(it.title) + '</button>';
-      }).join('');
+    if (sinp) {
+      var tmr = null;
+      sinp.addEventListener('input', function () {
+        if (tmr) clearTimeout(tmr);
+        var v = sinp.value;
+        tmr = setTimeout(function () { paint(v); }, 130);
+      });
+      sinp.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); closePicker(); return; }
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var first = wrap && wrap.querySelector('[data-i]');
+        if (first) first.click();
+      });
+    }
+
+    if (wrap) {
       wrap.addEventListener('click', function (e) {
         var b = e.target.closest && e.target.closest('[data-i]');
         if (!b) return;
@@ -2161,11 +2203,23 @@
         if (it.recent) renderStickerDocs(it.recent);
         else loadStickerSet(it.set);
       });
+    }
 
-      var first = wrap.querySelector('.reels-c-sticker-set');
-      if (first) first.classList.add('on');
-      if (items[0] && items[0].recent) renderStickerDocs(items[0].recent);
-      else if (items[0]) loadStickerSet(items[0].set);
+    Promise.all([stickerSetsPromise(), loadRecentStickers()]).then(function (r) {
+      var sets = r[0] || [], recent = r[1] || [];
+      if (!wrap) return;
+      if (!sets.length && !recent.length) { pickerStatus('Stiker topilmadi'); return; }
+
+      if (recent.length) items.push({ title: 'So‘nggi', recent: recent });
+      sets.forEach(function (s) { items.push({ title: s.title || 'Set', set: s }); });
+
+      var shown = paint(sinp ? sinp.value : '');
+      if (shown !== 1) {
+        var first = wrap.querySelector('.reels-c-sticker-set');
+        if (first) first.classList.add('on');
+        if (items[0] && items[0].recent) renderStickerDocs(items[0].recent);
+        else if (items[0]) loadStickerSet(items[0].set);
+      }
     }).catch(function (e) {
       pickerStatus('Xatolik: ' + esc(errMsg(e)));
     });
@@ -2309,6 +2363,7 @@
     renderTabs('gif');
     var p = panel();
     if (!p) return;
+    p.classList.remove('is-sticker');
     p.innerHTML = '<div class="reels-c-picker-head">GIF</div>'
       + '<div class="reels-c-gif-search">'
       + '<input id="cGifInput" type="text" placeholder="Qidirish (masalan: cat)…" autocomplete="off"></div>'
@@ -2355,6 +2410,7 @@
     renderTabs('mention');
     var p = panel();
     if (!p) return;
+    p.classList.remove('is-sticker');
     var list = [];
     for (var k in S.users) {
       var u = S.users[k];

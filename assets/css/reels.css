@@ -686,17 +686,56 @@
     gap: 6px; max-height: 36dvh;
 }
 .reels-c-picker-body .reels-c-empty { grid-column: 1 / -1; padding: 16px 0; }
+/* To'plamlar soni 200+ bo'lishi mumkin -> qidiruv maydoni + bir necha
+   qatorga o'tadigan, vertikal scroll qilinadigan ro'yxat (chatdagi kabi). */
+.reels-c-picker-panel.is-sticker { overflow: hidden; }
+.reels-c-sticker-head {
+    flex: 0 0 auto; padding: 6px 10px 0; background: var(--bg-2);
+}
+.reels-c-sticker-search { display: flex; align-items: center; gap: 6px; }
+.reels-c-sticker-search input {
+    flex: 1; min-width: 0;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 999px; padding: 7px 13px;
+    color: var(--text); font: inherit; font-size: 13px; outline: none;
+}
+.reels-c-sticker-search input:focus { border-color: var(--accent); }
+.reels-c-sticker-count {
+    flex: 0 0 auto; min-width: 40px; text-align: right;
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
 .reels-c-sticker-sets {
-    display: flex; gap: 6px; overflow-x: auto;
-    padding: 4px 10px 6px;
+    flex: 0 0 auto;
+    display: flex; flex-wrap: wrap; gap: 5px;
+    overflow-y: auto; overflow-x: hidden;
+    max-height: 104px;                /* ~3 qator */
+    padding: 6px 10px;
+    background: var(--bg-2);
+    scrollbar-width: thin;
+}
+.reels-c-sticker-sets::-webkit-scrollbar { width: 6px; }
+.reels-c-sticker-sets::-webkit-scrollbar-thumb {
+    background: rgba(127, 143, 168, .4); border-radius: 3px;
 }
 .reels-c-sticker-set {
     flex: 0 0 auto; background: var(--card); color: var(--muted);
     border: 1px solid var(--line); border-radius: 999px;
-    padding: 4px 10px; font-size: 12px; font-weight: 700; cursor: pointer;
-    white-space: nowrap;
+    padding: 4px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+    white-space: nowrap; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis;
 }
 .reels-c-sticker-set.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.reels-c-sticker-none {
+    flex: 1 0 100%; text-align: center; padding: 10px 0;
+    font-size: 12px; color: var(--muted);
+}
+/* Stiker panelida grid o'zi scroll qiladi. */
+.reels-c-picker-panel.is-sticker .reels-c-picker-body {
+    flex: 1 1 auto; min-height: 0; max-height: none;
+}
+.tv-mode .reels-c-sticker-sets { max-height: 132px; }
+.tv-mode .reels-c-sticker-set { font-size: 14px; padding: 6px 12px; }
 .reels-c-sticker-item {
     background: none; border: 0; cursor: pointer; padding: 4px;
     display: flex; align-items: center; justify-content: center;

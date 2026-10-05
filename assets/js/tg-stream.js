@@ -111,7 +111,10 @@
     prefetchPromise: null, // oldindan yuklash promise
     prefetchAbort: null,   // uni to'xtatish uchun funksiya
     onPlayerReady: null,   // mount(onReady) — player o'ynashga tayyor bo'lganda
-    readyFired: false      // onReady bir marta chaqirilishi uchun
+    readyFired: false,     // onReady bir marta chaqirilishi uchun
+    headCache: null,       // { docId: {t, bytes} } — fayl BOSHIDAGI baytlar
+    docSize: null,         // { docId: bayt } — butun fayl hajmi
+    deepKeys: null         // { docId: t } — bosh baytlar allaqachin olingan
   };
 
   // ------------------------------------------------------------------- yordam
@@ -894,6 +897,67 @@
     return TG_BLOCK - (aligned % TG_BLOCK);
   }
 
+  // ------------------------------------------------- BOSH BAYTLAR KESHI
+  //
+  //  Bir faylning birinchi `HEAD_MAX` bayti. Nima uchun kerak:
+  //
+  //  * `probeMp4` formatni aniqlash uchun fayl boshidan 64 KB o'qiydi;
+  //  * undan keyin `<video>` `tgfile/?size=…` manziliga yana so'rov yuboradi
+  //    va SW faylni 0-dan o'qishni boshlaydi.
+  //
+  //  Xuddi shu 64 KB (va SW ning birinchi 1 MB tortishida kelgan qismi)
+  // ikkinchi marta Telegram'dan so'ralmasligi uchun saqlanadi. Natijada:
+  //  video o'ynash bir so'rov bilan (Telegram'ga umuman murojaat qilmasdan)
+  //  boshlanadi.
+  //
+  //  Kesh KAM: 2 ta hujjat, har biri 1 MB. `prefetch` bu baytlarni oldindan
+  //  oladi — keyingi reel ochilganda u tayyor turadi.
+  var HEAD_MAX = 1024 * 1024;     // SW ning birinchi tortishi ham 1 MB
+  var HEAD_KEEP = 2;              // nechta hujjatni saqlaymiz
+
+  function headId(ctx) {
+    var id = (ctx && ctx.loc && ctx.loc.id != null) ? ctx.loc.id : (S.doc && S.doc.id);
+    return (id == null || id === '') ? null : String(id);
+  }
+
+  // Butun fayl hajmi (kichik fayllar uchun). Bilamiz — kash chegarasidan
+  // tashqariga chiqishda Telegram'ga bo'sh so'rov yubormaslik uchun kerak:
+  // 700 KB li faylning 1 MB so'rovi javobsiz qaytadi.
+  function headSize(id, size) {
+    if (!id) return 0;
+    S.docSize = S.docSize || {};
+    if (size > 0) S.docSize[id] = size;
+    return Number(S.docSize[id]) || 0;
+  }
+
+  // O'qilgan baytlarni keshga yozamiz (faqat fayl BOSHI uchun — qolgan
+  // joylar cheksiz o'sib ketmasligi uchun).
+  function headPut(id, off, u8) {
+    if (!id || !u8 || !u8.length || off !== 0) return;
+    if (u8.length > HEAD_MAX) u8 = u8.subarray(0, HEAD_MAX);
+    S.headCache = S.headCache || {};
+    var c = S.headCache;
+    c[id] = { t: Date.now(), bytes: new Uint8Array(u8) };
+
+    // Eskirganlarni tashlab, KAM joy saqlaymiz.
+    var keys = Object.keys(c);
+    if (keys.length > HEAD_KEEP) {
+      keys.sort(function (a, b) { return c[a].t - c[b].t; });
+      for (var i = 0; i < keys.length - HEAD_KEEP; i++) delete c[keys[i]];
+    }
+  }
+
+  function headGet(id) {
+    if (!id) return null;
+    var c = S.headCache && S.headCache[id];
+    return (c && c.bytes && c.bytes.length) ? c : null;
+  }
+
+  function headHas(id, need) {
+    var c = headGet(id);
+    return !!(c && c.bytes.length >= need);
+  }
+
   // BITTA `upload.getFile` so'rovi. Qaytgan bayt soni `length` dan kam
   // bo'lishi mumkin (blok chegarasi tufayli) — buni `readBytes` hal
   // qiladi. Fayl tugagan bo'lsa — bo'sh massiv (xato EMAS).
@@ -922,6 +986,7 @@
     }), dc).then(function (res) {
       var b = res.bytes || res;
       var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
+      headPut(headId(ctx), aligned, u8);
       // Telegram kamroq qaytarsa — ortiqcha joyni nol bilan
       // to'ldirmaymiz, faqat haqiqiy baytlarni qaytaramiz.
       if (u8.length <= skip) return new Uint8Array(0);
@@ -939,6 +1004,35 @@
   function readBytes(offset, length, ctx) {
     if (!(length > 0)) return Promise.resolve(new Uint8Array(0));
     if (ctx && ctx.abort && ctx.abort()) return Promise.resolve(new Uint8Array(0));
+
+    // 0) Bosh baytlar keshi. Agar so'ralgan oraliq (yoki uning boshi)
+    //    allaqachon olingan bo'lsa — Telegram'ga UMUMAT murojaat qilmaymiz.
+    //    `probeMp4` va `<video>` bir xil baytlarni o'qiydi; bu kesh shu
+    //    takroriy tortishni yo'q qiladi va reel ochilishini tezlashtiradi.
+    var hid = headId(ctx);
+    var hc = headGet(hid);
+    if (hc && offset < hc.bytes.length) {
+      var end = offset + length;
+      if (end <= hc.bytes.length) {
+        return Promise.resolve(hc.bytes.slice(offset, end));
+      }
+      // Keshda faylning OXIRGI bayti bo'lsa (kichik fayl to'liq kelgan) —
+      // Telegram'ga bo'sh so'rov yubormaymiz.
+      var full = headSize(hid, 0);
+      if (full && full <= hc.bytes.length) {
+        return Promise.resolve(hc.bytes.slice(offset));
+      }
+      // Qisman keshlangan: keshdagi qism + qolgani Telegram'dan.
+      var headPart = hc.bytes.slice(offset);
+      var tailFrom = hc.bytes.length;
+      return readBytes(tailFrom, end - tailFrom, ctx).then(function (tail) {
+        if (!tail || !tail.length) return headPart;
+        var out = new Uint8Array(headPart.length + tail.length);
+        out.set(headPart, 0);
+        out.set(tail, headPart.length);
+        return out;
+      });
+    }
 
     var skip0 = offset - Math.floor(offset / 4096) * 4096;
 
@@ -1057,6 +1151,30 @@
       if (n) n.innerHTML = html;
     }
   }
+
+  // ---------------------------------------------------------------- poster
+  //
+  // Reel ochilganda avvalgi kadr bir necha soniya YO'Q bo'lmasligi kerak:
+  // Telegram'dan qancha tez kelishidan qat'i nazar poster darhol
+  // ko'rinib tursin. Shu sabab `mount()` konteynerning o'ziga poster
+  // fon qo'yadi; `<video>` yaratilgach esa bu fon olib tashlanadi
+  // (uning o'z `poster` atributi bor).
+  function posterBg(node, poster) {
+    if (!node) return;
+    if (!poster) { posterBgOff(node); return; }
+    var u = String(poster).replace(/\\/g, '/').replace(/"/g, '%22');
+    node.style.backgroundImage = 'url("' + u + '")';
+    node.style.backgroundSize = 'cover';
+    node.style.backgroundPosition = 'center center';
+    node.style.backgroundRepeat = 'no-repeat';
+  }
+  function posterBgOff(node) {
+    if (!node || !node.style) return;
+    node.style.backgroundImage = '';
+    node.style.backgroundSize = '';
+    node.style.backgroundPosition = '';
+    node.style.backgroundRepeat = '';
+  }
   function progress() {
     if (!S.size || !S.mount) return;
     var n = S.mount.querySelector('.tgs-prog');
@@ -1124,6 +1242,8 @@
     var job = S.job;
 
     node.classList.add('tgs', 'tgs-preview');
+    // Poster darhol ko'rinib turadi — yuklanayotgan paytdan qat'i nazar.
+    posterBg(node, opts.poster);
     // Yuklanayotganda spinner (ostidagi karta posteri ko'rinib turadi).
     node.innerHTML = '<div class="tgs-pv-load"><i></i></div>';
 
@@ -1137,6 +1257,7 @@
 
   // Preview uchun engil <video> (boshqaruvsiz, ovozsiz, halqali).
   function renderPreview(node, opts, size, probe) {
+    posterBgOff(node);                 // endi `<video poster>` o'zi ko'rsatadi
     var url = fileUrl() + '?size=' + size + '&t=' + Date.now()
       + '&mime=' + encodeURIComponent(mimeOf(probe));
     node.innerHTML = '<video class="tgs-pv" id="playerVideo" muted playsinline loop '
@@ -1165,6 +1286,10 @@
     S.job++;
 
     node.classList.add('tgs');
+    // Poster darhol ko'rinib turadi: Telegram'dan kadr kelguncha bo'sh
+    // qora ekran ko'rsatmaymiz. `<video>` tayyor bo'lganda bu fon
+    // `renderPlayer` da olib tashlanadi.
+    posterBg(node, opts.poster);
 
     // Qayta o'rnatilganda QR rasmini YO'QOTMAYAPMIZ.
     //
@@ -1297,6 +1422,7 @@
         S.doc = cHit.doc;
         S.size = cHit.size;
         S.totalRead = 0;
+        headSize(cHit.doc && cHit.doc.id, cHit.size);
         S.loc = cHit.loc;
         S.probe = cHit.probe;
         connect();
@@ -1322,6 +1448,7 @@
     S.doc = doc;
     S.size = size;
     S.totalRead = 0;
+    headSize(doc.id, size);
     S.loc = new S.T.Api.InputDocumentFileLocation({
       id: doc.id,
       accessHash: doc.accessHash,
@@ -1571,6 +1698,7 @@
 
   // --------------------------------------------------------------- player
   function renderPlayer(node, opts, size, probe) {
+    posterBgOff(node);                 // endi `<video poster>` o'zi ko'rsatadi
     var cfg = JSON.stringify({
       autoplay: true,
       resumeAt: (S.cfg && S.cfg.resumeAt) || 0,
@@ -1664,6 +1792,7 @@
   // haqiqiy sinov — shu oqimning o'zi.
   function renderAdaptivePlayer(node, opts, size, probe, why) {
     if (S.play || S.playAbort) return;          // allaqach boshlandi
+    posterBgOff(node);                           // `<video poster>` o'zi ko'rsatadi
 
     // Bekor qilish. Modal yopilganda `stop()` uni otadi — konvertatsiya
     // shu zahoti to'xtaydi (Telegram'dan oqish ham to'xtaydi).
@@ -1989,6 +2118,9 @@
   // emas) o'qiladi, shunda aktiv oqimga tegmasdan boshqa hujjatni
   // tekshirish mumkin (prefetch).
   function probeFormat(size, ctx) {
+    // Hajmni yozib qo'yamiz: bosh baytlar keshi shundan foydalana oladi
+    // (kichik fayl to'liq kelgan bo'lsa — bo'sh so'rov yubormasin).
+    headSize(headId(ctx), Number(size) || 0);
     if (!global.WcProbe) {
       return Promise.resolve({
         playable: true, containerName: 'MP4', videoCodecs: [],
@@ -2066,9 +2198,14 @@
       ? (String(opts.channel) + '/' + Number(opts.post)) : null;
     if (!key) return Promise.resolve(false);
 
-    // Keshda bor bo'lsa — hech narsa qilmaymiz.
+    // Keshda bor bo'lsa — metama'lumotni qayta qidirmaymiz. Lekin `bytes`
+    // so'rovi kelgan bo'lsa, bosh baytlarni (1 MB) hozir olib qo'yamiz:
+    // foydalanuvchi keyingi reelga o'tganda video TAYYOR bo'ladi.
     var hit = S.pvCache && S.pvCache[key];
-    if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) return Promise.resolve(true);
+    if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) {
+      if (opts.bytes) warmHead(hit.doc, hit.loc, hit.size);
+      return Promise.resolve(true);
+    }
 
     // Xuddi shu hujjat allaqachon yuklanmoqda.
     if (S.prefetchKey === key && S.prefetchPromise) return S.prefetchPromise;
@@ -2079,6 +2216,7 @@
     if (!hasSession()) return Promise.resolve(false);
 
     var aborted = false;
+    var deep = !!opts.bytes;
     S.prefetchKey = key;
     S.prefetchAbort = function () { aborted = true; };
 
@@ -2102,6 +2240,12 @@
             if (aborted) return false;
             S.pvCache = S.pvCache || {};
             S.pvCache[key] = { t: Date.now(), doc: doc, size: size, loc: loc, probe: probe };
+            // Chuqur oldindan yuklash: metama'lumot TAYYOR bo'ldi, shuning
+            // uchun endi faylning birinchi 1 MB ini FONDA tortamiz. Bu
+            // `mount()` ni kutmaydi — foydalanuvchi o'sha reelga o'tsa,
+            // `<video>` ning birinchi so'rovi allaqach tayyor javob oladi
+            // va kadr deyarli darhol ko'rinadi.
+            if (deep) warmHead(doc, loc, size, ctx);
             return true;
           });
         });
@@ -2130,6 +2274,60 @@
     S.prefetchAbort = null;
     S.prefetchKey = null;
     S.prefetchPromise = null;
+  }
+
+  // ------------------------------------------- bosh baytlarni fonda olish
+  //
+  //  `prefetch({bytes:true})` faqat metama'lumot (doc/loc/probe) tayyor
+  //  qiladi. Bu yetarli emas: keyingi reel ochilganda `<video>` yana
+  //  Telegram'dan birinchi bo'laklarni so'raydi — aynan o'zgarishni
+  //  sezadigan qism.
+  //
+  //  Shu funksiya faylning birinchi `HEAD_MAX` (1 MB) baytini `readBytes`
+  //  orqali oladi. `readOnce` ularni avtomatik ravishda bosh baytlar
+  //  keshiga yozadi — keyinchalik `<video>` ning birinchi tortishi
+  //  Telegram'ga umuman murojaat qilmaydi va DARHOL to'ldiriladi.
+  //
+  //  Muhim: bu `prefetch` ning promise'iga QISMAYDI. Aks holda foydalanuvchi
+  //  reelga o'tganda `mount()` 1 MB ni tugashini kutib o'tirib qolardi —
+  //  ya'ni biz tezlashtirmoqchi bo'lgan narsaning o'zini sekinlashtirgan
+  //  bo'lardik.
+  function warmHead(doc, loc, size, ctx) {
+    var id = headId({ loc: loc || null });
+    if (!id) return;
+    // Bu hujjat uchun bosh baytlar allaqach olingan — takrorlamaymiz.
+    S.deepKeys = S.deepKeys || {};
+    if (S.deepKeys[id] && (Date.now() - S.deepKeys[id]) < 5 * 60 * 1000) return;
+    S.deepKeys[id] = Date.now();
+    // Ikki xotira xaritasi ham hujjat id'si bo'yicha o'sadi — eskirgan
+    // kalitlarni tozalab qo'yamiz (uzoq ochilgan saytda yig'lib qolmasin).
+    if (Object.keys(S.deepKeys).length > 64) {
+      var old = Date.now() - 5 * 60 * 1000;
+      for (var k in S.deepKeys) if (S.deepKeys[k] < old) delete S.deepKeys[k];
+      if (S.docSize) {
+        for (var k2 in S.docSize) if (!S.deepKeys[k2]) delete S.docSize[k2];
+      }
+    }
+
+    var c = ctx || { loc: loc, dcId: (doc && doc.dcId) };
+    var want = Math.min(HEAD_MAX, Number(size) || 0);
+    if (!(want > 0)) return;
+    headSize(id, Number(size) || 0);
+    if (headHas(id, want)) { S.deepKeys[id] = Date.now(); return; }
+
+    // Natijani ishlatamiz (kutmaymiz) — `headPut` keshga o'zi yozadi.
+    //
+    // KICHIK KECHIKISH: bu fonda ish joriy video o'ynab boshlagan paytda
+    // chaqiriladi. Agar darhol yuborsak, 1 MB joriy oqimning bandini
+    // egallab, uni to'xtatib qo'yishi mumkin (buffer to'lib qoladi).
+    // 600 ms — brauzer o'z buferini to'ldirib bo'ladi; shundan keyin
+    // keyingi reel uchun olish xavfsiz.
+    setTimeout(function () {
+      if (c.abort && c.abort()) return;      // foydalanuvchi slaydni tashlab ketgan
+      readBytes(0, want, c).then(function () {
+        // Bo'sh bo'lsa — Telegram'da fayl qisqar (masalan 0 bayt). Xato emas.
+      }).catch(function () { /* fon — xatoni ko'rsatmaymiz */ });
+    }, 600);
   }
 
   // Sahifadan chiqishda (boshqa bo'limga o'tish) hamma narsani to'xtatamiz:

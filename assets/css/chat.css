@@ -325,6 +325,12 @@
 }
 .chat-picker-x:hover { background: var(--card); color: var(--text); }
 .chat-picker-body { min-height: 64px; overflow-y: auto; padding: 6px 2px 8px; }
+/* Stiker paneli: qidiruv + to'plamlar qatori qat'iy, faqat stikerlar
+   grid'i scroll qilinadi (ikki ichki scroll birga ishlamasin). */
+.chat-picker-body.is-sticker {
+    overflow: hidden; padding: 0;
+    display: flex; flex-direction: column; min-height: 0;
+}
 .chat-gif-search {
     padding: 0 6px 8px;
     position: sticky; top: 0; z-index: 2;
@@ -360,7 +366,7 @@
 .chat-emoji:active { transform: scale(.92); }
 
 /* ----------------------------------------------------------------- stiker */
-.chat-sticker-body { overflow-y: auto; }
+.chat-sticker-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px 2px 8px; }
 /* Stiker to'plamlari soni juda ko'p (200+). Bitta qatorli gorizontal lenta
    ularni topishga imkon bermaydi, shuning uchun qidiruv maydoni + bir necha
    qatorga o'tadigan (vertikal scroll qilinadigan) ro'yxat qo'llandi. */
