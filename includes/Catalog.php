@@ -184,6 +184,59 @@ class Catalog {
         return $out;
     }
 
+    /**
+     * "Boshqa kinolar, animelar va multfilmlar" - ARALASH tavsiyalar.
+     *
+     * Ko'rish sahifasida (watch.php) pastki qator shu qiymatdan oziqlanadi.
+     * Talablar:
+     *   - aralash bo'lsin: kino + anime + multfilm bir qatorga ketma-ket;
+     *   - lekin o'xshash avval: bir xil kategoriya, keyin reyting;
+     *   - joriy kontent chiqariladi.
+     *
+     * Baza juda kichik bo'lsa hech narsa topilmadi - qatorni bo'sh
+     * qoldirmaslik uchun mashhurlar qaytariladi.
+     *
+     * @param array|int $content  Kontent qatori yoki uning ID'si
+     * @param int       $limit    Qancha tavsiya kerak
+     * @return array  `listContent()` formatidagi satrlar
+     */
+    public function getRelated($content, $limit = 12) {
+        if (is_numeric($content)) {
+            $content = $this->getContent((int) $content);
+        }
+        if (!$content || empty($content['id'])) {
+            return [];
+        }
+        $selfId     = (int) $content['id'];
+        $categoryId = (int) ($content['category_id'] ?? 0);
+        $limit = max(1, (int) $limit);
+
+        // `same_cat` - o'xshash avval, qolganlari keyin. Reyting bo'yicha
+        // aralashlik shu sababli buzilmaydi.
+        $rows = $this->db()->fetchAll(
+            "SELECT c.*, cat.name AS category_name, cat.slug AS category_slug,
+                    (SELECT COUNT(*) FROM episodes e WHERE e.content_id = c.id) AS episode_count,
+                    CASE WHEN c.category_id = ? THEN 0 ELSE 1 END AS same_cat
+             FROM content c
+             JOIN categories cat ON cat.id = c.category_id
+             WHERE c.id <> ?
+               AND c.status = 'published'
+             ORDER BY same_cat ASC, c.rating DESC, c.views DESC, c.id DESC
+             LIMIT ?",
+            [$categoryId, $selfId, $limit]
+        );
+
+        if (!$rows) {
+            $rows = array_values(array_filter(
+                $this->listContent(['sort' => 'popular', 'limit' => $limit]),
+                function ($c) use ($selfId) {
+                    return (int) $c['id'] !== $selfId;
+                }
+            ));
+        }
+        return $rows;
+    }
+
     // =========================================================================
     // Bitta kontent + qismlari
     // =========================================================================

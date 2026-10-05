@@ -39,6 +39,8 @@ require_once __DIR__ . '/../includes/Catalog.php';
 require_once __DIR__ . '/../includes/TgPull.php';
 require_once __DIR__ . '/../includes/TgResolve.php';
 require_once __DIR__ . '/../includes/Reels.php';
+// Ko'rish sahifasi videolari uchun izohlar mavzulari (reels'dan alohida).
+require_once __DIR__ . '/../includes/TgTopics.php';
 require_once __DIR__ . '/../includes/TelegramDelivery.php';
 // Account Privacy: profil maxfiyligi + bloklangan foydalanuvchilar
 require_once __DIR__ . '/../includes/Blocks.php';

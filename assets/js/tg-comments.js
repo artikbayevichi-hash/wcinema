@@ -137,16 +137,35 @@
   }
 
   // --------------------------------------------------------------- topic API
+  //
+  // Izohlar mavzusi qayerda ochiladi - bosh sahifaga bog'liq:
+  //   reels.php  -> `api/reel-topic.php` (reels.id, reels.jadvali)
+  //   watch.php  -> `api/video-topic.php` (episodes.id, tg_topics jadvali)
+  // Sahifa `window.APP.tgCommentsTopicApi` orqali yo'lni ko'rsatadi. Bu
+  // standart qiymat bo'lmasa - reels moduli o'zgarishsiz ishlayveradi.
+  var TOPIC_API   = (global.APP && global.APP.tgCommentsTopicApi) || 'api/reel-topic.php';
+
+  function topicQuery(id) {
+    // `reel-topic.php` `scope` ni bilmaydi (u faqat reels), shuning uchun
+    // qo'shimcha parametr faqat boshqa endpointlar uchun yuboriladi.
+    var q = 'id=' + encodeURIComponent(id);
+    if (TOPIC_API !== 'api/reel-topic.php') {
+      var scope = (global.APP && global.APP.tgCommentsScope) || 'video';
+      q += '&scope=' + encodeURIComponent(scope);
+    }
+    return q;
+  }
+
   function ensureTopic(reel) {
-    return fetchJson(baseUrl('api/reel-topic.php?id=' + encodeURIComponent(reel.id) + '&_=' + Date.now()))
+    return fetchJson(baseUrl(TOPIC_API + '?' + topicQuery(reel.id) + '&_=' + Date.now()))
       .then(function (d) {
         if (d && d.disabled) return { disabled: true };
         if (d && d.topic_id) return d;
         // Mavzu yo'q - bot orqali ochamiz.
-        return fetchJson(baseUrl('api/reel-topic.php'), {
+        return fetchJson(baseUrl(TOPIC_API), {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'id=' + encodeURIComponent(reel.id)
+          body: topicQuery(reel.id)
         });
       })
       .then(function (d) {
@@ -2033,6 +2052,7 @@
     var ab = el('cAttachBtn');
     if (ab) ab.setAttribute('aria-expanded', 'true');
     if (mode === 'sticker')  { toggleSticker();  return; }
+    if (mode === 'emoji')    { toggleEmoji();    return; }
     if (mode === 'gif')      { toggleGif();      return; }
     if (mode === 'mention')  { toggleMention();  return; }
     if (mode === 'photo')    { pickPhoto();      return; }
@@ -2080,6 +2100,73 @@
   function pickerStatus(html) {
     var b = pickerBody();
     if (b) b.innerHTML = '<div class="reels-c-empty">' + html + '</div>';
+  }
+
+  // ----------------------------------------------------------- emoji tanlash
+  //
+  // Xuddi chatdagi kabi: `tg-emoji.js` guruhlar ro'yxatini beradi, biz faqat
+  // chizamyiz. Emoji tanlanganda maydon yopilmaydi (bir nechta ketma-ket
+  // qo'yish mumkin bo'lishi uchun) - chat moduli ham shunday qiladi.
+  function toggleEmoji() {
+    var box = pickerBox();
+    if (!box) return;
+    box.hidden = false;
+    box.setAttribute('data-mode', 'emoji');
+    renderTabs('emoji');
+    var p = panel();
+    if (!p) return;
+    p.classList.remove('is-sticker');
+    p.innerHTML =
+      '<div class="reels-c-picker-head">'
+      +   '<div class="reels-c-emoji" id="cEmojiBox"></div>'
+      + '</div>';
+    var host = el('cEmojiBox');
+    if (!host) return;
+    var secs = (global.TgEmoji && global.TgEmoji.sections()) || [];
+    if (!secs.length) {
+      host.innerHTML = '<div class="reels-c-empty">Emoji yuklanmadi</div>';
+      return;
+    }
+    host.innerHTML = secs.map(function (g, gi) {
+      // "So'nggi" guruhi qayta chizilishi kerak bo'lganda barqaror kalit
+      // kerak - shuning uchun nom emas, indeks ishlatiladi.
+      var key = g.name === 'So‘nggi' ? 'recent' : 'g' + gi;
+      return '<div class="reels-c-emoji-sec" data-sec="' + key + '">'
+        + (g.icon ? '<div class="reels-c-emoji-cap">' + esc(g.icon) + ' ' + esc(g.name) + '</div>' : '')
+        + '<div class="reels-c-emoji-grid">'
+        +   g.list.map(function (em) {
+              return '<button type="button" class="reels-c-emoji-btn" data-e="' + esc(em) + '">' + em + '</button>';
+            }).join('')
+        + '</div></div>';
+    }).join('');
+    // Tanlangan emoji maydonga qo'yiladi. Panel ochiq qoladi.
+    host.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-e]');
+      if (!b) return;
+      var em = b.getAttribute('data-e') || '';
+      if (!em) return;
+      if (global.TgEmoji && global.TgEmoji.pushRecent) global.TgEmoji.pushRecent(em);
+      insertAt(em);
+      syncRecentEmoji();
+    });
+  }
+
+  /** Emojidan keyin "So'nggi" bo'limini yangilaydi (944 ta emoji qayta
+   *  chizilmasligi uchun faqat o'sha bo'limni chizamyiz). */
+  function syncRecentEmoji() {
+    var host = el('cEmojiBox');
+    if (!host || !global.TgEmoji || !global.TgEmoji.recent) return;
+    var sec = host.querySelector('[data-sec="recent"]');
+    var list = global.TgEmoji.recent();
+    if (!list || !list.length) {
+      if (sec) sec.remove();
+      return;
+    }
+    var grid = sec ? sec.querySelector('.reels-c-emoji-grid') : null;
+    if (!grid) return;
+    grid.innerHTML = list.map(function (em) {
+      return '<button type="button" class="reels-c-emoji-btn" data-e="' + esc(em) + '">' + em + '</button>';
+    }).join('');
   }
 
   // ---------------------------------------------------------- stiker tanlash

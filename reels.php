@@ -114,6 +114,7 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
         <div class="reels-c-picker" id="cPicker" hidden>
             <div class="reels-c-picker-tabs" id="cPickerTabs">
                 <button type="button" class="reels-c-picker-tab on" data-mode="sticker" title="Stiker">Stiker</button>
+                <button type="button" class="reels-c-picker-tab" data-mode="emoji" title="Emoji">😀</button>
                 <button type="button" class="reels-c-picker-tab" data-mode="gif" title="GIF">GIF</button>
                 <button type="button" class="reels-c-picker-tab" data-mode="photo" title="Rasm">Rasm</button>
                 <button type="button" class="reels-c-picker-tab" data-mode="mention" title="Belgilash">@</button>
@@ -232,6 +233,9 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>" defer></script>
 <script src="assets/js/tg-voice.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-voice.js') ?: 1; ?>" defer></script>
 <script src="assets/js/tg-format.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-format.js') ?: 1; ?>" defer></script>
+<?php /* Emoji ro'yxati (tg-emoji.js) - izoh kompozitoridagi "😀" tab uchun.
+         * Kichik (8 KB), emoji bosilmagan paytda hech narsa yuklamaydi. */ ?>
+<script src="assets/js/tg-emoji.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-emoji.js') ?: 1; ?>" defer></script>
 <script src="assets/js/tg-comments.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-comments.js') ?: 1; ?>" defer></script>
 <script src="assets/js/reels.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/reels.js') ?: 1; ?>" defer></script>
 <script>
