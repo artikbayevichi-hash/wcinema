@@ -4,12 +4,12 @@
    Vazifa:
      1) Video player (direct/file/hls -> `.udp-player`, telegram ->
         `TgStream.mount()`, embed -> `<iframe>`).
-     2) Qismlar ro'yxati (o'ng panelda, VERTIKAL skroll). Agar qismlar
-        bo'lmasa (kino/multfilm) - o'rniga aralash tavsiyalar.
+     2) Yon panel: serial/anime bo'lsa - qismlar kassetasi (vertikal skroll)
+        va uning ostida "Boshqa kinolar, animelar va multfilmlar" tavsiyalari;
+        kino/multfilmda - faqat tavsiyalar.
      3) Izohlar - `tg-comments.js` moduli (stiker/emoji/GIF/rasm/@ + like,
         reply, o'chirish). Faqat mavzu endpointi boshqa (`api/video-topic.php`).
      4) Chat - `tg-chat.js` moduli, kategoriyaga mos xona avtomatik ochiladi.
-     5) Pastda aralash tavsiyalar qatori.
 
    Reels moduli (`reels.js`) bu sahifada YUKLANMAYDI: u `#commentsModal`
    va carousel bilan ishlaydi. Shu sababli kompozitor yuborishini,
@@ -520,12 +520,13 @@
       };
     }
 
+    /* "Qismlar" tugmasi endi faqat yon panelning qismlar blokiga olib
+       boradi. Tugma faqat `S.sideEpisodes` ro'ylangan paytda chiqadi
+       (`renderActions`), ya'ni qismlar bloki allaqachon ko'rinmoqda. */
     var ae = el('actAllEps');
     if (ae) {
       ae.onclick = function () {
-        S.sideEpisodes = true;
-        renderSide();
-        var box2 = el('watchSide');
+        var box2 = el('watchSideEpBlock') || el('watchSide');
         if (box2 && box2.scrollIntoView) box2.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
     }
@@ -581,76 +582,52 @@
     return base + '/' + t.replace(/^\/+/, '');
   }
 
-  function renderSide() {
-    var title = el('watchSideTitle');
-    var count = el('watchSideCount');
-    var list  = el('watchSideList');
-    if (!list) return;
+  /* Yon panel ikki blokdan iborat (YouTube kanal sahifasi kabi):
 
-    if (S.sideEpisodes) {
-      if (title) title.textContent = 'Qismlar';
-      if (count) count.textContent = S.episodes.length + ' ta';
-      list.innerHTML = S.episodes.length
-        ? S.episodes.map(epRow).join('')
-        : '<div class="watch-side-empty">Qismlar hali qo‘shilmagan</div>';
-    } else {
-      if (title) title.textContent = 'Tavsiyalar';
-      if (count) count.textContent = 'kino · anime · multfilm';
-      list.innerHTML = S.related.length
+       1) `watchSideEpBlock`  - QISMLAR. Faqat serial/animedda (`hasPlaylist`);
+                               o'z ichida vertikal skroll.
+       2) `watchSideRecBlock` - "Boshqa kinolar, animelar va multfilmlar".
+                               Har doim ko'rinadi: qismlar bo'lsa ularning
+                               ostida, yo'q bo'lsa yon panelning o'zida.
+
+     Film/multfilmda 1-blok `hidden` bo'ladi, 2-blok butun joyni oladi. */
+  function renderSide() {
+    var epBlock = el('watchSideEpBlock');
+    var list    = el('watchSideList');
+    var count   = el('watchSideCount');
+    var recList = el('watchSideRecList');
+    var recCnt  = el('watchSideRecCount');
+
+    // --- 1) Qismlar
+    if (list) {
+      if (S.sideEpisodes) {
+        if (count) count.textContent = S.episodes.length + ' ta';
+        list.innerHTML = S.episodes.length
+          ? S.episodes.map(epRow).join('')
+          : '<div class="watch-side-empty">Qismlar hali qo‘shilmagan</div>';
+      } else {
+        list.innerHTML = '';
+      }
+    }
+    if (epBlock) epBlock.hidden = !S.sideEpisodes;
+
+    // --- 2) Tavsiyalar
+    if (recList) {
+      recList.innerHTML = S.related.length
         ? S.related.map(recRow).join('')
         : '<div class="watch-side-empty">Hozircha tavsiya yo‘q</div>';
     }
-  }
-
-  // ===================================================== PASTKI TAVSIYALAR
-  function cardHTML(c) {
-    var poster = c.poster
-      ? '<img src="' + esc(c.poster) + '" alt="" loading="lazy" referrerpolicy="no-referrer"'
-        + ' onerror="this.remove()">'
-      : '';
-    var fallback = poster ? '' :
-      '<div class="poster-fallback">' + catEmoji(c.category_slug, c.category) + '</div>';
-
-    var badges = [];
-    if (c.is_series) {
-      badges.push('<span class="badge badge-series">'
-        + esc(c.episodes || c.total_episodes || 0) + ' QISM</span>');
+    if (recCnt) {
+      recCnt.textContent = S.related.length
+        ? S.related.length + ' ta · kino · anime · multfilm'
+        : 'kino · anime · multfilm';
     }
-    if (c.is_premium) badges.push('<span class="badge badge-premium">\u{1F48E}</span>');
-
-    var dur = Number(c.duration) > 0
-      ? '<span class="yt-dur">' + fmtTime(c.duration) + '</span>' : '';
-
-    var meta = [];
-    meta.push(Number(c.views) > 0 ? fmtViews(c.views) + ' ko‘rildi' : 'Yangi');
-    var ago = fmtAgo(c.added_at || c.created_at);
-    if (ago) meta.push(ago);
-
-    var sub = [];
-    if (c.category) sub.push(esc(c.category));
-    if (c.year) sub.push(esc(c.year));
-    if (c.rating) sub.push('<span class="rating">★ ' + Number(c.rating).toFixed(1) + '</span>');
-
-    return '<a class="card yt-card" href="' + esc(base + '/watch.php?c=' + c.id) + '">'
-      + '<span class="yt-thumb">' + poster + fallback + badges.join('') + dur + '</span>'
-      + '<span class="yt-body">'
-      +   '<span class="yt-av">' + catEmoji(c.category_slug, c.category) + '</span>'
-      +   '<span class="yt-text">'
-      +     '<span class="yt-title">' + esc(c.title) + '</span>'
-      +     '<span class="yt-meta">' + meta.join(' · ') + '</span>'
-      +     (sub.length ? '<span class="yt-sub">' + sub.join(' · ') + '</span>' : '')
-      +   '</span>'
-      + '</span></a>';
   }
 
-  function renderRelated() {
-    var box = el('watchRelated');
-    var row = el('watchRelatedRow');
-    if (!box || !row) return;
-    if (!S.related.length) { box.hidden = true; return; }
-    box.hidden = false;
-    row.innerHTML = S.related.map(cardHTML).join('');
-  }
+  /* ARALASH TAVSIYALAR endi faqat yon panelda (`watchSideRecList`) chiziladi.
+     Ilgari sahifa oxirida alohida katta kartalar qatori bor edi - u bir xil
+     ro'yxatni ikkinchi marta ko'rsatardi (yon panel bilan yonma-yon), shu
+     sababli olib tashlandi. `cardHTML` ham shu bilan ishlatilmas edi. */
 
   // ================================================================= IZOH
   function initComments() {
@@ -817,7 +794,6 @@
 
     renderHead();
     renderSide();
-    renderRelated();
     mountPlayer();
     bindSideClicks();
     initComments();
@@ -858,7 +834,6 @@
     state: S,
     mountPlayer: mountPlayer,
     renderSide: renderSide,
-    renderRelated: renderRelated,
     switchEpisode: switchEpisode
   };
 })(window);

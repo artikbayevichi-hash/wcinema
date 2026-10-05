@@ -1972,9 +1972,19 @@
       switchTab(b.getAttribute('data-mode'));
     });
 
-    // "Aa" — matn formatlash qo'llanishi (chatdagi kabi).
+    /* "Aa" — matn formatlash qo'llanishi (chatdagi kabi).
+
+       XOST (menu qaysi konteynerga qo'yiladi) ikki sahifada turlicha:
+         reels.php  -> `.reels-comments-box` (modal ichidagi oqim)
+         watch.php  -> `.watch-comments-wrap`  (alohida ko'rish sahifasi)
+       Avval faqat `.reels-comments-box` so'ralardi - shuning uchun
+       watch.php da menyu umuman MOUNT QILINMASDI (host topilmadi =>
+       `mountFmtMenu` `null` qaytaradi). Ikkalasini ham so'raymiz:
+       `querySelector` ro'yxatdagi birinchi mavjud elementni oladi. */
     var F = global.TgFormat;
-    if (F && F.mountFmtMenu) F.mountFmtMenu('#cFmtBtn', '#commentInput', '.reels-comments-box');
+    if (F && F.mountFmtMenu) {
+      F.mountFmtMenu('#cFmtBtn', '#commentInput', '.reels-comments-box, .watch-comments-wrap');
+    }
 
     var pf = el('cPhoto');
     if (pf) pf.addEventListener('change', function () {

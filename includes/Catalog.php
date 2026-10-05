@@ -280,6 +280,29 @@ class Catalog {
         );
     }
 
+    /**
+     * Chuqur havolalar uchun: `watch.php?c=..&ep=3` da `ep` qism ID'si
+     * emas, 1-fasl `episode_number` bo'lishi mumkin. Bunday havola
+     * kengaytirilgan bo'lsa (masalan nav.php qidiruvida yoki reels CTA
+     * da) - shu qismni ID bo'yicha topamiz.
+     *
+     * Bitta raqam bir necha serialda bo'lishi mumkin, shuning uchun
+     * eng so'nggi qo'shilganini (katta `id`) olamiz: bu odatda eng
+     * yangi kontent.
+     */
+    public function getEpisodeByNumber($number, $season = 1) {
+        return $this->db()->fetchOne(
+            "SELECT e.*, c.title AS content_title, c.category_id,
+                    cat.name AS category_name, cat.slug AS category_slug
+             FROM episodes e
+             JOIN content c ON c.id = e.content_id
+             JOIN categories cat ON cat.id = c.category_id
+             WHERE e.season = ? AND e.episode_number = ?
+             ORDER BY e.id DESC
+             LIMIT 1", [(int) $season, (int) $number]
+        );
+    }
+
     // =========================================================================
     // Oqim (playback) aniqlash
     // =========================================================================

@@ -2,8 +2,9 @@
 // ============================================================================
 // watch.php - YouTube uslubidagi ko'rish sahifasi
 // ============================================================================
-// Video chapda, yon panelda qismlar (yoki tavsiyalar), tagida izohlar va
-// chat, eng pastida aralash tavsiyalar qatori.
+// Video chapda, uning ostida izohlar va chat. O'ng panelda: serial/anime
+// bo'lsa - qismlar kassetasi va uning TAGIDA "Boshqa kinolar, animelar va
+// multfilmlar" tavsiyalari; kino/multfilm bo'lsa - faqat tavsiyalar.
 //
 // DIQQAT: izohlar reels moduli bilan BIR XIL ishlaydi (tg-comments.js) -
 // farq faqat mavzu endpointi: reels uchun `api/reel-topic.php`
@@ -16,14 +17,32 @@ $userId = $user ? (int) $user['id'] : null;
 
 // ---------------------------------------------------------------------------
 // Chuqur havola: watch.php?c=12&e=40 (yoki faqat e=40 - kontent topiladi)
+//
+// `ep=` ham qabul qilinadi (YouTube shakli: `?c=2&ep=3`) va qiymat qism
+// ID'si bo'lishi SHART EMAS - agar bunday id yo'q bo'lsa, u 1-fasl
+// `episode_number` sifatida qaraladi (qism raqami). Masalan:
+//
+//   ?c=2&e=41   -> 41-idli qism (to'g'ri)
+//   ?c=2&ep=3    -> id 3 yo'q -> 3-qism (1-fasl)
+//   ?e=41        -> kontentni qismdan aniqlaymiz
 // ---------------------------------------------------------------------------
-$cId = (int) ($_GET['c'] ?? 0);
-$eId = (int) ($_GET['e'] ?? 0);
+$cId  = (int) ($_GET['c'] ?? 0);
+$eId  = (int) ($_GET['e'] ?? $_GET['ep'] ?? 0);
+// Havoladagi ASLI qiymat (qaysi qism so'ralgani) - pastda kanonik 302
+// uchun ishlatiladi, chunki `$eId` topilmagan qismda 0 ga tozalanadi.
+$eReq = $eId;
 
 if ($cId <= 0 && $eId > 0) {
     $ep = $catalog->getEpisode($eId);
     if ($ep) {
         $cId = (int) $ep['content_id'];
+    } else {
+        // Ehtimol bu qism RAQAMI. Uni kontent qilish uchun qidiramiz
+        // (faqat bitta qismli bo'lmasa - birinchi topilganini olamiz).
+        $byNum = $catalog->getEpisodeByNumber($eId);
+        if ($byNum) {
+            $cId = (int) $byNum['content_id'];
+        }
     }
 }
 
@@ -68,17 +87,43 @@ if ($item) {
 
     $genres   = $catalog->getContentGenres($item['id']);
 
-    // Tanlangan qism: ?e=..., yoki birinchi mavjud qism, yoki butun film
-    // (kontentning o'zida video_url bo'lishi mumkin).
+    // Tanlangan qism: ?e=/?ep=... bo'yicha ID, so'ng RAQAM (1-fasl),
+    // keyin birinchi mavjud qism yoki butun film (kontentning o'zida
+    // video_url bo'lishi mumkin).
+    $eMatched = false;
     foreach ($episodes as $e) {
         if ((int) $e['id'] === $eId) {
             $selected = $e;
+            $eMatched = true;
             break;
+        }
+    }
+    if (!$selected && $eId > 0) {
+        foreach ($episodes as $e) {
+            if ((int) $e['season'] === 1 && (int) $e['number'] === $eId) {
+                $selected = $e;
+                $eMatched = true;
+                break;
+            }
         }
     }
     if (!$selected) {
         $eId      = 0;
         $selected = $episodes[0] ?? null;
+    }
+
+    /* Kanonik havola: `?ep=3` (raqam) yoki umuman topilmagan qism
+       ishlatilgan bo'lsa, brauzer manzilini `?c=..&e=<qism id>` shakliga
+       yo'naltiramiz. Shu bilan "Ulashish", "orqaga" va qism
+       almashgandagi `pushState` bitta xil ko'rinishga ega bo'ladi
+       (hamda `?e=`/`?ep=` chalkashligi butun sayt bo'ylab yo'qoladi). */
+    if ($selected && $eReq > 0 && !$eMatched) {
+        // Skript yo'li (`watch.php`) yoki atribut/proksi (`/watch.php`) -
+        // nima bo'lsa ham o'shandan foydalanamiz.
+        $self = explode('?', (string) ($_SERVER['REQUEST_URI'] ?? '/watch.php'), 2)[0];
+        $qs   = 'c=' . (int) $item['id'] . '&e=' . (int) $selected['id'];
+        header('Location: ' . $self . '?' . $qs, true, 302);
+        exit;
     }
     // Oqim HAQIQIY episodes qatoridan olinadi (`is_premium`, 1080p/720p
     // variantlari ham shu yerda) - `$episodes` allaqachin qisqa qilingan.
@@ -97,8 +142,8 @@ if ($item) {
         ];
     }
 
-    // "Boshqa kinolar, animelar va multfilmlar" - pastki qator va (qismlar
-    // bo'lmasa) yon panel uchun bir xil ro'yxat.
+    // "Boshqa kinolar, animelar va multfilmlar" - O'NG PANEL uchun
+    // (qismlar bo'lsa ular ostida, bo'lmasa o'zida).
     foreach ($catalog->getRelated($item, 14) as $r) {
         $related[] = $catalog->toPublicArray($r, $userId);
     }
@@ -309,21 +354,35 @@ $NAV_ACTIVE = 'home';
             </section>
         </div>
 
-        <!-- ============================ O'NG PANEL ============================ -->
+        <!-- ============================ O'NG PANEL ============================
+             Ikki blokdan iborat, YouTube kanal sahifasi kabi:
+
+               1) QISMLAR (faqat serial/anime, ya'ni `hasPlaylist`).
+                  Baland-pastga aylanadigan "qismlar kassetasi".
+               2) "Boshqa kinolar, animelar va multfilmlar" - aralash
+                  tavsiyalar. Qismlar YO'Q bo'lsa (kino/multfilm) faqat
+                  shu blok ko'rinadi.
+
+             Ikkalasi ham o'z ichida vertikal skroll qiladi. -->
         <aside class="watch-side" id="watchSide">
-            <header class="watch-side-head">
-                <div class="watch-side-title" id="watchSideTitle">Qismlar</div>
-                <div class="watch-side-count" id="watchSideCount"></div>
-            </header>
-            <div class="watch-side-list" id="watchSideList"></div>
+
+            <section class="watch-side-block watch-side-eps" id="watchSideEpBlock">
+                <header class="watch-side-head">
+                    <div class="watch-side-title" id="watchSideTitle">Qismlar</div>
+                    <div class="watch-side-count" id="watchSideCount"></div>
+                </header>
+                <div class="watch-side-list" id="watchSideList"></div>
+            </section>
+
+            <section class="watch-side-block watch-side-rec" id="watchSideRecBlock">
+                <header class="watch-side-head">
+                    <div class="watch-side-title">Boshqa kinolar, animelar va multfilmlar</div>
+                    <div class="watch-side-count" id="watchSideRecCount">kino · anime · multfilm</div>
+                </header>
+                <div class="watch-side-list" id="watchSideRecList"></div>
+            </section>
         </aside>
     </div>
-
-    <!-- ============ Boshqa kinolar, animelar va multfilmlar ============ -->
-    <section class="watch-related" id="watchRelated" hidden>
-        <h2 class="watch-related-h">Boshqa kinolar, animelar va multfilmlar</h2>
-        <div class="watch-related-row" id="watchRelatedRow"></div>
-    </section>
 </main>
 <?php endif; ?>
 

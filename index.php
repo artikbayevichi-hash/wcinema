@@ -19,11 +19,16 @@ $stats    = $catalog->getStats();
 // Eski chuqur havola: /index.php?c=12&e=45 (yoki faqat e=45 — kontent avtomatik
 // topiladi). Videolar endi alohida `watch.php` sahifasida ochiladi, shuning
 // uchun bu havola shu yerga yo'naltiriladi (serverda, JS dan tezroq).
-if ((int) ($_GET['c'] ?? 0) > 0 || (int) ($_GET['e'] ?? 0) > 0) {
+// `ep=` ham qabul qilinadi (watch.php bilan bir xil).
+if ((int) ($_GET['c'] ?? 0) > 0 || (int) ($_GET['e'] ?? $_GET['ep'] ?? 0) > 0) {
     $cId = (int) ($_GET['c'] ?? 0);
-    $eId = (int) ($_GET['e'] ?? 0);
+    $eId = (int) ($_GET['e'] ?? $_GET['ep'] ?? 0);
     if ($cId <= 0 && $eId > 0) {
         $epRow = $catalog->getEpisode($eId);
+        if (!$epRow) {
+            // `e=` qism ID'si emas, 1-fasl qism raqami bo'lishi mumkin.
+            $epRow = $catalog->getEpisodeByNumber($eId);
+        }
         if ($epRow) {
             $cId = (int) $epRow['content_id'];
         }
