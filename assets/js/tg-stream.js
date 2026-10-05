@@ -113,8 +113,7 @@
     onPlayerReady: null,   // mount(onReady) — player o'ynashga tayyor bo'lganda
     readyFired: false,     // onReady bir marta chaqirilishi uchun
     headCache: null,       // { docId: {t, bytes} } — fayl BOSHIDAGI baytlar
-    docSize: null,         // { docId: bayt } — butun fayl hajmi
-    deepKeys: null         // { docId: t } — bosh baytlar allaqachin olingan
+    docSize: null          // { docId: bayt } — butun fayl hajmi
   };
 
   // ------------------------------------------------------------------- yordam
@@ -910,13 +909,26 @@
   //  video o'ynash bir so'rov bilan (Telegram'ga umuman murojaat qilmasdan)
   //  boshlanadi.
   //
-  //  Kesh KAM: 2 ta hujjat, har biri 1 MB. `prefetch` bu baytlarni oldindan
-  //  oladi — keyingi reel ochilganda u tayyor turadi.
-  var HEAD_MAX = 1024 * 1024;     // SW ning birinchi tortishi ham 1 MB
+  //  Kesh KAM: 2 ta hujjat, har biri 512 KB (RAM da jami ~1 MB).
+  //  DIQQAT: bu kesh OLDINDAN OLISH uchun emas, faqat `probeMp4` ning o'z
+  //  baytlarini `<video>` ga qaytarish uchun. U hech qachon Telegram'dan
+  //  qo'shimcha so'rov yubormaydi — ya'ni umuman trafik sarflamaydi.
+  //  (Ilgari keyingi reel uchun 1 MB fon rejimida tortilar edi — u aktiv
+  //  video bilan bir klientda raqobatlashib, global `tgCap` ni pasaytirib
+  //  butun oqimni sekinlashtirardi. Endi bunday yo'q.)
+  var HEAD_MAX = 512 * 1024;      // bitta Telegram bloki — RAM da kam
   var HEAD_KEEP = 2;              // nechta hujjatni saqlaymiz
 
+  // Kalit — hujjat id'si. MUHIM: `S.doc`/`S.loc` KESKGA YOZISH paytida
+  // emas, SO'ROVNING BOSHI da olinadi. Aks holda (foydalanuvchi shu paytda
+  // slaydni almastirsa) A reelining baytlari B reelining kaliti ostiga
+  // yozilib, `<video>` B ga begona MP4 sarlavhasini olib berardi — video
+  // umuman ochilmasdi. `S.loc` — haqiqiy o'qilayotgan manzil, shuning uchun
+  // u har doim `S.doc` dan ishonchli.
   function headId(ctx) {
-    var id = (ctx && ctx.loc && ctx.loc.id != null) ? ctx.loc.id : (S.doc && S.doc.id);
+    var id = (ctx && ctx.loc && ctx.loc.id != null) ? ctx.loc.id
+      : (S.loc && S.loc.id != null) ? S.loc.id
+      : (S.doc && S.doc.id != null) ? S.doc.id : null;
     return (id == null || id === '') ? null : String(id);
   }
 
@@ -953,11 +965,6 @@
     return (c && c.bytes && c.bytes.length) ? c : null;
   }
 
-  function headHas(id, need) {
-    var c = headGet(id);
-    return !!(c && c.bytes.length >= need);
-  }
-
   // BITTA `upload.getFile` so'rovi. Qaytgan bayt soni `length` dan kam
   // bo'lishi mumkin (blok chegarasi tufayli) — buni `readBytes` hal
   // qiladi. Fayl tugagan bo'lsa — bo'sh massiv (xato EMAS).
@@ -977,6 +984,11 @@
 
     var loc = (ctx && ctx.loc) ? ctx.loc : S.loc;
     var dc  = (ctx && ctx.dcId != null) ? ctx.dcId : (S.doc ? S.doc.dcId : undefined);
+    // Kesh kaliti SHU YERDA, so'rov yuborilishidan OLDIN aniqlanadi. Javob
+    // kelganda `S.loc` boshqa reelga o'tib bo'lgan bo'lishi mumkin — keshga
+    // noto'g'ri hujjat bayti yozmasligi uchun vaqt bo'yicha emas, joy
+    // bo'yicha kalitlashamiz.
+    var hid = headId(ctx);
 
     return S.client.invoke(new S.T.Api.upload.GetFile({
       location: loc,
@@ -986,7 +998,7 @@
     }), dc).then(function (res) {
       var b = res.bytes || res;
       var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
-      headPut(headId(ctx), aligned, u8);
+      headPut(hid, aligned, u8);
       // Telegram kamroq qaytarsa — ortiqcha joyni nol bilan
       // to'ldirmaymiz, faqat haqiqiy baytlarni qaytaramiz.
       if (u8.length <= skip) return new Uint8Array(0);
@@ -2198,14 +2210,17 @@
       ? (String(opts.channel) + '/' + Number(opts.post)) : null;
     if (!key) return Promise.resolve(false);
 
-    // Keshda bor bo'lsa — metama'lumotni qayta qidirmaymiz. Lekin `bytes`
-    // so'rovi kelgan bo'lsa, bosh baytlarni (1 MB) hozir olib qo'yamiz:
-    // foydalanuvchi keyingi reelga o'tganda video TAYYOR bo'ladi.
+    // Keshda bor bo'lsa — hech narsa qilmaymiz.
+    //
+    // DIQQAT: avval shu yerda `warmHead` chaqirilib, keyingi reel uchun
+    // 1 MB fon rejimida tortilardi. Bu:
+    //   * har o'tilgan reel uchun ~1 MB ortiqcha trafik (saytga og'irlik),
+    //   * aktiv video bilan BIR klientda parallel `upload.getFile` — natijada
+    //     global `tgCap` pasayib, joriy `<video>` oqimi ham "cho'q" qolardi.
+    // Endi faqat METAMA'LUMAT (doc/loc/size/probe) oldindan tayyorlanadi —
+    // bu 1 ta xabar + 64 KB; o'zi ham `probe` paytida kerak bo'ladigan.
     var hit = S.pvCache && S.pvCache[key];
-    if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) {
-      if (opts.bytes) warmHead(hit.doc, hit.loc, hit.size);
-      return Promise.resolve(true);
-    }
+    if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) return Promise.resolve(true);
 
     // Xuddi shu hujjat allaqachon yuklanmoqda.
     if (S.prefetchKey === key && S.prefetchPromise) return S.prefetchPromise;
@@ -2216,7 +2231,6 @@
     if (!hasSession()) return Promise.resolve(false);
 
     var aborted = false;
-    var deep = !!opts.bytes;
     S.prefetchKey = key;
     S.prefetchAbort = function () { aborted = true; };
 
@@ -2240,12 +2254,6 @@
             if (aborted) return false;
             S.pvCache = S.pvCache || {};
             S.pvCache[key] = { t: Date.now(), doc: doc, size: size, loc: loc, probe: probe };
-            // Chuqur oldindan yuklash: metama'lumot TAYYOR bo'ldi, shuning
-            // uchun endi faylning birinchi 1 MB ini FONDA tortamiz. Bu
-            // `mount()` ni kutmaydi — foydalanuvchi o'sha reelga o'tsa,
-            // `<video>` ning birinchi so'rovi allaqach tayyor javob oladi
-            // va kadr deyarli darhol ko'rinadi.
-            if (deep) warmHead(doc, loc, size, ctx);
             return true;
           });
         });
@@ -2274,60 +2282,6 @@
     S.prefetchAbort = null;
     S.prefetchKey = null;
     S.prefetchPromise = null;
-  }
-
-  // ------------------------------------------- bosh baytlarni fonda olish
-  //
-  //  `prefetch({bytes:true})` faqat metama'lumot (doc/loc/probe) tayyor
-  //  qiladi. Bu yetarli emas: keyingi reel ochilganda `<video>` yana
-  //  Telegram'dan birinchi bo'laklarni so'raydi — aynan o'zgarishni
-  //  sezadigan qism.
-  //
-  //  Shu funksiya faylning birinchi `HEAD_MAX` (1 MB) baytini `readBytes`
-  //  orqali oladi. `readOnce` ularni avtomatik ravishda bosh baytlar
-  //  keshiga yozadi — keyinchalik `<video>` ning birinchi tortishi
-  //  Telegram'ga umuman murojaat qilmaydi va DARHOL to'ldiriladi.
-  //
-  //  Muhim: bu `prefetch` ning promise'iga QISMAYDI. Aks holda foydalanuvchi
-  //  reelga o'tganda `mount()` 1 MB ni tugashini kutib o'tirib qolardi —
-  //  ya'ni biz tezlashtirmoqchi bo'lgan narsaning o'zini sekinlashtirgan
-  //  bo'lardik.
-  function warmHead(doc, loc, size, ctx) {
-    var id = headId({ loc: loc || null });
-    if (!id) return;
-    // Bu hujjat uchun bosh baytlar allaqach olingan — takrorlamaymiz.
-    S.deepKeys = S.deepKeys || {};
-    if (S.deepKeys[id] && (Date.now() - S.deepKeys[id]) < 5 * 60 * 1000) return;
-    S.deepKeys[id] = Date.now();
-    // Ikki xotira xaritasi ham hujjat id'si bo'yicha o'sadi — eskirgan
-    // kalitlarni tozalab qo'yamiz (uzoq ochilgan saytda yig'lib qolmasin).
-    if (Object.keys(S.deepKeys).length > 64) {
-      var old = Date.now() - 5 * 60 * 1000;
-      for (var k in S.deepKeys) if (S.deepKeys[k] < old) delete S.deepKeys[k];
-      if (S.docSize) {
-        for (var k2 in S.docSize) if (!S.deepKeys[k2]) delete S.docSize[k2];
-      }
-    }
-
-    var c = ctx || { loc: loc, dcId: (doc && doc.dcId) };
-    var want = Math.min(HEAD_MAX, Number(size) || 0);
-    if (!(want > 0)) return;
-    headSize(id, Number(size) || 0);
-    if (headHas(id, want)) { S.deepKeys[id] = Date.now(); return; }
-
-    // Natijani ishlatamiz (kutmaymiz) — `headPut` keshga o'zi yozadi.
-    //
-    // KICHIK KECHIKISH: bu fonda ish joriy video o'ynab boshlagan paytda
-    // chaqiriladi. Agar darhol yuborsak, 1 MB joriy oqimning bandini
-    // egallab, uni to'xtatib qo'yishi mumkin (buffer to'lib qoladi).
-    // 600 ms — brauzer o'z buferini to'ldirib bo'ladi; shundan keyin
-    // keyingi reel uchun olish xavfsiz.
-    setTimeout(function () {
-      if (c.abort && c.abort()) return;      // foydalanuvchi slaydni tashlab ketgan
-      readBytes(0, want, c).then(function () {
-        // Bo'sh bo'lsa — Telegram'da fayl qisqar (masalan 0 bayt). Xato emas.
-      }).catch(function () { /* fon — xatoni ko'rsatmaymiz */ });
-    }, 600);
   }
 
   // Sahifadan chiqishda (boshqa bo'limga o'tish) hamma narsani to'xtatamiz:

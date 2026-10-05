@@ -357,19 +357,23 @@
             deep:    box.dataset.deep || '',
             poster:  box.dataset.poster || '',
             onReady: function () {
-                // Joriy video o'ynab boshlagan ekan — endi trafik bo'sh.
-                // Shuning uchun bu yerda CHUQUR oldindan yuklashni
-                // yoqamiz: keyingi reel uchun 1 MB bayt ham fonga olinadi.
-                schedulePrefetch(i, true);
+                schedulePrefetch(i);
                 attachVideo(i);
             }
         });
     }
 
-    // `deep` — true bo'lsa, faqat metama'lumat emas, faylning birinchi 1 MB
-    // bayti ham oldindan olinadi (bosh baytlar keshiga). Bu faqat joriy
-    // video o'ynab boshlagan paytda chaqiriladi — trafik bo'sh bo'lgani uchun.
-    function schedulePrefetch(i, deep) {
+    // Keyingi slaydning METAMA'LUMATINI (doc/size/probe) tayyorlab qo'yamiz:
+    // 1 ta xabar + 64 KB format tekshiruvi - bular barchasi <video>
+    // ochilganda ham kerak bo'ladigan narsa. Shuning uchun keyingi reelga
+    // o'tganda findDoc + probe qayta ishlamaydi, shu zahoti ochiladi.
+    //
+    // DIQQAT: bu FAQAT joriy video o'ynab boshlagan paytdagi onReady da
+    // chaqiriladi. Undan oldin (slayd almashuv paytida) chaqirilsa, u
+    // aktiv video bilan BIR Telegram klientda parallel upload.getFile
+    // yuborib, global tgCap ni pasaytiradi - oqim "cho'q" qoladi va video
+    // umuman ochilmaydi.
+    function schedulePrefetch(i) {
         if (i !== state.active) return;
         const took = Date.now() - (state.mountStartedAt || Date.now());
         if (took > 20000) return;
@@ -387,8 +391,7 @@
             channel: ch,
             post: post,
             url: box.dataset.url || '',
-            deep: box.dataset.deep || '',
-            bytes: !!deep
+            deep: box.dataset.deep || ''
         });
     }
 
@@ -435,12 +438,12 @@
         pauseAll(i);
         playAt(i);
 
-        // Keyingi slaydni DARHOL tayyorlaymiz (faqat metama'lumot: Telegram'dan
-        // xabar topib, formatni tekshirib qo'yamiz). Foydalanuvchi keyingi
-        // reelga o'tganda `findDoc` + `probe` qayta ishlamaydi — shu zahoti
-        // ochiladi. Chuqur (1 MB bayt) oldindan yuklash esa joriy video
-        // o'ynab boshlagan paytda `onReady` orqali alohida chaqiriladi.
-        if (changed) schedulePrefetch(i);
+        // DIQQAT: bu yerda `schedulePrefetch` atlaydi. Sababi — `prefetch`
+        // ichida `cancelPrefetch()` bor, u esa kelayotgan prefetch'ni
+        // BEKOR qiladi (S.prefetchKey/promise = null). Ya'ni `playAt()` dan
+        // keyin shu yerda chaqirsak, joriy reelning metama'lumati hech
+        // qachon tayyor bo'lmaydi. Prefetch faqat `onReady` da (joriy video
+        // o'ynab boshlagan paytda) chaqiriladi.
 
         if (scroll && state.slideEls[i]) {
             state.slideEls[i].scrollIntoView({ behavior: 'auto', block: 'start' });
