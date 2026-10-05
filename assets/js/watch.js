@@ -44,6 +44,17 @@
     durSaved: {}
   };
 
+  /* Reels klipining CTA havolasi `watch.php?c=..&e=..#t=95` shaklida keladi
+     ("🎬 To'liq qismni tomosha qilish (1:35 dan)"). Bu soniya `resumeAt`
+     ustidan USTUN bo'lishi shart - aks holda foydalanuvchi "davom etish"
+     nuqtasidan boshlab, butunlay boshqa joyda bo'lib qolardi. */
+  var hashStart = 0;
+  (function () {
+    var m = /^#t=(\d+)$/.exec(location.hash || '');
+    if (m) hashStart = Math.max(0, parseInt(m[1], 10) || 0);
+  })();
+  S.hashStart = hashStart;
+
   var CAT_EMOJI = {
     kino: '\u{1F3AC}', anime: '\u{1F338}', multfilm: '\u{1F9F8}', multflim: '\u{1F9F8}',
     serial: '\u{1F4FA}', film: '\u{1F3A5}', kinoqizi: '\u{1F3AC}', bolalar: '\u{1F9F8}'
@@ -145,7 +156,7 @@
   function udpConfig() {
     var cfg = {
       autoplay: true,
-      resumeAt: Math.floor(S.resumeAt) || 0,
+      resumeAt: S.hashStart ? 0 : (Math.floor(S.resumeAt) || 0),
       introStart: 0,
       introEnd: 0,
       title: D.title || '',
@@ -298,7 +309,16 @@
       saveProgressSoon(v);
     }, true);
 
-    v.addEventListener('loadedmetadata', function () { saveDuration(v); });
+    v.addEventListener('loadedmetadata', function () {
+      // Reels CTA'sidan kelgan `#t=` ni bir marta qo'llaymiz. Seek bitta
+      // marta bajariladi - aks holda `timeupdate` har safar boshqa
+      // nuqtaga qaytarib, foydalanuvchining harakati bekor bo'lardi.
+      if (S.hashStart && v.currentTime < S.hashStart - 1) {
+        try { v.currentTime = S.hashStart; } catch (e) {}
+        lastT = S.hashStart;
+      }
+      saveDuration(v);
+    });
     v.addEventListener('pause', function () { saveProgress(v); });
     v.addEventListener('ended', function () { saveProgress(v); });
   }
@@ -742,6 +762,10 @@
     if (S.switching || !epId) return;
     if (epId === Number(S.selectedId)) return;
     S.switching = true;
+
+    // `#t=` reels klipining nuqtasi edi - boshqa qismga o'tganda u
+    // ma'nosiz (yangisida 95-soniyasi boshqa joy). Faqat joriy video uchun.
+    S.hashStart = 0;
 
     // Chuqur havola darhol yangilanadi - "Ulashish" va "orqaga" to'g'ri ishlaydi.
     try {
