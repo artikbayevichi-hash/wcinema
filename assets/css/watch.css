@@ -90,6 +90,27 @@
     position: absolute; left: 10px; right: 10px; top: 10px; z-index: 6;
 }
 
+/* --- BLUR: anibla.uz dagi kabi shaffof ("muxarram shisha") boshqaruv paneli
+   Talab: "faqat blurni o'tkaz" - shuning uchun bu yerda FAQAT shisha effekti.
+
+   Anibla.uz dagi `.media-surface` aynan shunday qiymatlarga ega:
+     backdrop-filter : blur(16px) saturate(1.5)
+     background       : rgba(255, 255, 255, .10)   ← shaffoflik blurning
+                                                       ko'rinishi uchun shart
+   Bizdagi eski qatlam `rgba(18, 23, 35, .92)` juda to'q edi — uning
+   ostida blur deyarli ko'rinmasdi. Faqat shu ikki qiymat almashtirildi.
+
+   O'LCHAM, JOYLASHUV, PLAY TUGMASI, MENYU, IZOH — hammasi avvalgidek.
+   Faqat `.watch-player` ostida yozilgani uchun index / reels / profil
+   sahifalarining playeri umuman tegilmaydi.
+   Telefonda ham xuddi shunday ko'rinadi (`backdrop-filter` o'lchamga bog'liq
+   emas); mobil uchun alohida pleer keyinroq alohida qilinadi. */
+.watch-player .udp-controls {
+    background: rgba(255, 255, 255, .1);
+    backdrop-filter: blur(16px) saturate(1.5);
+    -webkit-backdrop-filter: blur(16px) saturate(1.5);
+}
+
 /* ======================================================== SARLAVHA / AMALLAR */
 .watch-head { margin: 14px 0 0; }
 .watch-title {
