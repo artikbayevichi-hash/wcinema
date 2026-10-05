@@ -2,9 +2,9 @@
 // ============================================================================
 // watch.php - YouTube uslubidagi ko'rish sahifasi
 // ============================================================================
-// Video chapda, uning ostida izohlar va chat. O'ng panelda: serial/anime
-// bo'lsa - qismlar kassetasi va uning TAGIDA "Boshqa kinolar, animelar va
-// multfilmlar" tavsiyalari; kino/multfilm bo'lsa - faqat tavsiyalar.
+// Video chapda (keng), uning ostida izohlar va "Boshqa kinolar, animelar
+// va multfilmlar" setkasi. Serial/anime bo'lsa o'ngda QISMLAR paneli
+// (vertikal skroll); kino/multfilmda o'ng panel umuman yo'q.
 //
 // DIQQAT: izohlar reels moduli bilan BIR XIL ishlaydi (tg-comments.js) -
 // farq faqat mavzu endpointi: reels uchun `api/reel-topic.php`
@@ -161,15 +161,7 @@ if ($item) {
 // ---------------------------------------------------------------------------
 // JSON - frontend uchun. Bitta so'rovda hamma narsa (sahifa tez ochiladi).
 // ---------------------------------------------------------------------------
-$roomHint = 'general';
-if ($item && !empty($item['category_slug'])) {
-    // `tg-chat.js` xonalari aynan shu kalitlar bilan nomlangan.
-    $sl = (string) $item['category_slug'];
-    if (in_array($sl, ['general', 'kino', 'anime', 'multfilm'], true)) {
-        $roomHint = $sl;
-    }
-}
-
+// DIQQAT: `roomHint` yo'q - bu sahifada chat yo'q (chat.php da bor).
 $WATCH = [
     'base'      => rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\'),
     'botName'   => TELEGRAM_BOT_USERNAME,
@@ -183,7 +175,6 @@ $WATCH = [
     'progress'  => $progress,
     'hasPlaylist' => $hasPlaylist,
     'related'   => $related,
-    'roomHint'  => $roomHint,
 ];
 
 $NAV_ACTIVE = 'home';
@@ -200,7 +191,9 @@ $NAV_ACTIVE = 'home';
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/reels.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/reels.css') ?: 1; ?>">
-    <link rel="stylesheet" href="assets/css/chat.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/chat.css') ?: 1; ?>">
+    <?php /* DIQQAT: `chat.css` UCHUN LINK YO'Q - bu sahifada chat blok yo'q
+             (chat alohida `chat.php` da). Chat uslublarini kiritish kerak
+             bo'lsa, chat.php dagi ro'yxatdan ko'chirish kerak. */ ?>
     <link rel="stylesheet" href="assets/css/player.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/player.css') ?: 1; ?>">
     <?php /* tg-stream.css - Telegram CDN playeri uchun; tg-format.css - matn
              formatlash (bold/italic/kod/havola/...) va formatlash menyusi;
@@ -225,6 +218,14 @@ $NAV_ACTIVE = 'home';
 <?php else: ?>
 <main class="ig-page watch-page">
 
+    <?php /* YouTube uslubidagi 2 USTUNLI freymvork (batafsil watch.css):
+               CHAP  (~73%) -> video + sarlavha/statistika + IZOHLAR
+               O'NG  (~27%) -> QISMLAR (faqat anime/serial) va uning ostida
+                               "Boshqa kinolar, animelar va multfilmlar"
+
+             Yon panel HAR DOIM chiziladi. Kino/multfilmda qismlar bloki
+             `hidden` bo'ladi va tavsiyalar butun o'ng ustunni egallaydi -
+             shuning uchun bo'sh ustun qolmaydi. */ ?>
     <div class="watch-grid">
 
         <!-- ============================ CHAP USTUN ============================ -->
@@ -302,71 +303,26 @@ $NAV_ACTIVE = 'home';
                 </div>
             </section>
 
-            <!-- ============================== CHAT ============================== -->
-            <section class="watch-block">
-                <h2 class="watch-block-h">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12a8.4 8.4 0 0 1-11.9 7.6L3.5 20.5l1-4.9A8.4 8.4 0 1 1 20.5 12z"/></svg>
-                    Chat
-                </h2>
-
-                <?php /* Xonalar (💬 Kino ✨ Anime 🧸 Multfilm) bitta qatorda.
-                         chat.php dagi `.chat-rooms`; pastdagi `.chat-thread`
-                         OLDINDAN ko'rinadi (watch.js xonani avtomatik ochadi),
-                         shuning uchun "orqaga" tugmasi kerak emas. */ ?>
-                <div class="chat-rooms watch-chat-rooms" id="chatRooms">
-                    <div class="chat-room-skel"></div>
-                    <div class="chat-room-skel"></div>
-                    <div class="chat-room-skel"></div>
-                    <div class="chat-room-skel"></div>
-                </div>
-
-                <section class="chat-thread watch-chat-thread" id="chatThread">
-                    <header class="chat-thead">
-                        <div class="chat-ttl" id="chatTitle">Chat</div>
-                        <a class="chat-tg" id="chatOpenTg" href="#" target="_blank" rel="noopener" hidden aria-label="Telegram'da ochish">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 5h5v5"/><path d="M19 5l-8 8"/><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"/></svg>
-                        </a>
-                    </header>
-
-                    <div class="chat-feed" id="chatFeed"></div>
-
-                    <div class="chat-picker" id="chatPicker" hidden></div>
-
-                    <form class="chat-composer" id="chatComposer" autocomplete="off">
-                        <button type="button" class="chat-tool tg-fmt-btn" id="chatFmtBtn"
-                                aria-label="Matn formatlash" aria-expanded="false" title="Matn formatlash">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.2 9.6 6.4a1.5 1.5 0 0 1 2.8 0L18 19.2"/><path d="M6.1 14.4h7.8"/><path d="M20.4 20.4v-5.6h1.5a2.8 2.8 0 0 1 0 5.6z"/></svg>
-                        </button>
-                        <button type="button" class="chat-tool" id="chatAttachBtn"
-                                aria-label="Emoji, stiker, GIF va rasm" aria-expanded="false">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M8.6 14.2c.9 1.2 2.1 1.8 3.4 1.8s2.5-.6 3.4-1.8"/><path d="M9.2 10h.01M14.8 10h.01"/></svg>
-                        </button>
-                        <textarea id="chatInput" rows="1" placeholder="Xabar yozing…" maxlength="4000"></textarea>
-                        <button type="submit" class="chat-send" id="chatSend" data-mode="mic"
-                                aria-label="Ovozli xabar" title="Ovozli xabar">
-                            <span class="tv-send-mic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.6" width="6" height="11" rx="3"/><path d="M5.6 11.3a6.4 6.4 0 0 0 12.8 0"/><path d="M12 17.8v3.4M8.8 21.2h6.4"/></svg></span>
-                            <span class="tv-send-clip" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.4 11.1 12 19.5a5 5 0 0 1-7.1-7.1l8.4-8.4a3.4 3.4 0 0 1 4.8 4.8l-8.3 8.3a1.8 1.8 0 0 1-2.5-2.5l7.6-7.6"/></svg></span>
-                            <span class="tv-send-ico" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.5 11.15 19.9 4.3a.55.55 0 0 1 .72.7l-7 15.6a.55.55 0 0 1-1 .05l-2-5.6-5.55-1.95a.55.55 0 0 1-.07-.99z"/></svg></span>
-                        </button>
-                        <input type="file" id="chatPhoto" accept="image/*" hidden>
-                    </form>
-                </section>
-            </section>
+            <!-- Tavsiyalar endi chap ustunda emas - ular O'NG PANELDA
+                 (`.watch-side-rec`), YouTube kanal sahifasi kabi. -->
         </div>
 
         <!-- ============================ O'NG PANEL ============================
-             Ikki blokdan iborat, YouTube kanal sahifasi kabi:
+             YouTube'dekidek ikki blokli yon panel (~27%):
 
-               1) QISMLAR (faqat serial/anime, ya'ni `hasPlaylist`).
-                  Baland-pastga aylanadigan "qismlar kassetasi".
-               2) "Boshqa kinolar, animelar va multfilmlar" - aralash
-                  tavsiyalar. Qismlar YO'Q bo'lsa (kino/multfilm) faqat
-                  shu blok ko'rinadi.
+               1) `#watchSideEpBlock` — QISMLAR kassetasi (anime/serial).
+                  `hidden` = faqat kino/multfilmda; shunda panel butunlay
+                  tavsiyalarga qoladi. Ro'yxat VERTIKAL skroll qilinadi
+                  (`max-height` bilan cheklangan - panel ekrandan oshmasin).
+               2) `#watchSideRecBlock` — "Boshqa kinolar, animelar va
+                  multfilmlar" aralash tavsiyalar. HAR DOIM ko'rinadi:
+                  qismlar bo'lsa ularning ostida, bo'lmasa o'zida.
 
-             Ikkalasi ham o'z ichida vertikal skroll qiladi. -->
+             Ikkalasi ham o'z ichida alohida aylantiriladi (watch.css). -->
         <aside class="watch-side" id="watchSide">
 
-            <section class="watch-side-block watch-side-eps" id="watchSideEpBlock">
+            <section class="watch-side-block watch-side-eps"
+                     id="watchSideEpBlock"<?php echo $hasPlaylist ? '' : ' hidden'; ?>>
                 <header class="watch-side-head">
                     <div class="watch-side-title" id="watchSideTitle">Qismlar</div>
                     <div class="watch-side-count" id="watchSideCount"></div>
@@ -381,6 +337,7 @@ $NAV_ACTIVE = 'home';
                 </header>
                 <div class="watch-side-list" id="watchSideRecList"></div>
             </section>
+
         </aside>
     </div>
 </main>
@@ -403,9 +360,9 @@ $NAV_ACTIVE = 'home';
 </div>
 
 <div class="reels-toast" id="reelToast" hidden></div>
-<div class="chat-toast" id="chatToast" hidden></div>
 <?php /* watch.js'ning o'z xabarlari (kutubxona / ulashish / xato) uchun
-         alohida toast - `#reelToast` ni tg-comments.js ham ishlatadi. */ ?>
+         alohida toast - `#reelToast` ni tg-comments.js ham ishlatadi.
+         `#chatToast` ham olib tashlandi: bu sahifada chat yo'q. */ ?>
 <div class="reels-toast" id="watchToast" hidden></div>
 
 <script>
@@ -435,6 +392,8 @@ $NAV_ACTIVE = 'home';
 <script src="assets/js/tg-format.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-format.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-emoji.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-emoji.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-comments.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-comments.js') ?: 1; ?>"></script>
-<script src="assets/js/tg-chat.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-chat.js') ?: 1; ?>"></script>
+<?php /* `tg-chat.js` bu sahifada KERAK EMAS - chat bloki olib tashlandi
+         (chat alohida `chat.php` sahifasida). Skriptni yuklamaslik tezlik
+         uchun ham foyda: yana bir katta fayl (telegram ulanishlari yo'q). */ ?>
 <script src="assets/js/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/player.js') ?: 1; ?>"></script>
 <script src="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>"></script>

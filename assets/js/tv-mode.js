@@ -398,11 +398,16 @@
             // Avval yon panelning faol elementi, keyin kartalar.
             // Muhim: `visible()` tekshiruvi — mobil ko'rinishda yon panel
             // yashiringan bo'lsa, fokus ko'rinmaydigan elementga tushib qolmasin.
+            // `.watch-ep` (watch.php qismlar kassetasi) va `.reels-slide`
+            // (reels.php) sahifa maxsus fokus boshlanish nuqtasi.
             var pref = [
                 '#igSide .ig-item.active',
                 '#igSide .ig-item',
+                '.watchSide .watch-ep.on',
+                '.watch-side .watch-ep',
                 '.row .grid .yt-card',
                 '.yt-card',
+                '.reels-slide',
                 '.ig-item'
             ];
             for (var i = 0; i < pref.length; i++) {

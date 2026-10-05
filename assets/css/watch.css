@@ -1,23 +1,37 @@
 /* ==========================================================================
-   watch.css - YouTube uslubidagi ko'rish sahifasi
+   watch.css - YouTube uslubidagi ko'rish sahifasi (watch.php)
    ==========================================================================
-   Tuzilma:
-     .watch-grid      -> chap (video + izoh + chat) | o'ng panel
-     .watch-side-eps  -> "Qismlar" kassetasi (serial/anime), VERTIKAL skroll
-     .watch-side-rec  -> "Boshqa kinolar, animelar va multfilmlar" tavsiyalari,
-                         qismlar bloki ostida (yoki kino/multfilmda o'zida)
 
-   Izohlar va chat uchun `reels.css` / `chat.css` dagi tayyor uslublar
-   ishlatiladi - bu fayl faqat shu sahifaga xos o'lcham va joylashuvni
-   beradi (chunki reels izohlari modalda, bu yerda esa oqimda).
+   TUZILMA (desktop, 2 USTUNLI YouTube grid):
+
+     .watch-grid
+       ├── .watch-main        CHAP USTUN (~73%)
+       │     .watch-player    video pleer (16:9, width 100%)
+       │     .watch-head      sarlavha + statistika + tugmalar
+       │     .watch-desc      taqsif
+       │     .watch-comments  IZOHLAR (reels.css uslublari)
+       └── aside.watch-side   O'NG USTUN (~27%, sticky)
+             .watch-side-eps  "Qismlar" kassetasi
+                              (FAQAT anime/serialda, vertikal skroll)
+             .watch-side-rec  "Boshqa kinolar, animelar va multfilmlar"
+                              aralash tavsiyalar (har doim ko'rinadi)
+
+     Anime/serialda: qismlar YUQORIDA, tavsiyalar uning OSTIDA.
+     Kino/multfilmda: qismlar bloki `hidden` - to'g'ridan-to'g'ri
+     tavsiyalar butun o'ng ustunni egallaydi.
+
+   Izohlar uchun `reels.css` dagi tayyor uslublar ishlatiladi - bu fayl
+   faqat shu sahifaga xos o'lcham va joylashuvni beradi (chunki reels
+   izohlari modalda, bu yerda esa oqimda).
+
+   DIQQAT: bu sahifada CHAT yo'q (`chat.css`/`tg-chat.js` yuklanmaydi) -
+   chat alohida `chat.php` sahifasida.
    ========================================================================== */
 
 .ig-page.watch-page { max-width: 1560px; margin: 0 auto; padding: 14px; }
 
 /* ------------------------------------------------------------------ 404 */
-.watch-404 {
-    text-align: center; padding: 70px 20px;
-}
+.watch-404 { text-align: center; padding: 70px 20px; }
 .watch-404 h1 { font-size: 22px; margin: 0 0 8px; }
 .watch-404 p  { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
 .watch-404-btn {
@@ -27,21 +41,28 @@
 }
 
 /* ================================================================= GRID */
+/* YouTube'dekidek 2 ustun: chap keng (~73%), o'ng torroq (~27%).
+
+   `minmax(0, 1fr)` birinchi ustun uchun MUHIM: grid default `auto`
+   bo'lganda `<video>` ning tabiiy kengligi ichidan chiqib ketadi va
+   butun layout siljiydi. O'ng ustun `minmax(300px, 27%)` - keng ekranda
+   ~27%, o'rtada 300px dan kam bo'lmaydi. */
 .watch-grid {
     display: grid;
-    /* Yon panel YouTube'dekidek: o'ngdan torroq. `minmax(0,1fr)` shu
-       sababli video ichida chiqib ketmaydi (grid default `auto` bo'lishi
-       kerak edi - u `<video>` kengligini siqib yuboradi). */
-    grid-template-columns: minmax(0, 1fr) 372px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 27%);
     gap: 18px;
     align-items: start;
 }
 .watch-main { min-width: 0; }
 
 /* ================================================================ VIDEO */
+/* Talab: aniq 16:9, width 100%, responsive. `aspect-ratio` zamonaviy
+   brauzerlarda ishlaydi; `min-height: 0` esa ichidagi `<video>` ning
+   balandligini grid'ning siqib qo'yishidan saqlaydi. */
 .watch-player {
     width: 100%;
     aspect-ratio: 16 / 9;
+    min-height: 0;
     background: #000;
     border-radius: 14px;
     overflow: hidden;
@@ -129,7 +150,14 @@
     font-family: inherit; padding: 0;
 }
 
-/* ======================================================= IZOH / CHAT BLOKI */
+/* ========================================================= IZOH BO'LIMI */
+/* Izohlar reels modalidagi `.reels-comments-box` ichida edi. Bu yerda
+   modal yo'q - ro'yxat to'g'ridan-to'g'ri oqimda, shuning uchun balandligi
+   cheksiz va foni shaffof.
+
+   `.watch-comments-wrap` `position: relative` bo'lishi SHART: formatlash
+   menyusi (`.tg-fmt`) `bottom: 58px` da absolute joylashadi va o'z
+   konteyneriga (`.reels-comments-box` yoki `.chat-thread`) bog'lanadi. */
 .watch-block { margin-top: 22px; }
 .watch-block-h {
     display: flex; align-items: center; gap: 8px;
@@ -138,13 +166,6 @@
 }
 .watch-block-h svg { width: 19px; height: 19px; color: var(--muted); }
 
-/* Izohlar reels modalidagi `.reels-comments-box` ichida edi. Bu yerda
-   modal yo'q - ro'yxat to'g'ridan-to'g'ri oqimda, shuning uchun balandligi
-   cheksiz va foni shaffof.
-
-   `.watch-comments-wrap` `position: relative` bo'lishi SHART: formatlash
-   menyusi (`.tg-fmt`) `bottom: 58px` da absolute joylashadi va o'z
-   konteyneriga (`.reels-comments-box` yoki `.chat-thread`) bog'lanadi. */
 .watch-comments-wrap { position: relative; }
 .watch-comments-list {
     border: 0;
@@ -162,51 +183,23 @@
     background: var(--bg-2);
 }
 
-/* Chat oqimi - chat.php dagi kabi, lekin balandlik cheklangan */
-.watch-chat-rooms {
-    display: flex; gap: 8px; overflow-x: auto;
-    padding: 0 0 8px;
-    margin-bottom: 10px;
-    border-bottom: 1px solid var(--line);
-    scrollbar-width: none;
-}
-.watch-chat-rooms::-webkit-scrollbar { display: none; }
-.watch-chat-rooms .chat-room {
-    flex: 0 0 auto;
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 8px 14px; border-radius: 999px;
-    background: var(--card); border: 1px solid var(--line);
-    cursor: pointer; font-family: inherit;
-    color: var(--text); font-size: 13px; font-weight: 700;
-}
-.watch-chat-rooms .chat-room.on {
-    background: var(--accent); border-color: var(--accent); color: #fff;
-}
-.watch-chat-rooms .chat-room-ico { font-size: 15px; }
-.watch-chat-thread {
-    display: flex;
-    flex-direction: column;
-    height: 460px;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    background: var(--bg-2);
-    overflow: hidden;
-}
-/* "orqaga" tugmasi bu sahifada kerak emas: xona hech qachon yopilmaydi,
-   faqat boshqa xonaga o'tiladi. */
-.watch-chat-thread .chat-back { display: none; }
-.watch-chat-thread .chat-thead { flex: 0 0 auto; }
-.watch-chat-thread .chat-feed  { flex: 1 1 auto; min-height: 0; }
-.watch-chat-thread .chat-picker { position: static; flex: 0 0 auto; }
-.watch-chat-thread .chat-composer { flex: 0 0 auto; }
+/* DIQQAT: chat uslublari yo'q - bu sahifada chat blok ham yo'q.
+   Chat alohida `chat.php` sahifasida (uslublari `chat.css` da). */
 
 /* =========================================================== O'NG PANEL */
 /*
-  Yon panel ikki blokdan iborat:
-    1) .watch-side-eps -> "Qismlar" kassetasi (vertikal skroll).
-    2) .watch-side-rec -> "Boshqa kinolar, animelar va multfilmlar".
-  Panel o'zi sticky va ekran balandligiga sig'adigan qilib o'rnatiladi;
-  har bir blok o'z ro'yxatini ALOHIDA aylantiradi.
+  Yon panel ikki blokdan iborat (YouTube kanal sahifasi kabi):
+
+    1) `.watch-side-eps` -> "Qismlar" kassetasi.
+       FAQAT anime/serial (`hasPlaylist`); kino/multfilmda blok butunlay
+       `hidden` bo'ladi. Ro'yxat VERTIKAL skroll qilinadi va balandligi
+       `max-height` bilan cheklangan (panel oshib ketmasin).
+    2) `.watch-side-rec` -> "Boshqa kinolar, animelar va multfilmlar".
+       Har doim ko'rinadi: qismlar bo'lsa ularning OSTIDA, qismlar
+       bo'lmasa - to'g'ridan-to'g'ri panelli.
+
+  Panel o'zi sticky va ekran balandligiga sig'adigan; har bir blok o'z
+  ro'yxatini ALOHIDA aylantiradi.
 */
 .watch-side {
     position: sticky; top: 12px;
@@ -225,13 +218,11 @@
 /* Qismlar bloki - kasseta balandligi ekranning yarmini oshirmaydi. */
 .watch-side-eps { flex: 0 1 auto; }
 /* Tavsiyalar bloki qolgan bo'sh joyni oladi (qismlar bo'lmasa - butun panel). */
-.watch-side-rec {
-    flex: 1 1 auto;
-}
+.watch-side-rec { flex: 1 1 auto; }
 /* Qismlar bloki yashirilganda chegara chizig'i kerak emas. */
 .watch-side-eps[hidden] { display: none; }
 /* chegarasi faqat ikkala blok KO'RINSA (kino/multfilmda faqat bitta blok -
-   u holda chegara chizig'i panelning o'z chegarasi bilan ustma-ust tushardi). */
+   u holda chegara panelning o'z chegarasi bilan ustma-ust tushardi). */
 .watch-side-eps:not([hidden]) + .watch-side-rec { border-top: 1px solid var(--line); }
 
 .watch-side-head {
@@ -249,14 +240,16 @@
     display: flex; flex-direction: column; gap: 6px;
     scrollbar-width: thin;
 }
-/* Qismlar kassetasi baland bo'lganda panel ichida skroll paydo bo'ladi. */
+/* Qismlar kassetasi: max-height + vertikal skroll (YouTube playlist oynasi). */
 .watch-side-eps .watch-side-list { max-height: min(46dvh, 430px); }
+/* Tavsiyalar bloki qolgan bo'sh joyni oladi. */
+.watch-side-rec .watch-side-list { max-height: none; }
 .watch-side-list::-webkit-scrollbar { width: 6px; }
 .watch-side-list::-webkit-scrollbar-thumb {
     background: var(--line); border-radius: 99px;
 }
 
-/* --- Qism (episod) qatori: YouTube kalleksiyasidagi kabi --- */
+/* --- Qism (episod) qatori: YouTube playlist kabi --- */
 .watch-ep {
     display: flex; gap: 10px; align-items: center;
     padding: 7px; border-radius: 12px;
@@ -267,9 +260,7 @@
     transition: background .13s ease;
 }
 .watch-ep:hover { background: var(--card-2); }
-.watch-ep.on {
-    background: var(--card); border-color: var(--accent);
-}
+.watch-ep.on { background: var(--card); border-color: var(--accent); }
 .watch-ep-num {
     flex: 0 0 auto; width: 26px; text-align: center;
     font-size: 13px; font-weight: 800; color: var(--muted);
@@ -301,7 +292,7 @@
 }
 .watch-ep-seen { color: var(--accent); font-weight: 700; }
 
-/* --- Yon paneldagi TAVSIYA qatori (qismlar bo'lmasa) --- */
+/* --- Yon paneldagi TAVSIYA qatori (aralash kino/anime/multfilm) --- */
 .watch-rec {
     display: flex; gap: 9px; align-items: center;
     padding: 6px; border-radius: 11px;
@@ -332,10 +323,12 @@
 }
 
 /* ================================================================ MOBIL */
+/* 1040px dan kichikda (va mobil'da) ikkala ustun ham BIR ustunga tushadi;
+   panel statik bo'lib, sahifa oxirida (order: 2) ko'rinadi. */
 @media (max-width: 1040px) {
     .watch-grid { grid-template-columns: minmax(0, 1fr); }
-    /* Mobil'da panel statik (sticky emas) va balandlik cheklovisiz - ichki
-       skroll mobil'da qulay bo'lmaydi. */
+    /* Mobil'da panel sticky emas va balandlik cheklovisiz - ichki skroll
+       mobil'da qulay bo'lmaydi. */
     .watch-side { position: static; max-height: none; order: 2; }
     .watch-side-eps .watch-side-list { max-height: 60dvh; }
     .watch-side-rec .watch-side-list { max-height: none; }
@@ -346,7 +339,6 @@
     .watch-player { border-radius: 10px; }
     .watch-side-head { padding: 10px 12px; }
     .watch-comments-list { max-height: 460px; }
-    .watch-chat-thread { height: 400px; }
     .watch-side-eps .watch-side-list { max-height: none; }
 }
 
@@ -358,9 +350,8 @@
 .tv-mode .watch-side-list { scrollbar-width: none; }
 .tv-mode .watch-side-list::-webkit-scrollbar { display: none; }
 .tv-mode .watch-comments-list { max-height: 70dvh; }
-.tv-mode .watch-chat-thread { height: 66dvh; }
 /* Yon panel pult bilan boshqariladi: qatorlar kattaroq, sarlavhalar yirikroq.
-   `.watch-ep` <button>, `.watch-rec` <a> - ikkalasi ham `tv-mode.js`ning
+   `.watch-ep` <button> va `.watch-rec` <a> - ikkalasi ham `tv-mode.js` ning
    umumiy `button/a` selektoriga tushadi, shuning uchun D-Pad ishlaydi. */
 .tv-mode .watch-side-title { font-size: 19px; }
 .tv-mode .watch-side-count { font-size: 14px; }

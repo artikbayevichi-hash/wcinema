@@ -11,8 +11,14 @@
 // klassni qo'yadi. Boshqa hammasi `tv-mode.js` da (u `initial()` ni
 // `localStorage` va shu klass bilan bir xil hisoblaydi).
 //
-// Ishlatish: <head> ichida —
-//     <?php require __DIR__ . '/includes/tv-head.php'; ?>
+// Ishlatish: <head> ichida — `require __DIR__ . '/includes/tv-head.php';`
+//
+// DIQQAT: bu izohda HECH QACHON PHP ochiq/yopiq tegini yozib bo'lmaydi
+// (yuqorida `include` misoli shuning uchun tegsiz yozilgan). PHP parser
+// `//` izohini ham tekshiradi va undagi yopuvchi tegni haqiqiy teg deb
+// oladi — natijada quyidagi `// ====` qatori (va undan keyingi kod)
+// brauzerga MATN holida chiqib ketar edi. Bu xato `watch.php` da
+// ko'rinib turardi.
 // ============================================================================
 ?>
 <link rel="stylesheet" href="<?php echo htmlspecialchars($tvBase ?? 'assets/css/tv.css'); ?>?v=<?php echo @filemtime(__DIR__ . '/../assets/css/tv.css') ?: 1; ?>">

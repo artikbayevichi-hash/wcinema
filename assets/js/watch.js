@@ -4,12 +4,15 @@
    Vazifa:
      1) Video player (direct/file/hls -> `.udp-player`, telegram ->
         `TgStream.mount()`, embed -> `<iframe>`).
-     2) Yon panel: serial/anime bo'lsa - qismlar kassetasi (vertikal skroll)
-        va uning ostida "Boshqa kinolar, animelar va multfilmlar" tavsiyalari;
-        kino/multfilmda - faqat tavsiyalar.
-     3) Izohlar - `tg-comments.js` moduli (stiker/emoji/GIF/rasm/@ + like,
+     2) Izohlar - `tg-comments.js` moduli (stiker/emoji/GIF/rasm/@ + like,
         reply, o'chirish). Faqat mavzu endpointi boshqa (`api/video-topic.php`).
-     4) Chat - `tg-chat.js` moduli, kategoriyaga mos xona avtomatik ochiladi.
+     3) Yon panel (YouTube kanal sahifasi kabi, ikki blok):
+        - QISMLAR (faqat serial/anime, vertikal skroll);
+        - "Boshqa kinolar, animelar va multfilmlar" aralash tavsiyalar -
+          qismlar bo'lsa ularning ostida, bo'lmasa yon panelning o'zida.
+
+    DIQQAT: bu sahifada CHAT yo'q (`tg-chat.js` ham yuklanmaydi) - chat
+    alohida `chat.php` sahifasida.
 
    Reels moduli (`reels.js`) bu sahifada YUKLANMAYDI: u `#commentsModal`
    va carousel bilan ishlaydi. Shu sababli kompozitor yuborishini,
@@ -520,9 +523,9 @@
       };
     }
 
-    /* "Qismlar" tugmasi endi faqat yon panelning qismlar blokiga olib
-       boradi. Tugma faqat `S.sideEpisodes` ro'ylangan paytda chiqadi
-       (`renderActions`), ya'ni qismlar bloki allaqachon ko'rinmoqda. */
+    /* "Qismlar" tugmasi yon paneldagi qismlar kassetasiga olib boradi.
+       Tugma faqat `S.sideEpisodes` ro'ylangan paytda chiqadi
+       (`renderActions`), ya'ni panel allaqachon ko'rinmoqda. */
     var ae = el('actAllEps');
     if (ae) {
       ae.onclick = function () {
@@ -558,6 +561,8 @@
       + '</span></button>';
   }
 
+  /* Yon paneldagi ixchak "tavsiya qatori" - `watch.php?c=ID`
+     havolasidagi <a>. Karta uslublari `.watch-rec*` (watch.css). */
   function recRow(c) {
     var meta = [];
     meta.push(Number(c.views) > 0 ? fmtViews(c.views) + ' ko‘rildi' : 'Yangi');
@@ -574,6 +579,7 @@
       + '</span></a>';
   }
 
+
   /** `episodes.thumbnail` odatda `uploads/...` yoki to'liq URL bo'ladi. */
   function thumbUrl(t) {
     if (!t) return '';
@@ -582,15 +588,17 @@
     return base + '/' + t.replace(/^\/+/, '');
   }
 
-  /* Yon panel ikki blokdan iborat (YouTube kanal sahifasi kabi):
+  /* Yon panel YouTube kanal sahifasi kabi IKKI blokdan iborat:
 
-       1) `watchSideEpBlock`  - QISMLAR. Faqat serial/animedda (`hasPlaylist`);
-                               o'z ichida vertikal skroll.
+       1) `watchSideEpBlock`  - QISMLAR. Faqat serial/animedda
+                                  (`hasPlaylist`); o'z ichida vertikal skroll.
        2) `watchSideRecBlock` - "Boshqa kinolar, animelar va multfilmlar".
-                               Har doim ko'rinadi: qismlar bo'lsa ularning
-                               ostida, yo'q bo'lsa yon panelning o'zida.
+                                  Har doim ko'rinadi: qismlar bo'lsa
+                                  ularning ostida, yo'q bo'lsa yon panelning
+                                  o'zida (kino/multfilm).
 
-     Film/multfilmda 1-blok `hidden` bo'ladi, 2-blok butun joyni oladi. */
+     Film/multfilmda 1-blok `hidden` bo'ladi, 2-blok butun joyni oladi -
+     bo'sh o'ng ustun hech qachon qolmaydi. */
   function renderSide() {
     var epBlock = el('watchSideEpBlock');
     var list    = el('watchSideList');
@@ -623,11 +631,6 @@
         : 'kino · anime · multfilm';
     }
   }
-
-  /* ARALASH TAVSIYALAR endi faqat yon panelda (`watchSideRecList`) chiziladi.
-     Ilgari sahifa oxirida alohida katta kartalar qatori bor edi - u bir xil
-     ro'yxatni ikkinchi marta ko'rsatardi (yon panel bilan yonma-yon), shu
-     sababli olib tashlandi. `cardHTML` ham shu bilan ishlatilmas edi. */
 
   // ================================================================= IZOH
   function initComments() {
@@ -709,29 +712,10 @@
   }
 
   // ================================================================== CHAT
-  /**
-   * Xonalar async yuklanadi (`api/chat.php?action=rooms`). Videoning
-   * kategoriyasiga MOS xonani avtomatik ochamiz: kino -> 🎬, anime -> 🌸,
-   * multfilm -> 🧸, boshqalar -> 💬 Hammaga.
-   */
-  function initChat() {
-    if (!global.TGChat) return;
-    var hint = W.roomHint || 'general';
-    var tries = 0;
-
-    (function wait() {
-      var rooms = (global.TGChat._state && global.TGChat._state.rooms) || [];
-      if (rooms.length) {
-        var pick = null;
-        for (var i = 0; i < rooms.length; i++) {
-          if (rooms[i].key === hint) { pick = rooms[i]; break; }
-        }
-        global.TGChat.openRoom(pick || rooms[0]);
-        return;
-      }
-      if (tries++ < 40) setTimeout(wait, 150);
-    })();
-  }
+  /* DIQQAT: bu sahifada chat YO'Q. `tg-chat.js` ham yuklanmaydi
+     (watch.php dan skript va `chat.css` olib tashlangan), shuning uchun
+     `initChat`/`TGChat` kodini ham olib tashladik. Chat alohida `chat.php`
+     sahifasida (pastki nav markazidagi "Chat" tugmasi). */
 
   // ============================================================ QISM ALMASH
   function switchEpisode(epId) {
@@ -797,7 +781,6 @@
     mountPlayer();
     bindSideClicks();
     initComments();
-    initChat();
 
     // Qism almashtirilganda skroll yuqoriga qaytadi.
     global.addEventListener('popstate', function () {
