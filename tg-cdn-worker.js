@@ -483,57 +483,155 @@ function parseRange(header, size) {
 //     biz 200 + Content-Length: <hajm> qaytaramiz va haqiqiy ReadableStream
 //     ochamiz. Endi brauzer "bu 546 MB li video" deb biladi va o'zi
 //     xohlagancha (backpressure) tortib oladi.
-//   * Har CHUNK_PULL bayt uchun Telegram'dan alohida o'qish — butun fayl
-//     bir vaqtda emas, faqat kerak qismi yuklanadi.
 //   * Brauzer to'xtatganda (seek yoki sahifa yopilganda) `cancel()` chaqiriladi
 //     va biz o'qishni darhol to'xtatamiz — ortiqcha trafik sarflanmaydi.
 //
-// Bu birinchi so'rov uchun FIRST_CHUNK ni ham birdan oshiradi: avval
-// javob tugagach brauzer "movi tugabdi" deb o'ylardi, endi esa oqim
-// davom etadi.
+// ---------------------------------------------------------------------------
+//  IKKITA BOSQICH: DARHOL BIR BO'LAK, KEYIN QOLGANI
+// ---------------------------------------------------------------------------
+//
+// NIMA UCHUN: avval har bir `pull` 1 MB so'raydi, ya'ni `readRangeParallel`
+// ichida 2 ta parallel Telegram so'rovi (512 KB + 512 KB). Ikkalasi ham
+// tugagandan KEYIN brauzerga birinchi bayt yetib boradi. Sekundiga 3-4 MB
+// tezlikda bu bitta qadam ~0.5 s, sekin internetda bir necha sekun — ya'ni
+// video "ochilishi" sezilarli kechikadi.
+//
+// Endi oqim IKKITA QADAMDA ishlaydi:
+//
+//   1-BOSQICH (darhol) — bitta 512 KB bo'lak. Bitta Telegram so'rovi, bitta
+//     RTT. MP4 sarlavhasi (`ftyp` + `moov`) shu yerda bo'lsa, brauzer birinchi
+//     kadrni deyarli darhol ko'rsatadi.
+//
+//   2-BOSQICH (2 sekundan keyin) — qolgan butun fayl. Endi tezlik muhim:
+//     har tortish 2 MB va ichida 4 ta parallel so'rov (PARALLEL).
+//
+// NIMA UCHUN "FON ISHLOVCHI" (producer) va NAVBAT:
+//
+// Oqimning o'zini to'xtatib kutsa — brauzer `pull()` ga to'xtamaydi
+// chaqirib turadi va video 2 soniya "tosib" qoladi. Shuning uchun:
+//
+//   * `produce()` — FONDA ishlaydi: Telegram'dan o'qib, navbatga soladi.
+//     1-bosqichni darhol, 2-bosqichni 2 s dan keyin boshlaydi va
+//     NAVBAT TO'LMAY turib davom etadi (foydalanuvchi ko'rayotgan paytda
+//     keyingi qism oldindan tayyor bo'lib turadi — "buffer" qisqa bo'lmaydi).
+//   * `pull(controller)` — faqat navbatdan oladi. Navbat bo'sh bo'lsa
+//     `produce()` tugashini kutadi, lekin o'z-o'zidan Telegram'ga
+//     so'rov YUBORMAYDI.
+//
+// XOTIRA: navbat chegaralanadi (QUEUE_MAX). Aks holda 546 MB li fayl
+// butunlay RAM ga yig'ilib, telefonda brauzerni o'ldirardi. Chegara
+// oshilganda `produce` kutadi — bu aynan `backpressure` roli.
+const FIRST_PULL = 512 * 1024;      // 1-bosqich: bitta bo'lak, darhol
+const REST_PULL = 2 * 1024 * 1024;   // 2-bosqich: katta bo'lak, tez
+const REST_DELAY = 2000;             // ms — qolgani shundan keyin yuklanadi
+const QUEUE_MAX = 2;                 // navbatda nechta bo'lak (2 x 2 MB = 4 MB)
+
 async function progressiveResponse(size, mime, baseHeaders) {
-  const CHUNK_PULL = 1024 * 1024;     // har tortishdagi hajm
-  let off = 0;
-  let dead = false;
+  let off = 0;                       // Telegram'dan o'qilgan bayt soni
+  let dead = false;                  // brauzer bekor qilgan (yopilgan/seek)
+  let done = false;                  // fayl to'liq o'qib bo'ldi
+  let err = null;                    // oxirgi xato
   let part = 1;
+  const queue = [];                  // tayyor baytlar (Uint8Array)
+  const waiters = [];                // navbat bo'sh bo'lishini kutayotganlar
+
+  // Kimdir navbatga keldi yoki shart o'zgarganda — barcha kutuvchilarni
+  // uyg'otamiz. Ro'yxat bo'lgani uchun `pull` ham, `produce` ham bir vaqtda
+  // kuta oladi (oldingi bitta `wake` sloti ikkinchisini yo'qotardi).
+  function notify() {
+    while (waiters.length) waiters.shift()();
+  }
+  function waitTick() {
+    return new Promise(function (r) { waiters.push(r); });
+  }
+  function pause(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
+
+  // --- FON ISHLOVCHI -------------------------------------------------------
+  async function produce() {
+    try {
+      // ---- 1-BOSQICH: darhol bitta kichik bo'lak --------------------------
+      const first = await readRange(0, Math.min(FIRST_PULL, size), size);
+      if (dead) return;
+      if (first && first.length) {
+        off += first.length;
+        STATS.requests++;
+        STATS.bytes += first.length;
+        queue.push(first);
+        say('~ oqim #1 ' + (first.length / 1024).toFixed(0) + ' KB — darhol');
+        notify();
+      }
+      part++;                              // keyingi bo'lak "#2" bo'lib hisoblanadi
+
+      // ---- 2-BOSQICH: 2 sekunddan keyin qolgan fayl ----------------------
+      // `dead` bo'lsa kutmaymiz — brauzer allaqachon yopgan bo'lsa 2 sekun
+      // bekor qilib turish ortiqcha. 50 ms da bo'lib `dead` ga tez javob beramiz.
+      if (!dead && !done && REST_DELAY > 0) {
+        let left = REST_DELAY;
+        while (left > 0 && !dead) {
+          const step = left > 50 ? 50 : left;
+          await pause(step);
+          left -= step;
+        }
+      }
+      if (dead) return;
+
+      // ---- fayl oxirigacha (navbat to'lmasdan oldin to'xtaydi) -----------
+      while (!dead && !err && off < size) {
+        // Navbat to'lgan — bu BACKPRESSURE: brauzer o'z tezligida ko'rayapti,
+        // biz esa ortiqcha yuklamaymiz. Bo'sh joy bo'lganda `notify` uyg'otadi.
+        while (!dead && !err && queue.length >= QUEUE_MAX) await waitTick();
+
+        const want = Math.min(REST_PULL, size - off);
+        const u8 = await readRange(off, want, size);
+        if (!u8 || !u8.length) break;      // Telegram kamroq berdi / fayl tugadi
+        off += u8.length;
+        STATS.requests++;
+        STATS.bytes += u8.length;
+        queue.push(u8);
+        if (part <= 2 || part % 20 === 0) {
+          say('~ oqim #' + part + ' ' + (off / 1048576).toFixed(1) + ' / '
+            + (size / 1048576).toFixed(1) + ' MB'
+            + (part === 2 ? '  (2 s dan keyin — qolgani)' : ''));
+        }
+        part++;
+        notify();
+      }
+    } catch (e) {
+      if (!dead) {
+        err = e;
+        say('✗ oqim ' + off + ': ' + ((e && e.message) || e));
+      }
+    } finally {
+      done = true;
+      notify();                            // `pull` buni kutayotgan bo'lishi mumkin
+    }
+  }
+
+  // Fon ishlovchini shu yerda ishga tushiramiz — javob darhol qaytariladi
+  // (200 OK + sarlavhalar), baytlar esa `stream` orqali keladi.
+  produce();
 
   const stream = new ReadableStream({
     async pull(controller) {
-      if (dead || off >= size) { controller.close(); return; }
-      const want = Math.min(CHUNK_PULL, size - off);
-      let u8;
-      try {
-        u8 = await readRange(off, want, size);
-      } catch (err) {
-        // Telegram vaqtincha javob bermadi. Oqimni YOPMAYMIZMIZ — Realma?
-        // Yo'q: qisman oqimni uzish brauzerni "tarmoq xatosi"ga olib
-        // keladi. Shuning uchun faqat oxirgi urinishdan keyin uzamiz.
-        dead = true;
-        say('✗ oqim ' + off + '+' + want + ': ' + err.message);
+      // Navbat bo'sh bo'lsa `produce` tugashini yoki yangi baytni kutamiz.
+      while (!queue.length && !dead && !done && !err) await waitTick();
+      if (dead) return;
+      if (err && !queue.length) {
         try { controller.error(err); } catch (e) { /* allaqachon yopilgan */ }
         return;
       }
-      if (!u8 || !u8.length) {
-        // Telegram kamroq bayt berdi. Qolganini yana so'ramiz.
-        if (off + u8.length >= size) { controller.close(); return; }
-        return;                         // pull() yana chaqiriladi
-      }
-      // O'qish davomida brauzer oqimni bekor qilgan bo'lsa (seek/yopilish) —
-      // endi hech narsa yubormaymiz (yopilgan oqimga `enqueue` xato beradi).
-      if (dead) return;
-      off += u8.length;
-      STATS.requests++;
-      STATS.bytes += u8.length;
-      if (part === 1 || part % 20 === 0) {
-        say('~ oqim #' + part + ' ' + (off / 1048576).toFixed(1) + ' / '
-          + (size / 1048576).toFixed(1) + ' MB');
-      }
-      part++;
+      if (!queue.length) { controller.close(); return; }
+
+      const u8 = queue.shift();
+      notify();                            // bo'sh joy bo'ldi — produce davom etsin
       controller.enqueue(u8);
     },
     cancel() {
       // Brauzer to'xtadi — Telegram'dan yana o'qimaymiz.
       dead = true;
+      notify();                            // kutayotgan `pull` ni uyg'otamiz
       say('~ oqim to‘xtatildi (' + (off / 1048576).toFixed(1) + ' MB o‘qilgan)');
     }
   });
