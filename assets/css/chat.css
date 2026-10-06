@@ -86,13 +86,25 @@
     padding: 34px 16px; line-height: 1.5;
 }
 
-/* ----------------------------------------------------------------- suhbat */
+/* ----------------------------------------------------------------- suhbat
+   DIQQAT (`hidden` atributi): ushbu elementlarda `display:flex` berilgani
+   uchun brauzerning `[hidden] { display:none }` qoidasi BOSTIRILAR edi —
+   natijada chat oynasi doim ochiq qolar, "Orqaga" bosilganda ro'yxat ham,
+   suhbat ham birga ko'rinib qolardi. Shuning uchun `hidden` holatni
+   aniq belgilaymiz. `.chat-listview` oddiy div bo'lsa ham baribir yozamiz
+   (xavfsizlik uchun). */
+.chat-listview[hidden],
+.chat-thread[hidden],
+.chat-picker[hidden],
+.chat-tg[hidden] { display: none; }
+
 .chat-thread {
     display: flex;
     flex-direction: column;
     position: relative;          /* formatlash menyusi shu yerga bog'lanadi */
     height: calc(100vh - var(--ig-tabbar-h) - 40px);
     min-height: 320px;
+    overflow: hidden;           /* stiker/GIF/ovoz ramkadan chiqib ketmasin */
 }
 .chat-thead {
     display: flex; align-items: center; gap: 8px;
@@ -116,8 +128,10 @@
 .chat-tg svg { width: 20px; height: 20px; }
 
 .chat-feed {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;              /* flex qism: kichrayishi + scroll ishlashi */
     overflow-y: auto;
+    overflow-x: hidden;         /* media (stiker/GIF/ovoz) yon tomonga chiqmasin */
     padding: 14px 2px;
     display: flex;
     flex-direction: column;
@@ -130,7 +144,7 @@
 .chat-row.mine { flex-direction: row-reverse; }
 .chat-avw { flex: 0 0 auto; }
 .chat-avw .reels-c-av { width: 32px; height: 32px; font-size: 13px; }
-.chat-col { display: flex; flex-direction: column; max-width: 76%; }
+.chat-col { display: flex; flex-direction: column; max-width: 76%; min-width: 0; }
 .chat-row.mine .chat-col { align-items: flex-end; }
 .chat-who { font-size: 11.5px; color: var(--muted); margin: 0 4px 3px; }
 
@@ -179,17 +193,28 @@
     box-shadow: none;
 }
 /* Stiker o'z o'lchamida, markazlashgan - orqa fon butunlay yo'q va burchak
-   yumaloq emas (Telegram'dagi kabi "kesilgan" ko'rinish). */
+   yumaloq emas (Telegram'dagi kabi "kesilgan" ko'rinish). Balandligi ham
+   cheklanadi - aks holda katta stiker chat ramkasidan pastga chiqib ketardi. */
 .chat-media .reels-c-sticker {
     background: transparent !important;
     border-radius: 0;
     max-width: 150px;
+}
+.chat-media .reels-c-sticker img,
+.chat-media .reels-c-sticker video {
+    max-height: 180px;
+    width: auto;
 }
 /* GIF esa rasm kabi yumaloq burchakli (12px) - huddi yuborilgan rasm ustubida. */
 .chat-media .reels-c-gif {
     background: transparent !important;
     border-radius: 12px;
     max-width: 150px;
+}
+.chat-media .reels-c-gif img,
+.chat-media .reels-c-gif video {
+    max-height: 210px;
+    width: auto;
 }
 /* ...lekin YUKLANAYOTGAN paytda skelet ko'rinishi kerak (bo'sh qator
    bo'lib qolmasin). Tayyor bo'lgach yana butunlay shaffof bo'ladi. */

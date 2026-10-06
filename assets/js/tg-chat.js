@@ -134,7 +134,15 @@
   }
 
   // ============================================================ OYNALARNI ALMASHTIRISH
-  function showThread(title, tgUrl) {
+  /**
+   * Chat oynasini ochadi. Ro'yxat (sarlavha + kategoriyalar + "Xabarlar")
+   * umuman yashiriladi, faqat tanlangan suhbat ko'rinadi.
+   * Teskari harakat: `closeChat()` (Orqaga / `goBack()`).
+   *
+   * @param {string} title - suhbat sarlavhasi
+   * @param {string} tgUrl  - (ixtiyoriy) "Telegram'da ochish" havolasi
+   */
+  function openChat(title, tgUrl) {
     var lv = el('chatListView'), th = el('chatThread');
     if (lv) lv.hidden = true;
     if (th) th.hidden = false;
@@ -145,6 +153,31 @@
     if (C.voice) C.voice.close();
     closePicker();
     setComposerLocked(!!C.locked, C.lockedReason || '');
+  }
+
+  /**
+   * Chat oynasini yopadi (Orqaga): suhbat `display:none` bo'ladi,
+   * umumiy chatlar ro'yxati va kategoriyalar qayta aktiv ko'rinadi.
+   */
+  function closeChat() {
+    // Yozib turilayotgan ovozni to'xtatamiz (mikrofon yoniq qolmasin).
+    if (C.voice) C.voice.close();
+    closePicker();                        // emoji/stiker/GIF paneli ham yopiladi
+    try { toggleFmt(false); } catch (e) {} // formatlash menyusi yopiladi
+    if (C.active && C.active.type === 'dm') loadContacts();
+    C.active = null;
+    C.locked = false; C.lockedReason = '';
+    var lv = el('chatListView'), th = el('chatThread');
+    if (th) th.hidden = true;
+    if (lv) lv.hidden = false;
+    var url = location.pathname + location.search.replace(/[?&]u=\d+/, '').replace(/^\?$/, '');
+    try { history.replaceState({}, '', url); } catch (e) {}
+  }
+
+  /** "Orqaga" (<) tugmasi va/yoki Escape: ochiq suhbatni yopadi. */
+  function goBack(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    closeChat();
   }
 
   /**
@@ -168,24 +201,11 @@
     if (form) form.classList.toggle('is-locked', C.locked);
   }
 
-  function showList() {
-    // Yozib turilayotgan ovozni to'xtatamiz (mikrofon yoniq qolmasin).
-    if (C.voice) C.voice.close();
-    if (C.active && C.active.type === 'dm') loadContacts();
-    C.active = null;
-    C.locked = false; C.lockedReason = '';
-    var lv = el('chatListView'), th = el('chatThread');
-    if (th) th.hidden = true;
-    if (lv) lv.hidden = false;
-    var url = location.pathname + location.search.replace(/[?&]u=\d+/, '').replace(/^\?$/, '');
-    try { history.replaceState({}, '', url); } catch (e) {}
-  }
-
   // ============================================================ XONANI OCHISH
   function openRoom(room) {
     C.active = { type: 'room', room: room, topicId: room.topic_id ? Number(room.topic_id) : 0, title: room.title };
     C.locked = false; C.lockedReason = '';
-    showThread(room.title, room.url || '');
+    openChat(room.title, room.url || '');
     if (!CHAT) { status('Chat sozlanmagan'); return; }
     if (!room.topic_id) { status('Bu xona hozircha tayyor emas'); return; }
     ensureRoomPeer().then(function () { return joinChat(); })
@@ -226,7 +246,7 @@
     C.lockedReason = blocked
       ? (contact.i_blocked ? 'Siz bu foydalanuvchini bloklagansiz' : 'Bu foydalanuvchi sizni bloklagan')
       : '';
-    showThread(contactName(contact), '');
+    openChat(contactName(contact), '');
     if (blocked) {
       var feed = el('chatFeed');
       if (feed) {
@@ -938,9 +958,10 @@
   // ============================================================ UI ULASH
   function initUI() {
     var feed = el('chatFeed');
+    var thread = el('chatThread');
 
     var back = el('chatBack');
-    if (back) back.addEventListener('click', function (e) { e.preventDefault(); showList(); });
+    if (back) back.addEventListener('click', goBack);
 
     var form = el('chatComposer');
     var input = el('chatInput');
@@ -991,6 +1012,8 @@
       if (toggleFmt(false)) return;               // formatlash menyusi
       var p = picker();
       if (p && !p.hidden) { closePicker(); return; }
+      // Suhbat ochiq, boshqa panel yo'q — Orqaga (Telegramdagidek).
+      if (thread && !thread.hidden) { goBack(); }
     });
 
     initFmtMenu(input);
@@ -1085,6 +1108,9 @@
   }
 
   global.TGChat = {
+    openChat: openChat,
+    closeChat: closeChat,
+    goBack: goBack,
     reload: function () { loadRooms(); loadContacts(); },
     openRoom: openRoom,
     openDM: openDM,
