@@ -449,7 +449,7 @@
   //   <h1> Sinov anime 1 — 2-qism
   //   +--------------------------------------------------------+
   //   | [av] W CINEMA          ★ 8.0   2024                 |
-  //   |      8 ta obunachi    [👍 3,9 ming][👎] [📚] [🔗] [📋]|
+  //   |      8 ta foydalanuvchi [👍 3,9 ming][👎] [📚] [🔗] [📋]|
   //   +--------------------------------------------------------+
   //   📅 1,2 ming ko'rildi · 3 kun oldin
   //
@@ -468,15 +468,19 @@
         : D.title;
     }
 
-    // --- Kanal qatori: "N obunachi" ------------------------------------
-    // YouTube'da kanal = videoni nashr etuvchi. Bu saytda kinolar
-    // Telegram'dan olinadi, lekin kanal SITE_NAME ("W CINEMA") — shuning
-    // uchun obunachi soni ham ro'yxatdan o'tgan foydalanuvchilar soni
-    // (`Catalog::getSubscriberCount()`, serverda hisoblanadi).
+    // --- Kanal qatori: saytdagi foydalanuvchilar soni ------------------
+    // YouTube'da kanal = videoni nashr etuvchi va unda "N obunachi" turadi.
+    // Bu saytda kanal SITE_NAME ("W CINEMA"), obunachi esa yo'q - shuning
+    // uchun foyalanuvchi so'rovi bilan "obunachi" o'rniga SAYTDA
+    // RO'YXATDAN O'TGANLAR soni ko'rsatiladi (`users` jadvalidagi
+    // qatorlar, serverda `Catalog::getSubscriberCount()` bilan
+    // hisoblanadi - frontend qo'shimcha so'rov yubormaydi).
     var subs = el('watchSubs');
     if (subs) {
       var sn = Number(W.subscribers) || 0;
-      subs.textContent = sn > 0 ? fmtViews(sn) + ' ta obunachi' : 'Yangi kanal';
+      subs.textContent = sn > 0
+        ? fmtViews(sn) + ' ta foydalanuvchi'
+        : 'Hali kim ro‘yxatdan o‘tmagan';
     }
 
     // --- Ikkinchi qator: ko'rish + vaqt --------------------------------
@@ -548,36 +552,135 @@
   //   [👍 3,9 ming | 👎]  [Share]  [Download]  [Save]  [⋯]
   //
   // Bizda:
-  //   [👍 3,9 ming | 👎]  [📚 Kutubxona]  [🔗 Ulashish]  [📋 Qismlar]
+  //   [👍 son | 👎 son]  [📚 Kutubxona ▾]  [🔗 Ulashish]  [📋 Qismlar]
   //
-  // Muhim: 👍 va 👎 BITTAGINA yopiq guruhda (`.watch-vote`) turadi -
-  // YouTube'da ham shunday, chiziqcha ularni ajratib turadi.
+  //   · 👍 va 👎 chap navigatsiya tugmasi (`.ig-item`) uslubida;
+  //   · ikkalasida ham HISOBLAGICH bor va u 1 DAN BOSHLANADI
+  //     (birinchi odam bosganda "1", keyingisi "2", ...);
+  //   · 📚 bosilganda menyu ochiladi: Keyinroq ko'rish / Saqlash;
+  //   · 🔗 bosilganda Instagram uslubidagi ulashish oynasi ochiladi.
+
+  /* Sonni silliq "o'sib kelayotgan" ko'rinishida yangilash.
+     NIMA UCHUN: oddiy `textContent` almashtirish sonning o'zgarganini
+     ko'zga urmaydi; foyalanuvchi esa "1 dan boshlab hisoblanib kelsin"
+     deb so'ragan - ya'ni raqamning o'sishi KO'RINISHI kerak.
+
+     VAQTINCHA setTimeout ishlatiladi (rAF EMAS): yashirin tabda rAF
+     callback'i hech qachon kelmaydi va son o'rtoq qiymatda qolib
+     ketardi. setTimeout esa sekinlashtirilganda ham YAKUNIY qiymatga
+     yetib boradi. */
+  function animCount(node, from, to, fmt) {
+    if (!node) return;
+    from = Number(from) || 0;
+    to   = Number(to) || 0;
+    if (from === to) { node.textContent = fmt(to); return; }
+    if (node._t) clearTimeout(node._t);
+    var t0 = Date.now(), dur = 340;
+    function step() {
+      var p = Math.min(1, (Date.now() - t0) / dur);
+      var e = 1 - Math.pow(1 - p, 3);              // easeOutCubic
+      node.textContent = fmt(Math.round(from + (to - from) * e));
+      if (p < 1) node._t = setTimeout(step, 32);
+      else { node._t = 0; node.textContent = fmt(to); }
+    }
+    node._t = setTimeout(step, 32);
+  }
+
+  /* Ovoz berish tugmasidagi matn: son > 0 bo'lsa RAQAM, aks holda
+     so'z ("Yoqdi" / "Yoqmadi"). 0 ni "0" deb ko'rsatmaymiz - son
+     birinchi bosishda 1 dan boshlanadi. */
+  function voteTxt(n, zeroWord) {
+    return (Number(n) || 0) > 0 ? fmtViews(n) : zeroWord;
+  }
+
+  /* API so'roviga joriy Telegram foydalanuvchisini qo'shish.
+     `api/chat.php` foydalanuvchini `reelUserId()` bilan aniqlaydi - u
+     avval PHP sessiyasini, bo'lmasa `tg_me` ni tekshiradi. Saytning
+     qolgan qismi (reels / notifications / profile) ham shu kalitni
+     `localStorage['wc_tg_me_v1']` dan o'zi qo'shib yuboradi. */
+  function withMeQS(path) {
+    var m = '';
+    try { m = localStorage.getItem('wc_tg_me_v1') || ''; } catch (e) {}
+    if (!m) return path;
+    return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'tg_me=' + encodeURIComponent(m);
+  }
+
+  /* Saqlash menyusini yopish. Elementni doim ID orqali qidirish shart
+     (`renderActions` har qism almashishda `innerHTML` ni qayta yozadi -
+     eski closure'da eskirgan element qolardi). */
+  function closeSaveMenu() {
+    var m = el('actSaveMenu');
+    if (m) m.hidden = true;
+  }
+
+  /* Menyuni tugmaning tagiga, lekin EKRAN CHEGARASIDA ushlab turish.
+     `.watch-menu` `position: fixed` (telefonda `.watch-actions`
+     ichidagi `overflow-x: auto` kesib yubormasin), shuning uchun
+     koordinatani JS beradi. */
+  function placeSaveMenu() {
+    var m = el('actSaveMenu'), b = el('actWatchlist');
+    if (!m || !b) return;
+    var r = b.getBoundingClientRect();
+    var vw = document.documentElement.clientWidth;
+    var vh = global.innerHeight || 0;
+    var mw = m.offsetWidth, mh = m.offsetHeight;
+    var left = Math.min(Math.max(8, r.left), Math.max(8, vw - mw - 8));
+    var top = r.bottom + 6;
+    if (top + mh > vh - 8) top = Math.max(8, r.top - mh - 6);  // pastda joy yo'q -> yuqorida
+    m.style.left = left + 'px';
+    m.style.top = top + 'px';
+  }
+  /* Tashqarini bosganda yopish faqat BIR MARTA ulanadi. */
+  renderActions.bindMenuClose = function () {
+    if (renderActions._menuClosed) return;
+    renderActions._menuClosed = true;
+    document.addEventListener('click', closeSaveMenu);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') closeSaveMenu();
+    });
+    // Menyu `fixed` joylashadi - oyna o'zgarsa yoki sahifa skroll
+    // bo'lsa eski koordinatada qolib, tugmadan ajrab ketardi.
+    global.addEventListener('resize', closeSaveMenu);
+    global.addEventListener('scroll', closeSaveMenu, true);
+  };
+
   function renderActions() {
     var box = el('watchActions');
     if (!box) return;
     var likes = Number(D.likes) || 0;
+    var dislikes = Number(D.dislikes) || 0;
 
-    // Yoqdi/Yoqmadi — bitta yopiq juftlik.
+    // Yoqdi | Yoqmadi - chap navigatsiya uslubidagi ikkita tugma.
     //
-    // DIQQAT — `.watch-act-vote-n` (like SONI) boshqa tugmalardan
-    // ataylab ajratilgan: tor ekranda CSS matnlarni yashiradi, lekin
-    // like soni har doim ko'rinib turadi (YouTube'da ham shunday —
-    // "3,9 ming" yozuvi ikona qilib qisqartirilmaydi).
-    var likeTxt = likes > 0 ? fmtViews(likes) : 'Yoqdi';
+    // DIQQAT - `.watch-act-vote-n` (SON) boshqa tugmalardan ataylab
+    // ajratilgan: tor ekranda CSS matnlarni yashiradi, lekin son har
+    // doim ko'rinib turadi (YouTube'da ham "3,9 ming" o'chirilmaydi).
     var vote = '<div class="watch-vote">'
       + '<button type="button" class="watch-act watch-act-vote' + (D.has_liked ? ' on' : '') + '"'
       +     ' id="actLike" title="Yoqdi" aria-label="Yoqdi">'
-      +     '👍 <span class="watch-act-vote-n">' + esc(likeTxt) + '</span></button>'
+      +     '👍 <span class="watch-act-vote-n" id="actLikeN">' + esc(voteTxt(likes, 'Yoqdi')) + '</span></button>'
       + '<button type="button" class="watch-act watch-act-vote watch-act-vote-d' + (D.has_disliked ? ' on' : '') + '"'
       +     ' id="actDislike" title="Yoqmadi" aria-label="Yoqmadi">'
-      +     '👎</button>'
+      +     '👎 <span class="watch-act-vote-n" id="actDislikeN">' + esc(voteTxt(dislikes, 'Yoqmadi')) + '</span></button>'
       + '</div>';
 
-    // Qolgan tugmalardagi matnlar `.watch-act-t` — 1180px dan kichikda
-    // CSS ularni yashiradi va tugma faqat ikonkaga aylanadi.
-    box.innerHTML = vote
+    // 📚 - ustida MENYU turadi (`data-go` = chap navigatsiyadagi bo'limga).
+    var save = '<span class="watch-act-wrap">'
       + '<button type="button" class="watch-act" id="actWatchlist" title="Kutubxonaga qo\'shish" aria-label="Kutubxona">'
       +   '📚 <span class="watch-act-t">Kutubxona</span></button>'
+      + '<div class="watch-menu" id="actSaveMenu" hidden>'
+      +   '<button type="button" class="watch-menu-item" data-go="later">'
+      +     '<span class="watch-menu-ico">&#128339;</span>'
+      +     '<span class="watch-menu-lab">Keyinroq ko‘rish</span></button>'
+      +   '<button type="button" class="watch-menu-item" data-go="save">'
+      +     '<span class="watch-menu-ico">&#128278;</span>'
+      +     '<span class="watch-menu-lab">Saqlash</span></button>'
+      + '</div></span>';
+
+    // Qolgan tugmalardagi matnlar `.watch-act-t` - 1180px dan kichikda
+    // CSS ularni yashiradi va tugma faqat ikonkaga aylanadi.
+    box.innerHTML = vote
+      + save
       + '<button type="button" class="watch-act" id="actShare" title="Ulashish" aria-label="Ulashish">'
       +   '🔗 <span class="watch-act-t">Ulashish</span></button>'
       + (S.sideEpisodes && S.episodes.length > 1
@@ -590,16 +693,17 @@
     // `type` bo'yicha qaror qabul qiladi va javobda IKKALA holatni ham
     // qaytaradi - shuning uchun frontend qayta so'rov yubormaydi.
     function voteSync(r) {
+      var oldL = D.likes, oldD = D.dislikes;
       D.has_liked    = !!r.liked;
       D.has_disliked = !!r.disliked;
       D.likes        = Number(r.likes) || 0;
       D.dislikes     = Number(r.dislikes) || 0;
       var lk = el('actLike'), dk = el('actDislike');
-      if (lk) {
-        lk.classList.toggle('on', D.has_liked);
-        lk.querySelector('span').textContent = D.likes > 0 ? fmtViews(D.likes) : 'Yoqdi';
-      }
+      if (lk) lk.classList.toggle('on', D.has_liked);
       if (dk) dk.classList.toggle('on', D.has_disliked);
+      // Sonlar ANIMATSIYA bilan 1 dan boshlab o'sib/tushib boradi.
+      animCount(el('actLikeN'), oldL, D.likes, function (n) { return voteTxt(n, 'Yoqdi'); });
+      animCount(el('actDislikeN'), oldD, D.dislikes, function (n) { return voteTxt(n, 'Yoqmadi'); });
     }
 
     function bindVote(btnId, type, guardMsg) {
@@ -625,45 +729,63 @@
     bindVote('actLike', 'like', 'Yoqish uchun kiring');
     bindVote('actDislike', 'dislike', 'Yoqmaslik uchun kiring');
 
+    // ================================================= SAQLASH MENYUSI
+    // 📚 tugmasi o'zi SAQLAMAYDI - u MENYU ochadi (foydalanuvchi
+    // so'rovi): "Keyinroq ko'rish" / "Saqlash". Shulardan biri
+    // bosilganda avval kontent kutubxonaga QO'SHILADI, keyin chap
+    // navigatsiyadagi bo'limga O'TILADI.
+    //
+    // NIMA UCHUN avval holatni tekshiramiz: `api/watchlist.php` POST i
+    // TOGGLE (qo'sh/olib tashla). Kontent allaqachon saqlangan bo'lsa,
+    // ko'r-ko'rona yuborilgan POST uni O'CHIRIB YUBORARDI.
     var w = el('actWatchlist');
     if (w) {
       w.classList.toggle('on', !!D.in_watchlist);
-      w.onclick = function () {
-        if (!W.loggedIn) { toast('Kutubxonaga qo‘shish uchun kiring'); return; }
-        w.classList.add('busy');
-        fetch(base + '/api/watchlist.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          credentials: 'same-origin',
-          body: 'id=' + encodeURIComponent(D.id)
-        }).then(function (r) { return r.json(); }).then(function (r) {
-          if (r.success === false) throw new Error(r.message || 'Xato');
-          D.in_watchlist = !!r.in_watchlist;
-          w.classList.toggle('on', D.in_watchlist);
-          toast(D.in_watchlist ? 'Kutubxonaga qo‘shildi' : 'Kutubxonadan olib tashlandi');
+      w.onclick = function (ev) {
+        ev.stopPropagation();          // hujum document'ga ketmasin
+        var m = el('actSaveMenu');
+        if (!m) return;
+        m.hidden = !m.hidden;
+        if (!m.hidden) placeSaveMenu();
+      };
+    }
+
+    function ensureSaved() {
+      if (D.in_watchlist) return Promise.resolve(true);
+      return fetch(base + '/api/watchlist.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'same-origin',
+        body: 'id=' + encodeURIComponent(D.id)
+      }).then(function (r) { return r.json(); }).then(function (r) {
+        if (r.success === false) throw new Error(r.message || 'Xato');
+        D.in_watchlist = !!r.in_watchlist;
+        if (w) w.classList.toggle('on', D.in_watchlist);
+        return D.in_watchlist;
+      });
+    }
+
+    var sm = el('actSaveMenu');
+    if (sm) {
+      sm.onclick = function (ev) {
+        ev.stopPropagation();
+        var it = ev.target.closest && ev.target.closest('[data-go]');
+        if (!it) return;
+        if (!W.loggedIn) { toast('Saqlash uchun tizimga kiring'); closeSaveMenu(); return; }
+        it.classList.add('busy');
+        ensureSaved().then(function () {
+          // `nav.php` dagi Kutubxona bo'limi:
+          //   Keyinroq ko'rish -> saved.php
+          //   Saqlanganlar     -> saved.php (saved.php -> profile.php?tab=saved)
+          location.href = 'saved.php';
         }).catch(function (err) {
           toast(err.message || 'Xatolik');
-        }).finally(function () { w.classList.remove('busy'); });
+        }).finally(function () { it.classList.remove('busy'); });
       };
     }
 
     var sh = el('actShare');
-    if (sh) {
-      sh.onclick = function () {
-        var shareUrl = watchUrl(S.selectedId || '');
-        if (navigator.share) {
-          navigator.share({ title: D.title, url: shareUrl }).catch(function () {});
-          return;
-        }
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(shareUrl)
-            .then(function () { toast('\u{1F517} Havola nusxalandi'); })
-            .catch(function () { toast('Havolani nusxalab bo‘lmadi'); });
-          return;
-        }
-        toast(shareUrl);
-      };
-    }
+    if (sh) sh.onclick = function () { openShare(); };
 
     /* "Qismlar" tugmasi yon paneldagi qismlar kassetasiga olib boradi.
        Tugma faqat `S.sideEpisodes` ro'ylangan paytda chiqadi
@@ -675,6 +797,185 @@
         if (box2 && box2.scrollIntoView) box2.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
     }
+
+    // Menyu yopish hodisasi (document/Escape) faqat bir marta ulanadi.
+    renderActions.bindMenuClose();
+  }
+
+  // ============================================== ULASHISH OYNASI (Instagram)
+  //
+  // Foyalanuvchi so'rovi: "Ulashish" bosilsa Instagram'dagidek CHATLAR
+  // chiqsin va pastida boshqa platformalar (Telegram, WhatsApp,
+  // ssilkadan nusxa ...).
+  //
+  //   YUQORI qism - saytdagi suhbatlar (`api/chat.php?action=contacts`)
+  //   PASTI  qism - platformalar gorizontal qatorida
+  //
+  // Kontaktni bosganda: havola klipbordga nusxalanadi va chat YANGI
+  // TABDA ochiladi (`chat.php?u=ID` - `tg-chat.js` shu parametrni
+  // o'qib, to'g'ridan-to'g'ri shu suhbatni ochadi). Video sahifasi
+  // joyida qoladi.
+  function shareUrl() { return watchUrl(S.selectedId || ''); }
+
+  function copyText(txt) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(txt);
+    }
+    return Promise.reject(new Error('Klipbord mavjud emas'));
+  }
+
+  function closeShare() {
+    var s = el('shareSheet'), b = el('shareBackdrop');
+    if (s) s.hidden = true;
+    if (b) b.hidden = true;
+    document.body.classList.remove('share-lock');
+  }
+
+  function sendToContact(id, name) {
+    // DIQQAT: `window.open(..., '_blank', 'noopener')` CHROMEDA `null`
+    // qaytaradi (opener uzilganligi sababli). Bu esa bizda "ochilmadi"
+    // deb talqin qilinib, sahifa O'ZI ham chatga ketib qolardi —
+    // natijada ikkita ochilardi. Shuning uchun `noopener` ishlatilmaydi,
+    // `opener` esa keyin o'zimiz uzamiz.
+    var url = base + '/chat.php?u=' + encodeURIComponent(id);
+    var win = null;
+    try { win = window.open(url, '_blank'); } catch (e) { win = null; }
+    if (win) { try { win.opener = null; } catch (e) {} }
+    copyText(shareUrl()).then(function () {
+      toast('\u{1F517} Havola nusxalandi — ' + (name ? name + ' bilan ' : '') + 'chatda yuboring');
+    }).catch(function () {
+      toast('Havolani nusxalab bo‘lmadi: ' + shareUrl());
+    });
+    if (win) closeShare();
+    else location.href = url;                  // popup bloklangan bo'lsa
+  }
+
+  function sharePlatItems() {
+    var u = encodeURIComponent(shareUrl());
+    var t = encodeURIComponent(D.title || 'W CINEMA');
+    var both = encodeURIComponent((D.title || '') + '\n' + shareUrl());
+    var list = [
+      // `p` - rang uchun (watch.css), `href` bo'lsa brauzer o'zi ochadi,
+      // `act` bo'lsa bizning JS bajaradi.
+      { p: 'tg', ico: '&#9992;&#65039;', lab: 'Telegram',    href: 'https://t.me/share/url?url=' + u + '&text=' + t },
+      { p: 'wa', ico: '&#128172;',       lab: 'WhatsApp',    href: 'https://wa.me/?text=' + both },
+      { p: 'fb', ico: 'f',               lab: 'Facebook',    href: 'https://www.facebook.com/sharer/sharer.php?u=' + u },
+      { p: 'tw', ico: 'X',               lab: 'X (Twitter)', href: 'https://twitter.com/intent/tweet?url=' + u + '&text=' + t },
+      { p: 'em', ico: '&#9993;',         lab: 'Email',       href: 'mailto:?subject=' + t + '&body=' + both },
+      { p: 'cp', ico: '&#128203;',       lab: 'Nusxa olish', act: 'copy' }
+    ];
+    if (navigator.share) {
+      list.push({ p: 'nv', ico: '&#128228;', lab: 'Boshqa', act: 'native' });
+    }
+    return list;
+  }
+
+  /* Panel birinchi ochilganda quriladi - keyin faqat `hidden`
+     almashtiriladi (qayta-qayta yaratilmaydi, hodisalar yo'qolmaydi). */
+  function shareSheet() {
+    var s = el('shareSheet');
+    if (s) return s;
+    var host = document.createElement('div');
+    host.innerHTML =
+        '<div class="share-backdrop" id="shareBackdrop" hidden></div>'
+      + '<div class="share-sheet" id="shareSheet" hidden role="dialog" aria-modal="true" aria-label="Ulashish">'
+      +   '<div class="share-grab"></div>'
+      +   '<div class="share-head">'
+      +     '<span class="share-title">Ulashish</span>'
+      +     '<button type="button" class="share-close" id="shareClose" aria-label="Yopish">&#10005;</button>'
+      +   '</div>'
+      +   '<div class="share-sub">Suhbatlar</div>'
+      +   '<div class="share-chats" id="shareChats"><p class="share-empty">Yuklanmoqda…</p></div>'
+      +   '<div class="share-sub">Boshqa platformalar</div>'
+      +   '<div class="share-plat" id="sharePlat"></div>'
+      + '</div>';
+    var frag = document.createDocumentFragment();
+    while (host.firstChild) frag.appendChild(host.firstChild);
+    document.body.appendChild(frag);
+
+    el('shareBackdrop').onclick = closeShare;
+    el('shareClose').onclick    = closeShare;
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') closeShare();
+    });
+
+    // Chatlar: yopiq ro'yxatga delegation (elementlar keyin qo'shiladi).
+    el('shareChats').onclick = function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-peer]');
+      if (!b) return;
+      sendToContact(b.getAttribute('data-peer'), b.getAttribute('data-name') || '');
+    };
+    // Platformalar: faqat `data-act` li tugmalar; oddiy <a> ni
+    // brauzer o'zi ochadi (target="_blank").
+    el('sharePlat').onclick = function (ev) {
+      var it = ev.target.closest && ev.target.closest('[data-act]');
+      if (!it) return;
+      var act = it.getAttribute('data-act');
+      if (act === 'copy') {
+        copyText(shareUrl())
+          .then(function () { toast('\u{1F517} Havola nusxalandi'); })
+          .catch(function () { toast(shareUrl()); });
+        return;
+      }
+      if (act === 'native' && navigator.share) {
+        navigator.share({ title: D.title, url: shareUrl() }).catch(function () {});
+      }
+    };
+    return el('shareSheet');
+  }
+
+  /* Chatlar ro'yxati faqat bir marta so'raladi (har ochilishda emas). */
+  function loadShareChats() {
+    var box = el('shareChats');
+    if (!box || loadShareChats.done) return;
+    loadShareChats.done = true;
+    fetch(withMeQS(base + '/api/chat.php?action=contacts'), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var list = (d && d.contacts) || [];
+        if (!list.length) {
+          // Suhbatlar bo'lmasa - bo'sh holat yaxshi ko'rsatiladi va
+          // foydalanuvchi chat sahifasiga olib boriladi (havola nusxalanib,
+          // keyin suhbat ochiladi).
+          box.innerHTML = '<p class="share-empty">Hozircha suhbat yo‘q. '
+            + '<a href="' + base + '/chat.php">Chat sahifasida</a> '
+            + 'yozib boshlang — keyin bu yerda chiqadi.</p>';
+          return;
+        }
+        box.innerHTML = list.map(function (u) {
+          var nm = (((u.first_name || '') + ' ' + (u.last_name || ''))
+            .replace(/\s+/g, ' ').trim()) || u.username || 'Foydalanuvchi';
+          var img = u.avatar
+            ? '<img src="' + esc(u.avatar) + '" alt="" onerror="this.remove()">' : '';
+          return '<button type="button" class="share-contact" data-peer="' + esc(String(u.id)) + '"'
+            + ' data-name="' + esc(nm) + '">'
+            + '<span class="share-av"><span class="share-av-fb">'
+            + esc(nm.charAt(0).toUpperCase()) + '</span>' + img + '</span>'
+            + '<span class="share-cname">' + esc(nm) + '</span></button>';
+        }).join('');
+      })
+      .catch(function () {
+        loadShareChats.done = false;            // keyingi ochilishda qayta urinadi
+        box.innerHTML = '<p class="share-empty">Suhbatlarni yuklab bo‘lmadi</p>';
+      });
+  }
+
+  function openShare() {
+    var s = shareSheet();
+    el('sharePlat').innerHTML = sharePlatItems().map(function (x) {
+      var ico = '<span class="share-plat-ico">' + x.ico + '</span>';
+      var lab = '<span class="share-plat-lab">' + esc(x.lab) + '</span>';
+      if (x.href) {
+        return '<a class="share-plat-item" data-p="' + x.p + '" href="' + esc(x.href) + '"'
+          + ' target="_blank" rel="noopener">' + ico + lab + '</a>';
+      }
+      return '<button type="button" class="share-plat-item" data-p="' + x.p + '"'
+        + ' data-act="' + x.act + '">' + ico + lab + '</button>';
+    }).join('');
+    s.hidden = false;
+    el('shareBackdrop').hidden = false;
+    document.body.classList.add('share-lock');
+    loadShareChats();
   }
 
   // ============================================================== YON PANEL

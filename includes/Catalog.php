@@ -892,7 +892,7 @@ class Catalog {
     }
 
     /**
-     * Kanal qatoridagi "N obunachi" soni.
+     * Kanal qatoridagi "N ta foydalanuvchi" soni.
      *
      * YouTube'da kanal = kontentni nashr etuvchi. Bu saytda ham shunaqa:
      * kinolar Telegram'dan olinadi, lekin kanal SITE_NAME. Shuning uchun

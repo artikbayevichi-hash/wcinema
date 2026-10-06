@@ -367,19 +367,24 @@
     margin-left: auto;
 }
 
-/* --- Kanal (avatar + nom + obunachi) --------------------------------- */
+/* --- Kanal (avatar + nom + foydalanuvchilar soni) -------------------- */
 /* YouTube'da avatar 40px aylana, nom 16px yirg' (semibold), obunachi
    12px kulrang va ostida turadi. */
 .watch-channel {
     display: flex; align-items: center; gap: 12px; min-width: 0;
 }
+/* Avatar: YUMALOQ CHEGARA OLIB TASHLANDI (foydalanuvchi so'rovi).
+   `border-radius: 50%` logo'ni doiraga kesib, burchaklarini yutardi.
+   `object-fit: contain` esa rasmni TUZIQ maydonda to'liq chiqaradi -
+   kengligi to'liq ko'rinadi, qirqilmaydi. */
 .watch-channel-av {
-    flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+    flex: 0 0 auto; width: 40px; height: 40px;
+    border-radius: 0;
     overflow: hidden; background: var(--card-2);
     display: inline-flex; align-items: center; justify-content: center;
 }
 .watch-channel-av img {
-    width: 100%; height: 100%; object-fit: cover; display: block;
+    width: 100%; height: 100%; object-fit: contain; display: block;
 }
 .watch-channel-tx { display: flex; flex-direction: column; min-width: 0; }
 .watch-channel-name {
@@ -443,30 +448,192 @@
 .watch-act.busy   { opacity: .6; pointer-events: none; }
 .watch-act svg    { width: 17px; height: 17px; flex: 0 0 auto; }
 
-/* Yoqdi | Yoqmadi — YOPIQ juftlik (YouTube kabi). Ichki chegara
-   ikki tugmani bitta tugma kabi ko'rsatadi. */
+/* Yoqdi | Yoqmadi — chap navigatsiya tugmasi (`.ig-item`) uslubida.
+   Foyalanuvchi so'rovi: "ko'rinishini chapki navigatsiya tugmasiga
+   o'xshat". `instagram.css` dagi `.ig-item` bilan BIR XIL asosiy
+   xususiyatlar: 10px burchak, fonsiz, 15px/400 shrift, hover'da
+   `var(--card)` foni. */
 .watch-vote {
-    display: inline-flex; align-items: stretch;
-    border-radius: 999px; overflow: hidden;
-    background: var(--card-2); border: 1px solid var(--line);
+    display: inline-flex; align-items: stretch; gap: 4px;
 }
 .watch-vote .watch-act {
-    border: 0; border-radius: 0; background: none;
+    border: 0; border-radius: 10px; background: none;
+    padding: 10px 12px; font-size: 15px; font-weight: 400;
 }
 /* MUHIM: quyidagi ikki qoida `.watch-act:hover` / `.watch-act.on`
    bilan BIR XIL kuchsizlikka ega (0,2,0), lekin ULAR SHU QATORDAN
-   keyin keladi — ya'ni yutish ularning qo'liga o'tadi. Shuning uchun
+   keyin keladi - ya'ni yutish ularning qo'liga o'tadi. Shuning uchun
    hover va "bosilgan" holatlar alohida, kuchliroq yoziladi. */
-.watch-vote .watch-act:hover { background: var(--line); }
+.watch-vote .watch-act:hover { background: var(--card); }
+/* Aktiv holat `.ig-item.active` dagidek: fon `var(--card)`, shrift
+   qalin. Qo'shimcha `color: accent` - aks holda "yoqdimi/yo'qmi"
+   tushunilmaydi (`.ig-item.active` da ham belgi bor). */
 .watch-vote .watch-act.on,
 .watch-vote .watch-act.on:hover {
-    background: var(--accent); color: #fff;
+    background: var(--card); color: var(--accent); font-weight: 700;
 }
-.watch-vote .watch-act + .watch-act {
-    border-left: 1px solid var(--line);
+/* Son har doim ko'rinadi (0 bo'lsa so'z) - YouTube'dagi kabi. */
+.watch-act-vote-n { font-variant-numeric: tabular-nums; }
+
+/* Saqlash menyusi / ulashish oynasi ochiq ekan sahifa silinmasin. */
+body.share-lock { overflow: hidden; }
+
+/* --- Saqlash menyusi (📚 tugmasi bosilganda ochiladi) ----------------
+   Foyalanuvchi so'rovi: "Saqlash" tugmasini bosganda menyu ochilsin
+   va ichida "Keyinroq ko'rish" / "Saqlash" tursin; shulardan biri
+   bosilsa chap navigatsiyadagi bo'limga o'tilsin. */
+.watch-act-wrap { position: relative; display: inline-flex; }
+/* MUHIM: `position: FIXED`, `absolute` EMAS. Telefon ekranda
+   `.watch-actions` ichida `overflow-x: auto` bor (tugmalar qatori
+   silinadi) - `absolute` menyu shu konteyner ichida KESILIB qolardi.
+   `fixed` esa bunday kesishdan qochadi. Aniq `top/left` ni JS
+   tugmaning `getBoundingClientRect()` dan olib, chegaraga moslaydi. */
+.watch-menu {
+    position: fixed; z-index: 60;
+    min-width: 216px; padding: 6px;
+    display: flex; flex-direction: column; gap: 2px;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 13px; box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+    animation: watchMenuIn .16s ease;
 }
-/* Bitta tugma faqat ikonalash — YouTube'da ham shunday (son yo'q). */
-.watch-act-vote-d { padding: 9px 13px; }
+.watch-menu[hidden] { display: none; }
+/* Chap navigatsiya `.ig-item` bilan BIR XIL qatorlar. Faqat hover
+   rangi `var(--card-2)` - menyu o'zi `var(--card)` fonida turadi,
+   `var(--card)` esa ko'rinmas edi. */
+.watch-menu-item {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 10px 12px;
+    border: 0; border-radius: 10px; background: none;
+    color: var(--text); font-size: 15px; font-weight: 400;
+    font-family: inherit; text-align: left; cursor: pointer;
+    transition: background .12s ease;
+}
+.watch-menu-item:hover { background: var(--card-2); }
+.watch-menu-item.busy { opacity: .6; pointer-events: none; }
+.watch-menu-ico {
+    width: 26px; height: 26px; flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 19px; line-height: 1;
+}
+.watch-menu-lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes watchMenuIn { from { opacity: 0; transform: translateY(-6px); } }
+
+/* --- Ulashish oynasi (Instagram uslubidagi pastdan chiqadigan panel) --
+   Foyalanuvchi so'rovi: "Ulashish" bosilsa Instagram'dagidek chatlar
+   chiqsin, pastida esa boshqa platformalar (Telegram, WhatsApp,
+   ssilkadan nusxa olish ...). */
+.share-backdrop {
+    position: fixed; inset: 0; z-index: 480;
+    background: rgba(0, 0, 0, .55);
+    animation: shareFade .18s ease;
+}
+.share-backdrop[hidden] { display: none; }
+.share-sheet {
+    position: fixed; left: 50%; bottom: 0; z-index: 481;
+    transform: translateX(-50%);
+    width: min(560px, 100%);
+    max-height: 84vh; overflow-y: auto;
+    padding: 8px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+    background: var(--card); border: 1px solid var(--line);
+    border-bottom: 0;
+    border-radius: 16px 16px 0 0;
+    animation: shareUp .22s ease;
+}
+.share-sheet[hidden] { display: none; }
+/* Keng ekranda paneldan biroz balandroq turadi (YouTube dialogidek). */
+@media (min-width: 701px) {
+    .share-sheet { bottom: 22px; border-bottom: 1px solid var(--line); border-radius: 16px; }
+}
+@keyframes shareUp {
+    from { transform: translate(-50%, 26px); opacity: 0; }
+    to   { transform: translate(-50%, 0);    opacity: 1; }
+}
+@keyframes shareFade { from { opacity: 0; } }
+/* Telefon qurilmasida `min(560px, 100%)` tufayli o'zi to'liq kenglikka
+   cho'ziladi - alohida qoida kerak emas. */
+.share-grab {
+    width: 40px; height: 4px; margin: 2px auto 10px;
+    background: var(--line); border-radius: 999px;
+}
+.share-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+.share-title { font-size: 16px; font-weight: 800; flex: 1 1 auto; }
+.share-close {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 0; background: var(--card-2); color: var(--text);
+    font-size: 15px; line-height: 1; cursor: pointer; font-family: inherit;
+}
+.share-close:hover { background: var(--line); }
+/* Yuqori qism: SUHBATLAR (Instagram'dagi "Send to" ro'yxati). */
+.share-sub {
+    font-size: 12.5px; color: var(--muted); font-weight: 700;
+    margin: 4px 0 8px;
+}
+.share-chats {
+    display: flex; flex-direction: column; gap: 2px;
+    max-height: 224px; overflow-y: auto; margin-bottom: 14px;
+    padding-right: 2px;
+}
+.share-empty { color: var(--muted); font-size: 13.5px; margin: 4px 0 10px; }
+.share-empty a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.share-empty a:hover { text-decoration: underline; }
+.share-contact {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 8px 10px;
+    border: 0; border-radius: 10px; background: none;
+    color: var(--text); font-family: inherit; text-align: left;
+    cursor: pointer; transition: background .12s ease;
+}
+.share-contact:hover { background: var(--card-2); }
+.share-av {
+    position: relative; width: 40px; height: 40px; flex: 0 0 auto;
+    border-radius: 50%; overflow: hidden; background: var(--card-2);
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.share-av img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; display: block;
+}
+.share-av-fb { font-size: 16px; font-weight: 700; color: var(--muted); }
+.share-cname {
+    flex: 1 1 auto; min-width: 0;
+    font-size: 14.5px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Pastki qism: BOSHA PLATFORMALAR - Instagram'dagi ilovalar qatoridek
+   gorizontal, aylanma qator. */
+.share-plat {
+    display: flex; gap: 4px; overflow-x: auto;
+    scrollbar-width: none; padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+}
+.share-plat::-webkit-scrollbar { display: none; }
+.share-plat-item {
+    flex: 0 0 auto; width: 74px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 6px 0; border: 0; background: none;
+    color: var(--text); font-family: inherit; cursor: pointer;
+    border-radius: 10px; text-decoration: none;
+    transition: background .12s ease;
+}
+.share-plat-item:hover { background: var(--card-2); }
+.share-plat-ico {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 20px; line-height: 1; font-weight: 800;
+    background: var(--card-2); border: 1px solid var(--line);
+}
+/* Telegram ko'k, WhatsApp yashil - tanib olish uchun (Instagram ham
+   ilovalarning o'z ranglarini ishlatadi). */
+.share-plat-item[data-p="tg"] .share-plat-ico { background: #229ed9; border-color: #229ed9; }
+.share-plat-item[data-p="wa"] .share-plat-ico { background: #25d366; border-color: #25d366; }
+.share-plat-item[data-p="fb"] .share-plat-ico { background: #1877f2; border-color: #1877f2; }
+.share-plat-item[data-p="tw"] .share-plat-ico { background: #111; border-color: #333; }
+.share-plat-lab {
+    font-size: 11px; color: var(--muted); line-height: 1.25;
+    text-align: center; word-break: break-word;
+}
 
 /* --- O'RTA EKRAN: tugmalar FAQAT IKONKA (YouTube'dagi kabi) ---------
    Nima uchun 1180px:
@@ -485,6 +652,10 @@
 @media (max-width: 1180px) {
     .watch-act-t { display: none; }
     .watch-act { padding: 9px 13px; }
+    /* Like/Yoqmadi tugmalari nav-uslubida (10px burchak), shuning uchun
+       ularni ham siqish kerak - aks holda ular matnsiz qolganda ham
+       keng qolardi. Son (`.watch-act-vote-n`) esa yashirilmaydi. */
+    .watch-vote .watch-act { padding: 9px 11px; font-size: 14.5px; }
 }
 
 /* ============================================================ TAQSIF */
@@ -776,6 +947,8 @@
     .watch-actions::-webkit-scrollbar { display: none; }
     .watch-act { padding: 8px 12px; font-size: 13px; flex: 0 0 auto; }
     .watch-vote { flex: 0 0 auto; }
+    .watch-vote .watch-act { padding: 8px 10px; font-size: 13.5px; }
+    .watch-menu { min-width: 200px; }
 }
 @media (max-width: 560px) {
     .ig-page.watch-page { padding: 10px; }

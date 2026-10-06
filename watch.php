@@ -189,7 +189,8 @@ $WATCH = [
     'miniApp'   => MINI_APP_URL,
     'loggedIn'  => (bool) $user,
     // YouTube uslubidagi kanal qatori uchun: kanal nomi (SITE_NAME) va
-    // "N obunachi". Bular serverda hisoblanadi - frontend hisoblamaydi.
+    // "N ta foydalanuvchi" (saytda ro'yxatdan o'tganlar soni). Serverda
+    // hisoblanadi - frontend qo'shimcha so'rov yubormaydi.
     'siteName'  => SITE_NAME,
     'subscribers' => $catalog->getSubscriberCount(),
     'content'   => $item ? $catalog->toPublicArray($item, $userId) : null,
@@ -293,7 +294,7 @@ $NAV_ACTIVE = 'home';
          <h1> Sarlavha
          ┌──────────────────────────────────────────────────────┐
          │ [av] Kanal nomi        ★ 8.0  2024                 │
-         │      N obunachi    [👍 3,9 ming][👎] [📚] [🔗] [📋] │
+         │      N ta foydalanuvchi [👍 3,9 ming][👎] [📚] [🔗] [📋] │
          └──────────────────────────────────────────────────────┘
          📅 1,2 ming ko'rildi · 3 kun oldin
 
