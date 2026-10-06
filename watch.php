@@ -75,16 +75,25 @@ if ($item) {
     // shu endpoint javobini oladi va `S.episodes` ni to'liq almashtiradi.
     // Nomlar farq qilsa, birinchi ochilishda raqamlar chiqib, keyin
     // barcha qismlar "undefined" bo'lib ko'rinardi.
-    $episodes = array_map(static fn($e) => [
-        'id'         => (int) $e['id'],
-        'season'     => (int) $e['season'],
-        'number'     => (int) $e['episode_number'],
-        'title'      => $e['title'],
-        'thumbnail'  => $e['thumbnail'],
-        'duration'   => $e['duration'],
-        'is_premium' => (int) $e['is_premium'] === 1,
-        'has_video'  => !empty($e['video_url']),
-    ], $catalog->getEpisodes($item['id']));
+    //
+    // `tg_channel` + `tg_post` ham shu yerda kerak: birinchi ochilishda
+    // `watch.js` darhol KEYINGI qismni oldindan yuklashi (`TgStream.prefetch`)
+    // uchun Telegram post manzilini bilishi lozim.
+    $episodes = array_map(static function ($e) {
+        $ref = Catalog::tgRef($e['video_url'] ?? '');
+        return [
+            'id'         => (int) $e['id'],
+            'season'     => (int) $e['season'],
+            'number'     => (int) $e['episode_number'],
+            'title'      => $e['title'],
+            'thumbnail'  => $e['thumbnail'],
+            'duration'   => $e['duration'],
+            'is_premium' => (int) $e['is_premium'] === 1,
+            'has_video'  => !empty($e['video_url']),
+            'tg_channel' => $ref['channel'],
+            'tg_post'    => $ref['post'],
+        ];
+    }, $catalog->getEpisodes($item['id']));
 
     $genres   = $catalog->getContentGenres($item['id']);
 

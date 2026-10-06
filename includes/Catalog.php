@@ -632,6 +632,36 @@ class Catalog {
         return $map[$ext] ?? 'video/mp4';
     }
 
+    // =====================================================================
+    // t.me post manzilini ajratish
+    // =====================================================================
+    //
+    // NIMA UCHUN alohida funksiya: `playbackTelegram()` ham, qismlar ro'yxati
+    // ham xuddi shu ikki qiymatni (kanal + post raqami) oladi. Regex
+    // ikkala joyda takrorlansa, biri tuzatilganda ikkinchisi eskiradi -
+    // va "qismni oldindan yuklash" (`TgStream.prefetch`) jimgina xato kalit
+    // yuborib, hech qachon ishlamasdi.
+    //
+    // @param  string|null $url  t.me post manzili
+    // @return array{channel:?string, post:int}  `post` 0 bo'lsa - havolada post yo'q
+    public static function tgRef($url) {
+        $out = ['channel' => null, 'post' => 0];
+        $url = trim((string) $url);
+        if ($url === '') {
+            return $out;
+        }
+        $path = (string) parse_url($url, PHP_URL_PATH);
+
+        if (preg_match('#^/c/(\d+)/(\d+)#', $path, $m)) {
+            // Xususi kanal: t.me/c/<id>/<post> - kanal nomi yo'q, `post` yetarli.
+            $out['post'] = (int) $m[2];
+        } elseif (preg_match('#^/([A-Za-z0-9_]+)/(\d+)#', $path, $m)) {
+            $out['channel'] = $m[1];
+            $out['post']    = (int) $m[2];
+        }
+        return $out;
+    }
+
     private function playbackNone($warning) {
         return [
             'type' => 'none', 'url' => null, 'mime' => null,
@@ -658,20 +688,19 @@ class Catalog {
      * @param array|null $tg   TgResolve natijasi (og'iltirish uchun)
      */
     private function playbackTelegram($url, $poster = null, $tg = null) {
-        $path      = (string) parse_url((string) $url, PHP_URL_PATH);
-        $channel   = null;   // ommaviy kanal (@wcinemauz)
-        $post      = 0;
-        $deep      = null;   // mobil ilovada to'g'ridan-to'g'ri ochish
+        // Kanal + post raqamini `tgRef()` o'zi ajratadi (bitta manba).
+        $ref     = self::tgRef($url);
+        $channel = $ref['channel'];   // ommaviy kanal (@wcinemauz)
+        $post    = $ref['post'];
+        $deep    = null;              // mobil ilovada to'g'ridan-to'g'ri ochish
 
-        if (preg_match('#^/c/(\d+)/(\d+)#', $path, $m)) {
-            // Xususi kanal: t.me/c/<id>/<post>
-            $channel = null;
-            $post    = (int) $m[2];
-            $deep    = 'tg://privatepost?channel=' . $m[1] . '&post=' . $post;
-        } elseif (preg_match('#^/([A-Za-z0-9_]+)/(\d+)#', $path, $m)) {
-            $channel = $m[1];
-            $post    = (int) $m[2];
-            $deep    = 'tg://resolve?domain=' . $channel . '&post=' . $post;
+        // Xususi kanal (`t.me/c/<id>/<post>`) da `channel` null qoladi, shuning
+        // uchun deep linkni alohida tiklaymiz.
+        $path = (string) parse_url((string) $url, PHP_URL_PATH);
+        if ($channel === null && preg_match('#^/c/(\d+)/(\d+)#', $path, $m)) {
+            $deep = 'tg://privatepost?channel=' . $m[1] . '&post=' . $post;
+        } elseif ($channel !== null) {
+            $deep = 'tg://resolve?domain=' . $channel . '&post=' . $post;
         }
 
         $big = $tg && !empty($tg['media_big']);

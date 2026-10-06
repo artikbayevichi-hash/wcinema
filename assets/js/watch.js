@@ -158,6 +158,54 @@
   }
   function curEp() { return ep(S.selectedId); }
 
+  // ==================================================== QISMLARNI OLDINDAN TAYYORLASH
+  //
+  // MUAMMO: har bir qism almashganda `mount()` Telegram'dan HUJJATNI qayta
+  // izlaydi (`findDoc` — kanal xabarlarini o'qish) va FORMATNI qayta aniqlaydi
+  // (`probeFormat` — 64 KB o'qish). Ikkalasi ham tarmoqda, ketma-ket turadi -
+  // shuning uchun "ikkinchi qism" har doim sekin ochiladi.
+  //
+  // YECHIM: `TgStream.prefetch({channel, post})` shu ishlarni OLDINDAN qilib
+  // qo'yadi (1 ta xabar + 64 KB) va `pvCache` ga yozadi. `mount()` esa:
+  //   * kalit keshda bo'lsa -> darhol `renderPlayer()` (s kutish umuman yo'q);
+  //   * hali yuklanayotgan bo'lsa -> `prefetchPromise` ni KUTADI.
+  // Ya'ni bu yerda yozgan kodimiz "boshqaruvni oldindan olib qo'yish" bilan
+  // cheklangan - qolganini `tg-stream.js` o'zi hal qiladi.
+  //
+  // NIMA UCHUN `reels.js` dagi kabi emas: reels uchun bitta kanal, qisqa
+  // klip; kinoda qismlar boshqa-boshqa postlarda va uzoq ko'riladi, ya'ni
+  // oldindan tayyorlash foydasi katta.
+  var lastPrefetchKey = '';   // ketma-ket takror so'rovlarni filtrlaymiz
+
+  /**
+   * Bitta qismni oldindan tayyorlaydi. `TgStream` yo'q/ishlamayotgan bo'lsa
+   * jim o'tadi - hech qanday xato ko'rsatmaydi (shu sahifa ishlashda davom etadi).
+   *
+   * @param {object|null} e  qism (`S.episodes` dagi bir element)
+   */
+  function prefetchEpisode(e) {
+    if (!e) return;
+    var channel = e.tg_channel || '';
+    var post    = Number(e.tg_post) || 0;
+    if (!channel || !post) return;          // t.me emas (embed/direct fayl) - yuklanmaydi
+
+    var key = channel + '/' + post;
+    if (key === lastPrefetchKey) return;    // allaqachon so'ralgan
+    lastPrefetchKey = key;
+
+    if (!global.TgStream || typeof global.TgStream.prefetch !== 'function') return;
+    try {
+      global.TgStream.prefetch({ channel: channel, post: post });
+    } catch (err) { /* jim: oldindan yuklash ixtiyoriy qulaylik */ }
+  }
+
+  /** Joriy qismdan KEYINGISINI tayyorlaydi (oxirgi qismda hech narsa qilmaydi). */
+  function prefetchNext() {
+    var i = epIndex(S.selectedId);
+    if (i < 0) return;
+    prefetchEpisode(S.episodes[i + 1] || null);
+  }
+
   function watchUrl(epId) {
     return base + '/watch.php?c=' + D.id + (epId ? '&e=' + epId : '');
   }
@@ -254,7 +302,13 @@
         poster:  pb.poster || '',
         cfg:     cfg,
         epLabel: e ? (e.season + '-fasl ' + e.number + '-qism') : '',
-        onReady: function () { wireVideo(m.querySelector('video')); }
+        // Player tayyor bo'lgach KEYINGI qismni oldindan tayyorlaymiz:
+        // foydalanuvchi shu paytda joriy qismni ko'rayotgan bo'ladi, demak
+        // tarmoq bo'sh - yuklash uning hisobiga tez ketadi.
+        onReady: function () {
+          wireVideo(m.querySelector('video'));
+          prefetchNext();
+        }
       });
       return;
     }
@@ -902,6 +956,21 @@
       history.pushState({ ep: epId }, '', watchUrl(epId).replace(base, ''));
     } catch (e) {}
 
+    // MUHIM: Telegram hujjatini `content.php` SO'ROVI bilan PARALLEL tayyorlaymiz.
+    //
+    // Oldingi ketma-ket oqim shunday edi:
+    //   content.php (tarmoq)  ->  mount()  ->  findDoc (Telegram)  ->  probe (Telegram)
+    // Ya'ni ikki bosqich tarmoqda BIR-BIRINI kutardi. Endi `content.php`
+    // javotlanayotgan paytda `findDoc` + `probe` allaqachin yuguradi va
+    // `mount()` ularni KESHDAN ozi oladi (yoki jarayonda bo'lsa kutadi) -
+    // natijada ochilish sekinligi ikki barobar kamayadi.
+    //
+    // `S.episodes` hozirgidan YANGI ro'yxatni ko'rsatadi, shuning uchun
+    // eski kalitni `cancelPrefetch()` bilan avval tozalash shart emas:
+    // `tg-stream.js` bitta vaqtda bittasini saqlaydi va `mount()` o'z
+    // kalitini topsa, o'sha promise'ni kutadi.
+    prefetchEpisode(ep(epId));
+
     api('/api/content.php?id=' + encodeURIComponent(D.id) + '&episode=' + epId)
       .then(function (d) {
         S.playback  = d.playback || S.playback;
@@ -936,6 +1005,22 @@
       if (!b) return;
       e.preventDefault();
       switchEpisode(Number(b.getAttribute('data-ep')) || 0);
+    });
+
+    // Ustiga borish = "bu qismni ko'rmoqchi" belgisi. Shu qismning Telegram
+    // hujjatini shu zahoti tayyorlaymiz: ro'yxatda siljitish tuguni bosish
+    // odatda bir necha yuz ms oldin bo'ladi - shu vaqt Telegram ishi
+    // tugunlaydi va bosilgachida video DARHOL ochiladi.
+    //
+    // `mouseover` (delegatsiya) `mouseenter` dan tez: elementlar
+    // `renderSide()` da qayta quriladi, `mouseenter` esa yangi elementga
+    // ulangan bo'lishi kerak edi - `mouseover` har safar ishlaydi.
+    list.addEventListener('mouseover', function (e) {
+      var b = e.target.closest && e.target.closest('[data-ep]');
+      if (!b) return;
+      var id = Number(b.getAttribute('data-ep')) || 0;
+      if (!id || id === Number(S.selectedId)) return;
+      prefetchEpisode(ep(id));
     });
   }
 

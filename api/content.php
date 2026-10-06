@@ -66,16 +66,25 @@ if ($userId && $selected) {
 // buni api/views.php qiladi (frontend shu yerda chaqiradi).
 
 // Qismlar ro'yxasi (maxsus maydonlar bilan)
-$epOut = array_map(static fn($e) => [
-    'id'        => (int) $e['id'],
-    'season'    => (int) $e['season'],
-    'number'    => (int) $e['episode_number'],
-    'title'     => $e['title'],
-    'thumbnail' => $e['thumbnail'],
-    'duration'  => $e['duration'],
-    'is_premium'=> (int) $e['is_premium'] === 1,
-    'has_video' => !empty($e['video_url']),
-], $episodes);
+$epOut = array_map(static function ($e) {
+    // `tg_channel` + `tg_post` - shu qismning Telegram posti. `watch.js` shularni
+    // `TgStream.prefetch({channel, post})` ga beradi: ya'ni keyingi qism
+    // OLDINDAN tayyorlanadi (hujjat + format Telegram'dan bir marta olinadi),
+    // foydalanuvchi bosganda esa `mount()` keshdan bir zumda ochiladi.
+    $ref = Catalog::tgRef($e['video_url'] ?? '');
+    return [
+        'id'         => (int) $e['id'],
+        'season'     => (int) $e['season'],
+        'number'     => (int) $e['episode_number'],
+        'title'      => $e['title'],
+        'thumbnail'  => $e['thumbnail'],
+        'duration'   => $e['duration'],
+        'is_premium' => (int) $e['is_premium'] === 1,
+        'has_video'  => !empty($e['video_url']),
+        'tg_channel' => $ref['channel'],
+        'tg_post'    => $ref['post'],
+    ];
+}, $episodes);
 
 // content-level playback (qismsiz film uchun)
 $mainPlayback = $episodes ? null : $catalog->getPlayback($item);

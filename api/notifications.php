@@ -48,10 +48,14 @@ $action = input('action', '', 20);
 // ---------------------------------------------------------------------------
 // Kirish xabarnomasi ("login alert").
 //
-// Brauzer MTProto orqali kirgandan keyin BIR MARTA shu so'rovni yuboradi.
-// Server: (1) `notifications` ga yozadi, (2) Telegram Bot orqali shaxsiy
-// chat'iga xabar yuboradi. Deduplik `Alerts::login()` ichida — 5 daqiqa
-// ichida ikkinchi marta yuborilmaydi.
+// Brauzer MTProto orqali kirgandan keyin `ensureSession` ichidan BIR MARTA
+// chaqiriladi. Server: (1) `notifications` ga yozadi, (2) Telegram Bot orqali
+// shaxsiy chat'iga xabar yuboradi.
+//
+// Deduplik: `Alerts::login()` ichida — BIR QURILMADA FAQAT BIR MARTA.
+// `login_devices` jadvali qurilmani (User-Agent, versiyasiz) eslab qoladi,
+// shuning uchun sahifa necha marta refresh qilinsa ham xabar QAYTMAYDI.
+// Bo'sh javob `{created:0, pushed:false, known:true}` — bu normal holat.
 // ---------------------------------------------------------------------------
 if ($action === 'hello') {
     if ($userId <= 0) {
@@ -65,8 +69,9 @@ if ($action === 'hello') {
     ]);
     ok([
         'success' => true,
-        'created' => $r['created'],
-        'pushed'  => $r['pushed'],
+        'created' => (int) $r['created'],
+        'pushed'  => (bool) $r['pushed'],
+        'known'   => !empty($r['known']),
     ]);
 }
 

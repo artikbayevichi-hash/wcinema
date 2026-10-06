@@ -15,14 +15,16 @@
 // holatda ham xabar oladi.
 //
 // Xususiyatlar:
-//   · Deduplik — bir xil hodisa `DEDUP_WINDOW` daqiqa ichida qaytarilmaydi;
+//   · Deduplik — BIR QURILMADA faqat BIR MARTA xabar yuboriladi (jumladan
+//     `login`); `login_devices` jadvali qurilmani eslab qoladi. Vaqt oynasi
+//     faqat "qurilma kaliti topilmadi" holatida zaxira sifatida ishlaydi;
 //   · Spam himoyasi — bloklagan foydalanuvchiga yuborilmaydi;
 //   · Xatolar jim yutiladi (bildirishnoma yuborilmasa sayt buzilmaydi).
 // ============================================================================
 
 class Alerts
 {
-    /** Deduplik oynasi (daqiqa). */
+    /** Zaxira vaqt oynasi (daqiqa) — faqat qurilma kaliti aniqlanmasa. */
     const DEDUP_WINDOW = 5;
 
     /** Bot ishga tushirilmagan bo'lsa yuborish o'chiriladi. */
@@ -33,6 +35,9 @@ class Alerts
 
     /** @var TelegramBot|null (kech va sinxron nusxa) */
     private $bot = null;
+
+    /** @var bool|null `login_devices` jadvali tayyorligi (bir marta tekshiriladi) */
+    private $devReady = null;
 
     public function __construct($db = null)
     {
@@ -46,29 +51,49 @@ class Alerts
     /**
      * Hisobga kirish hodisasi.
      *
+     * DEDUPLIK: har bir qurilmadan FAQAT BIR MARTA xabar yuboriladi.
+     * Sababi: `tg-stream.js` sahifa har yuklanganda `action=hello` so'rovi
+     * yuboradi (u `ensureSession` ichidan chaqiriladi). Avvalgi 5 daqiqalik
+     * oyna yetarli emas edi — foydalanuvchi 5 daqiqadan keyin yana
+     * refresh qilsa, xabar YANA kelardi. Endi `login_devices` jadvalida
+     * qurilma bir marta ko'rilgan bo'lsa, darhol qaytaramiz.
+     *
      * @param int    $userId bazadagi users.id
      * @param array  $meta   ['ip'=>string,'ua'=>string,'city'=>string,'first'=>bool]
-     * @return array{created:int, pushed:bool}
+     * @return array{created:int, pushed:bool, known:bool} `known` — qurilma
+     *         allaqachon ko'rilganmi (diagnostika uchun)
      */
     public function login($userId, array $meta = [])
     {
         $userId = (int) $userId;
         if ($userId <= 0) {
-            return ['created' => 0, 'pushed' => false];
+            return ['created' => 0, 'pushed' => false, 'known' => false];
         }
 
         $user = $this->user($userId);
         if (!$user) {
-            return ['created' => 0, 'pushed' => false];
+            return ['created' => 0, 'pushed' => false, 'known' => false];
         }
 
         $when = date('Y-m-d H:i');
         $ip   = $this->clip($meta['ip'] ?? '', 45);
         $ua   = $this->clip($meta['ua'] ?? '', 160);
 
-        // ---- 0) Deduplik: bir necha sahifa yuklansa ham bitta xabar
-        if ($this->recently('login', $userId, self::DEDUP_WINDOW)) {
-            return ['created' => 0, 'pushed' => false];
+        // ---- 0) Deduplik: bir qurilmada — bir marta -----------------------
+        //
+        // `null` — qaror qabul qilib bo'lmadi (jadval yo'qi yoki kalit yo'qi):
+        //   keyin vaqt oynasi bilan yurishimiz mumkin.
+        // `true` — bu qurilma allaqachon ko'rilgan: HECH NARSA yubormaymiz.
+        $known = null;
+        $key   = $this->deviceKey($ua, $ip);
+        if ($key !== '') {
+            $known = $this->deviceSeen($userId, $key, $ua, $ip);
+        }
+        if ($known === true) {
+            return ['created' => 0, 'pushed' => false, 'known' => true];
+        }
+        if ($known === null && $this->recently('login', $userId, self::DEDUP_WINDOW)) {
+            return ['created' => 0, 'pushed' => false, 'known' => false];
         }
 
         $lines = [];
@@ -104,7 +129,107 @@ class Alerts
             '🔐 Kirish'
         );
 
-        return ['created' => $created, 'pushed' => $pushed];
+        return ['created' => $created, 'pushed' => $pushed, 'known' => false];
+    }
+
+    // =====================================================================
+    // Qurilma eslash (kirish xabarining dedupligi)
+    // =====================================================================
+    //
+    // NIMA UCHUN alohida jadval: `notifications` jadvalidan o'qib tekshirish
+    // ishardi, lekin u shunga qarab to'g'rilmaydi — foydalanuvchi "bildirish-
+    // nomalarni tozalash" qo'shganda kirish xabari ham yo'qolardi va keyin
+    // HAR SAFAR yana kelib turardi. Bu jadval faqat "bu qurilma allaqachon
+    // xabar oldimi?" savoliga javob beradi.
+    //
+    // `CREATE TABLE IF NOT EXISTS` — `TgTopics` kabi, migratsiya skriptisiz.
+
+    /** Jadval mavjudligini bir marta tekshiradi va kerusida yaratadi. */
+    private function devicesReady()
+    {
+        if ($this->devReady !== null) {
+            return $this->devReady;
+        }
+        $this->devReady = false;
+        try {
+            $this->db->query(
+                "CREATE TABLE IF NOT EXISTS login_devices (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    device_key VARCHAR(90) NOT NULL,
+                    user_agent VARCHAR(200) NOT NULL DEFAULT '',
+                    ip_address VARCHAR(45) NOT NULL DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uniq_user_device (user_id, device_key),
+                    KEY idx_user (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            $this->devReady = true;
+        } catch (Throwable $e) {
+            error_log('[Alerts] login_devices jadvali yaratilmadi - ' . $e->getMessage());
+            $this->devReady = false;
+        }
+        return $this->devReady;
+    }
+
+    /**
+     * Qurilma kaliti.
+     *
+     * Versiya raqamlarini OLIB TASHLAYMIZ: brauzer o'zi avtomatik yangilanadi
+     * (Chrome 141 -> 142) va aks holda foydalanuvchi O'Z qurilmasida ham har
+     * oy "yangi qurilmadan kirdi" xabarini olardi — bu uning maqsadiga zid.
+     *
+     * @return string bo'sh bo'lsa — kalit aniqlanmadi
+     */
+    private function deviceKey($ua, $ip)
+    {
+        $norm = preg_replace('/\d+(\.\d+)*/u', 'x', (string) $ua);
+        $norm = preg_replace('/\s+/u', ' ', strtolower(trim((string) $norm)));
+        if ($norm !== '') {
+            return 'ua:' . sha1($norm);
+        }
+        // User-Agent yo'q (curl, server-side so'rov) — IP bo'yicha.
+        $ip = trim((string) $ip);
+        if ($ip !== '') {
+            return 'ip:' . sha1($ip);
+        }
+        return '';
+    }
+
+    /**
+     * Bu qurilma allaqachon ko'rilganmi?
+     *
+     * @return bool|null true = ko'rilgan (yubormaslik), false = YANGI,
+     *                   null = qaror qilinolmadi (jadval yo'q)
+     */
+    private function deviceSeen($userId, $key, $ua, $ip)
+    {
+        if (!$this->devicesReady()) {
+            return null;
+        }
+        // `INSERT IGNORE`: kalit UNIQUE bo'lgani uchun takror so'rov jimgina
+        // rad etiladi (xato chiqmaydi) — bu aynan bizga kerak bo'lgan holat.
+        $st = $this->db->query(
+            'INSERT IGNORE INTO login_devices
+                (user_id, device_key, user_agent, ip_address, last_seen_at)
+             VALUES (?, ?, ?, ?, NOW())',
+            [(int) $userId, $key, (string) $ua, (string) $ip]
+        );
+        if ($st === false) {
+            return null;      // jadval yo'q / DB xatosi — eski yo'lga qaytamiz
+        }
+        if ($st->rowCount() > 0) {
+            return false;     // YANGI qurilma — xabar yuboriladi
+        }
+        // Allaqachon ko'rilgan: "oxirgi ko'rilgan"ni yangilab qo'yamiz.
+        $this->db->query(
+            'UPDATE login_devices SET last_seen_at = NOW(), ip_address = ?
+              WHERE user_id = ? AND device_key = ?',
+            [(string) $ip, (int) $userId, $key]
+        );
+        return true;
     }
 
     // =====================================================================
