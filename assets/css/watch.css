@@ -373,14 +373,17 @@
 .watch-channel {
     display: flex; align-items: center; gap: 12px; min-width: 0;
 }
-/* Avatar: YUMALOQ CHEGARA OLIB TASHLANDI (foydalanuvchi so'rovi).
+/* Avatarlik: YUMALOQ CHEGARA OLIB TASHLANDI (foydalanuvchi so'rovi).
    `border-radius: 50%` logo'ni doiraga kesib, burchaklarini yutardi.
-   `object-fit: contain` esa rasmni TUZIQ maydonda to'liq chiqaradi -
-   kengligi to'liq ko'rinadi, qirqilmaydi. */
+   `object-fit: contain` esa rasmni to'liq chiqaradi - qirqilmaydi.
+   ORQA FON: `var(--card-2)` qutichasi ham olib tashlandi — logo faylining
+   o'zi transparent (white belgi), shuning uchun ortga quticha chizilsa
+   logo "orqa fonda" turadigan bo'lib ko'rinardi. Endi ort shaffof. */
 .watch-channel-av {
     flex: 0 0 auto; width: 40px; height: 40px;
     border-radius: 0;
-    overflow: hidden; background: var(--card-2);
+    overflow: hidden;
+    background: transparent;
     display: inline-flex; align-items: center; justify-content: center;
 }
 .watch-channel-av img {

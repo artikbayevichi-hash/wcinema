@@ -42,8 +42,19 @@ img.ig-logo {
 .ig-nav {
     display: flex; flex-direction: column; gap: 2px;
     flex: 1; min-height: 0;
-    overflow: hidden;
+    /* Vertikal scroll: tugmalar ekranga sig'masa pastki qismi kesilmasin,
+       ichida aylanadi (avval `overflow: hidden` edi - "Sozlamalar"gacha
+       bo'lgan oxirgi tugmalar umuman qolib ketardi). Gorizontal scroll ham
+       yoqilgan - juda tor paneldagi to'lib ketish uchun (izoh bo'yicha). */
+    overflow-y: auto;
+    overflow-x: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
 }
+.ig-nav::-webkit-scrollbar { width: 6px; height: 6px; }
+.ig-nav::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.ig-nav::-webkit-scrollbar-track { background: transparent; }
 .ig-group { display: flex; flex-direction: column; gap: 2px; }
 .ig-sep { height: 1px; background: var(--line); margin: 8px 6px; flex: 0 0 auto; }
 

@@ -146,6 +146,16 @@
     toastTimer = setTimeout(function () { b.hidden = true; }, 2800);
   }
 
+  /* Yoqdi/Yoqmadi/Saqlash login talab qiladi. Foydalanuvchi kirmagan
+     (yoki sessiyasi muddati o'tgan - API 401 qaytargan) bo'lsa, tugma
+     "jim" turib qolmasligi uchun login oynasiga yo'naltiramiz; kirib
+     qaytgach aynan shu sahifa (va qism) ochiladi. Aks holda foydalanuvchi
+     tugma ishlamayotgandek taassurot qolar edi. */
+  function needLogin() {
+    var next = encodeURIComponent(location.pathname + location.search);
+    location.href = (base || '') + '/tg-login.php?next=' + next;
+  }
+
   function epIndex(id) {
     for (var i = 0; i < S.episodes.length; i++) {
       if (Number(S.episodes[i].id) === Number(id)) return i;
@@ -706,11 +716,11 @@
       animCount(el('actDislikeN'), oldD, D.dislikes, function (n) { return voteTxt(n, 'Yoqmadi'); });
     }
 
-    function bindVote(btnId, type, guardMsg) {
+    function bindVote(btnId, type) {
       var b = el(btnId);
       if (!b) return;
       b.onclick = function () {
-        if (!W.loggedIn) { toast(guardMsg); return; }
+        if (!W.loggedIn) { needLogin(); return; }
         b.classList.add('busy');
         fetch(base + '/api/like.php', {
           method: 'POST',
@@ -718,7 +728,12 @@
           credentials: 'same-origin',
           body: 'id=' + encodeURIComponent(D.id)
                 + '&type=' + encodeURIComponent(type)
-        }).then(function (r) { return r.json(); }).then(function (r) {
+        }).then(function (raw) {
+          // Sessiya muddati o'tgan - javob 401: login oynasiga yo'naltiramiz.
+          if (raw.status === 401) { needLogin(); return null; }
+          return raw.json();
+        }).then(function (r) {
+          if (!r) return;
           if (r.success === false) throw new Error(r.message || 'Xato');
           voteSync(r);
         }).catch(function (err) {
@@ -726,8 +741,8 @@
         }).finally(function () { b.classList.remove('busy'); });
       };
     }
-    bindVote('actLike', 'like', 'Yoqish uchun kiring');
-    bindVote('actDislike', 'dislike', 'Yoqmaslik uchun kiring');
+    bindVote('actLike', 'like');
+    bindVote('actDislike', 'dislike');
 
     // ================================================= SAQLASH MENYUSI
     // 📚 tugmasi o'zi SAQLAMAYDI - u MENYU ochadi (foydalanuvchi
@@ -757,7 +772,12 @@
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         credentials: 'same-origin',
         body: 'id=' + encodeURIComponent(D.id)
-      }).then(function (r) { return r.json(); }).then(function (r) {
+      }).then(function (raw) {
+        // Sessiya muddati o'tgan - javob 401: login oynasiga yo'naltiramiz.
+        if (raw.status === 401) { needLogin(); return null; }
+        return raw.json();
+      }).then(function (r) {
+        if (!r) return false;
         if (r.success === false) throw new Error(r.message || 'Xato');
         D.in_watchlist = !!r.in_watchlist;
         if (w) w.classList.toggle('on', D.in_watchlist);
@@ -771,7 +791,7 @@
         ev.stopPropagation();
         var it = ev.target.closest && ev.target.closest('[data-go]');
         if (!it) return;
-        if (!W.loggedIn) { toast('Saqlash uchun tizimga kiring'); closeSaveMenu(); return; }
+        if (!W.loggedIn) { needLogin(); closeSaveMenu(); return; }
         it.classList.add('busy');
         ensureSaved().then(function () {
           // `nav.php` dagi Kutubxona bo'limi:

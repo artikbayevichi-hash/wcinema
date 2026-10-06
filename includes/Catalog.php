@@ -897,10 +897,19 @@ class Catalog {
      * YouTube'da kanal = kontentni nashr etuvchi. Bu saytda ham shunaqa:
      * kinolar Telegram'dan olinadi, lekin kanal SITE_NAME. Shuning uchun
      * obunachi = ro'yxatdan o'tgan foydalanuvchilar soni.
+     *
+     * DIQQAT: `is_registered = 1` sharti kerak — bot orqali ro'yxatdan
+     * o'tishni tugatgandagina `bot.php` da bu bayroq 1 bo'ladi. Demo/test
+     * qaydlar (oddiy Telegram kirishida 0 qoladi) saytga "ro'yxatdan
+     * o'tgan" emas, shuning uchun ular hisobga kirmaydi. Aks holda son
+     * sun'iy sinov qaydlari bilan shishib ko'rinardi («8 ta foydalanuvchi»
+     * ko'rinib, aslida ro'yxatdan o'tganlar kamroq edi).
      */
     public function getSubscriberCount() {
         try {
-            $row = $this->db()->fetchOne("SELECT COUNT(*) AS n FROM users");
+            $row = $this->db()->fetchOne(
+                "SELECT COUNT(*) AS n FROM users WHERE is_registered = 1"
+            );
             return (int) ($row['n'] ?? 0);
         } catch (Throwable $e) {
             return 0;
