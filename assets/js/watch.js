@@ -49,6 +49,10 @@
     // Yon panelda nima ko'rinadi: qismlar (true) yoki tavsiyalar (false).
     // `hasPlaylist` serverda hisoblanadi (film -> tavsiyalar, anime -> qismlar).
     sideEpisodes: !!W.hasPlaylist,
+    // Mobil "QISM TANLASH" fasl filtri: 0 = barcha fasllar, aks holda
+    // tanlangan fasl raqami. Desktopda chiplar yashirin bo'lgani uchun
+    // doim 0 qoladi — ro'yxat butunlay ko'rinadi.
+    epSeason: 0,
     resumeAt: 0,
     switching: false,
     viewed: false,
@@ -1078,14 +1082,15 @@
     if (list) {
       if (S.sideEpisodes) {
         if (count) count.textContent = S.episodes.length + ' ta';
-        list.innerHTML = S.episodes.length
-          ? S.episodes.map(epRow).join('')
-          : '<div class="watch-side-empty">Qismlar hali qo\u2018shilmagan</div>';
+        // Fasl chiplari + filtr/qidiruv birgalikda ro'yxatni quradi.
+        renderSeasons();
+        filterEpisodes();
       } else {
         list.innerHTML = '';
       }
     }
     if (epBlock) epBlock.hidden = !S.sideEpisodes;
+    syncEpMobileUI();
 
     // --- 2) Tavsiyalar (sarlavhasiz, YouTube sidebar uslubida)
     if (recList) {
@@ -1214,19 +1219,98 @@
         || (e.title || '').toLowerCase().indexOf(q) !== -1;
   }
 
-  /** Kiritilgan so'zga mos qismlarni ko'rsatadi (bo'sh -> to'liq ro'yxat). */
+  /* ------------------------------------------------ MOBIL FASL TANLASH
+     Mobil "QISM TANLASH" grid'idagi fasl chiplari. Desktopda
+     `.watch-ep-seasons` CSS'da yashiringan (faqat mobil ko'rinadi). */
+  function seasonList() {
+    var seen = {};
+    S.episodes.forEach(function (e) { seen[e.season || 1] = true; });
+    return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+  }
+  /** Fasl chiplari qatorini quradi (`renderSide`/chip bosilishida). */
+  function renderSeasons() {
+    var epBlock = el('watchSideEpBlock');
+    var head = epBlock && epBlock.querySelector('.watch-side-head');
+    if (!head) return;
+    var box = el('watchEpSeasons');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'watch-ep-seasons';
+      box.id = 'watchEpSeasons';
+      var form = el('watchEpFind');
+      if (form) head.insertBefore(box, form);
+      else head.appendChild(box);
+    }
+    var seasons = seasonList();
+    if (!seasons.length) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = '';
+    function chip(n, label) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'watch-ep-season' + (S.epSeason === n ? ' on' : '');
+      b.setAttribute('data-season', String(n));
+      b.setAttribute('aria-pressed', S.epSeason === n ? 'true' : 'false');
+      b.textContent = label;
+      b.addEventListener('click', function () {
+        S.epSeason = n;
+        renderSeasons();
+        filterEpisodes();
+      });
+      return b;
+    }
+    box.appendChild(chip(0, 'Barcha'));
+    seasons.forEach(function (s) { box.appendChild(chip(s, s + '-fasl')); });
+  }
+
+  /* Mobil ekranda sarlavha va qidiruv maydonini moslaydi:
+       • "Qismlar"  ->  "Qism tanlash"  (CSS UPPERCASE => "QISM TANLASH")
+       • inputmode "numeric" -> "text"  (nom YOKI raqam bo'yicha qidirish) */
+  function syncEpMobileUI() {
+    var mob = typeof global.matchMedia === 'function'
+      && global.matchMedia('(max-width: 768px)').matches;
+    var t = el('watchSideTitle');
+    if (t) t.textContent = (mob && S.sideEpisodes) ? 'Qism tanlash' : 'Qismlar';
+    var inp = el('watchEpFindInput');
+    if (inp) {
+      inp.setAttribute('inputmode', mob ? 'text' : 'numeric');
+      inp.placeholder = mob ? 'Nom yoki raqam…' : 'Qism raqami…';
+    }
+  }
+  /** Mobil sarlavha/qidiruv moslashuvini resize'da yangilab turadi. */
+  function bindEpMobileUI() {
+    if (typeof global.addEventListener !== 'function') return;
+    var dc = null;
+    global.addEventListener('resize', function () {
+      clearTimeout(dc);
+      dc = setTimeout(syncEpMobileUI, 120);
+    });
+  }
+
+  /** Kiritilgan so'zga mos qismlarni ko'rsatadi (bo'sh -> to'liq ro'yxat).
+     Fasl filtri (`S.epSeason`) va matn qidiruvi birgalikda qo'llanadi. */
   function filterEpisodes() {
     var list = el('watchSideList');
     if (!list || !S.sideEpisodes) return;
     var inp = el('watchEpFindInput');
     var raw = inp ? inp.value.trim() : '';
     var q = raw.toLowerCase();
-    var rows = q
-      ? S.episodes.filter(function (e) { return epMatches(e, q); })
-      : S.episodes;
-    list.innerHTML = rows.length
-      ? rows.map(epRow).join('')
-      : '<div class="watch-side-empty">' + esc(raw) + ' topilmadi</div>';
+    var rows = S.episodes;
+    if (S.epSeason) {
+      rows = rows.filter(function (e) { return (e.season || 1) === S.epSeason; });
+    }
+    if (q) {
+      rows = rows.filter(function (e) { return epMatches(e, q); });
+    }
+    if (!rows.length) {
+      list.innerHTML = '<div class="watch-side-empty">'
+        + (S.episodes.length
+            ? (raw ? esc(raw) + ' topilmadi' : 'Bu faslda qismlar yo\u2018q')
+            : 'Qismlar hali qo\u2018shilmagan')
+        + '</div>';
+      return;
+    }
+    list.innerHTML = rows.map(epRow).join('');
   }
 
   function initEpFind() {
@@ -1377,6 +1461,9 @@
         S.playback  = d.playback || S.playback;
         S.resumeAt  = (d.progress && d.progress.position > 5) ? d.progress.position : 0;
         if (d.episodes && d.episodes.length) S.episodes = d.episodes;
+        // Yangi qismlar ro'yxatida fasl filtrisi mos kelmasligi mumkin -
+        // "Barcha" holatiga qaytaramiz.
+        S.epSeason = 0;
         S.selectedId = epId;
         renderHead();
         renderSide();
@@ -1436,6 +1523,7 @@
     mountPlayer();
     bindSideClicks();
     initEpFind();
+    bindEpMobileUI();
     initRecObserver();
     initComments();
 
@@ -1451,6 +1539,7 @@
           .then(function (d) {
             S.playback = d.playback || S.playback;
             if (d.episodes && d.episodes.length) S.episodes = d.episodes;
+            S.epSeason = 0;
             S.selectedId = id;
             renderHead(); renderSide(); mountPlayer();
             return openComments();

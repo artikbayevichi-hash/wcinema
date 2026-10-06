@@ -20,7 +20,9 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         fsExit: '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 14h6v6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 10h-6V4"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 10l7-7"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 21l7-7"/></svg>',
         gear: '<svg viewBox="0 0 24 24"><path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96a7.72 7.72 0 0 0-1.62-.94l-.36-2.54a.49.49 0 0 0-.48-.41h-3.84c-.25 0-.43.17-.47.41l-.36 2.54c-.59.24-1.12.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.32-.09.65-.09.98s.03.66.09.98L2.86 13.6a.499.499 0 0 0 .12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.04.24.22.41.47.41h3.84c.25 0 .43-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>',
         cc: '<svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM8.5 14.8c-2.9 0-2.9-5.6 0-5.6 1.3 0 2.1.6 2.7 1.4l-1.5 1c-.3-.5-.6-.8-1.2-.8-.9 0-.9 2.4 0 2.4.6 0 .9-.3 1.2-.8l1.5 1c-.6.8-1.4 1.4-2.7 1.4zm7 0c-2.9 0-2.9-5.6 0-5.6 1.3 0 2.1.6 2.7 1.4l-1.5 1c-.3-.5-.6-.8-1.2-.8-.9 0-.9 2.4 0 2.4.6 0 .9-.3 1.2-.8l1.5 1c-.6.8-1.4 1.4-2.7 1.4z"/></svg>',
-        replay: '<svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>'
+        replay: '<svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>',
+        back10: '<svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>',
+        fwd10: '<svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/></svg>'
     };
 
     function parseConfig(root) {
@@ -165,16 +167,41 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         row1Left.appendChild(volWrap);
         row1.appendChild(row1Left);
 
-        // Row1 CENTER: Play/Pause
+        // Row1 CENTER: -10s | Play/Pause | +10s
+        // (±10s tugmalari desktopda `.udp-seek10 { display:none }` orqali
+        // yashirin; mobil overlay qatorida ko'rinadi.)
         var row1Center = el('div', 'udp-controls-row1-center');
+        var backBtn = el('button', 'udp-btn udp-seek10 udp-back10', ICONS.back10
+            + '<span class="udp-seek10-num">10</span>');
+        backBtn.type = 'button';
+        backBtn.title = S.back10 || '-10 soniya';
+        row1Center.appendChild(backBtn);
         var playBtn = el('button', 'udp-btn udp-play', ICONS.play);
         playBtn.type = 'button';
         playBtn.title = S.play || 'Ijro etish';
         row1Center.appendChild(playBtn);
+        var fwdBtn = el('button', 'udp-btn udp-seek10 udp-fwd10', ICONS.fwd10
+            + '<span class="udp-seek10-num">10</span>');
+        fwdBtn.type = 'button';
+        fwdBtn.title = S.fwd10 || '+10 soniya';
+        row1Center.appendChild(fwdBtn);
         row1.appendChild(row1Center);
 
-        // Row1 RIGHT: fullscreen + pip + gear
+        // Row1 RIGHT: Speed(1x) | Quality(Auto) | fullscreen | pip | gear
+        // (Tezlik/Sifat tugmalari desktopda yashirin — gear menyusida qoladi.)
         var row1Right = el('div', 'udp-controls-row1-right');
+
+        var speedBtn = el('button', 'udp-btn udp-speed-btn',
+            '<span class="udp-speed-lbl">1x</span>');
+        speedBtn.type = 'button';
+        speedBtn.title = S.speed || 'Tezlik';
+        row1Right.appendChild(speedBtn);
+
+        var qualityBtn = el('button', 'udp-btn udp-quality-btn',
+            '<span class="udp-quality-lbl">HD</span>');
+        qualityBtn.type = 'button';
+        qualityBtn.title = S.quality || 'Sifat';
+        row1Right.appendChild(qualityBtn);
 
         var fsBtn = el('button', 'udp-btn udp-fs', ICONS.fs);
         fsBtn.type = 'button';
@@ -232,7 +259,13 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         document.body.appendChild(menuBackdrop);
 
         var menuCloseT = null;
-        function openMenu(name, viaHover) {
+        function openMenu(name, viaHover, anchor) {
+            var anch = anchor || gearBtn;
+            // Mobil rejimda menyu tugmaga emas, boshqaruv paneliga ulanadi —
+            // tor ekranda tugmaga bog'langan menyu chekkadan chiqib qolardi.
+            // CSS `.watch-player .udp-menu` bu joylashuvni boshqaradi.
+            var target = mobileUi ? controls : anch;
+            if (menu.parentNode !== target) target.appendChild(menu);
             var wasOpen = menu.classList.contains('udp-open');
             clearTimeout(menuCloseT);
             if (!wasOpen) {
@@ -399,6 +432,31 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         video.muted = isMuted;
         updateVolumeUI();
 
+        // ------ Mobil rejim detektori ------
+        // `.udp-player` qutisining O'ZI tor bo'lsa (kenglik ≤ 672px =
+        // watch.css `@container wpl` chegarasi 42rem), boshqaruvlar mobil
+        // ko'rinishga o'tadi: vaqt "11:11 / 25:57" usulida, menyu panelga
+        // nisbatan ochiladi. Fullscreen'da quti kengligi ekranga teng bo'ladi
+        // — desktop fullscreen'da bu avtomatik qaytib desktop rejimiga o'tadi.
+        var mobileUi = false;
+        function syncMobileUi() {
+            var m = root.clientWidth > 0 && root.clientWidth <= 672;
+            if (m !== mobileUi) {
+                mobileUi = m;
+                updateTime();
+            }
+        }
+        if (typeof ResizeObserver === 'function') {
+            try { new ResizeObserver(syncMobileUi).observe(root); } catch (e) {}
+        } else {
+            window.addEventListener('resize', syncMobileUi);
+        }
+        syncMobileUi();
+
+        // Tezlik/Sifat tugmalari yorliqlarini boshlang'ich holatga keltiramiz.
+        updateSpeedLabel();
+        updateQualityLabel();
+
         function updatePlayIcon() {
             playBtn.innerHTML = (video.paused || video.ended) ? ICONS.play : ICONS.pause;
         }
@@ -440,6 +498,12 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
 
         function setRate(r) {
             video.playbackRate = r;
+            updateSpeedLabel();
+        }
+
+        function updateSpeedLabel() {
+            var lbl = speedBtn.querySelector('.udp-speed-lbl');
+            if (lbl) lbl.textContent = fmtRate(video.playbackRate);
         }
 
         function updateTime() {
@@ -448,7 +512,11 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             var remaining = d - video.currentTime;
             if (remaining < 0) remaining = 0;
             timeCurrent.textContent = fmtTime(video.currentTime);
-            timeRemaining.textContent = '-' + fmtTime(remaining);
+            // Mobil: o'ng tomonda QOLGAN vaqt emas, UMUMIY vaqt ko'rsatiladi
+            // ("11:11 / 25:57" uslubi). Desktop: "-14:46" (avvalgidek).
+            timeRemaining.textContent = mobileUi
+                ? fmtTime(d)
+                : '-' + fmtTime(remaining);
         }
 
         function updateSeek() {
@@ -538,6 +606,28 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         muteBtn.addEventListener('click', toggleMute);
         playBtn.addEventListener('click', function () { togglePlay(); });
         fsBtn.addEventListener('click', function () { closeMenu(); toggleFullscreen(); });
+
+        /* ±10 soniya sakrash va to'g'ridan-to'g'ri Tezlik/Sifat tugmalari
+           (mobil overlay qatorida; desktopda yashirin — gear menyusi qoladi). */
+        function seekDelta(sec) {
+            var d = video.duration;
+            var t = video.currentTime + sec;
+            if (isFinite(d) && d > 0) t = Math.max(0, Math.min(d - 0.05, t));
+            else t = Math.max(0, t);
+            video.currentTime = t;
+            updateTime();
+            updateSeek();
+        }
+        backBtn.addEventListener('click', function () { closeMenu(); seekDelta(-10); });
+        fwdBtn.addEventListener('click', function () { closeMenu(); seekDelta(10); });
+        speedBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            openMenu('speed', false, speedBtn);
+        });
+        qualityBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            openMenu('quality', false, qualityBtn);
+        });
 
         video.addEventListener('click', function (ev) {
             if (ev.target === video && !video.dragging) togglePlay();
@@ -752,7 +842,10 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             return 'HD';
         }
         function updateQualityLabel() {
-            qualityLabel.textContent = qualityLabelText();
+            var txt = qualityLabelText();
+            qualityLabel.textContent = txt;
+            var lbl = qualityBtn.querySelector('.udp-quality-lbl');
+            if (lbl) lbl.textContent = txt;
         }
         var qualityOptions = function () {
             if (isHls && hlsAutoLevels.length) {

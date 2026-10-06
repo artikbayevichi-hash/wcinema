@@ -370,6 +370,48 @@
     flex-shrink: 0;
 }
 
+/* --- YANGI: -10s/+10s va Tezlik(1x)/Sifat(Auto) tugmalari (desktopda YASHIRIN)
+     Mobil overlay qatorida (watch.css `@container wpl`) ko'rinadi. --- */
+.udp-btn.udp-seek10,
+.udp-btn.udp-speed-btn,
+.udp-btn.udp-quality-btn { display: none; }
+
+.udp-seek10 {
+    position: relative;
+}
+.udp-seek10 .udp-seek10-num {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    z-index: 2;
+    display: inline-block;
+    min-width: 15px;
+    text-align: center;
+    font-size: 7.5px;
+    font-weight: 800;
+    line-height: 1.15;
+    padding: 1.5px 2.5px;
+    border-radius: 4px;
+    color: #3a4150;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+}
+.udp-speed-btn,
+.udp-quality-btn {
+    position: relative;
+    font-family: inherit;
+}
+.udp-speed-lbl,
+.udp-quality-lbl {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
 /* --- ROW 2: time | seek | -remaining --- */
 .udp-controls-row2 {
     display: flex;

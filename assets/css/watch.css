@@ -171,7 +171,7 @@
     .watch-player .udp-player video { object-fit: contain !important; }
 
     /* --- GRADIENT: boshqaruv paneli ustidan o'tadigan qoraytirish.
-       anibla `.media-overlay`: linear-gradient(0deg, .5, .3, 0).
+       Talab: pastki qism to'q shaffof gradient (rgba(0,0,0,0.75)).
        Faqat boshqaruv paneli ko'rinib turganda paydo bo'ladi. --- */
     .watch-player .udp-player::after {
         content: "";
@@ -180,7 +180,7 @@
         z-index: 12;                 /* titlebar(15) va panel(18) ostida */
         pointer-events: none;
         background: linear-gradient(0deg,
-            rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.3) 50%, rgba(0, 0, 0, 0));
+            rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.42) 50%, rgba(0, 0, 0, 0));
         opacity: 0;
         transition: opacity 0.15s ease-out;
     }
@@ -207,77 +207,99 @@
     .watch-player .udp-controls-row2 {
         order: -1;                   /* desktopda pastda, telefonda tepada */
         width: 100%;
-        height: 32px;
-        gap: 12px;
+        height: 36px;
+        gap: 10px;
         padding: 0 10px;
     }
     .watch-player .udp-time {
         font-size: 13px;
         min-width: 31px;
         line-height: 20px;
+        font-variant-numeric: tabular-nums;
     }
-    .watch-player .udp-seek { height: 32px; min-width: 0; }
+    /* O'ng tomondagi vaqt — "11:11 / 25:57" uslubida UMUMIY davomiylik
+       (JS `mobileUi` bo'lganda total qiymat yozadi; desktopda -qolgan). */
+    .watch-player .udp-time-remaining { color: rgba(255, 255, 255, 0.92); }
+    /* Chiziq: teginish zonasi 36px (barmoq uchun qulay), ko'rinadigan
+       chiziqcha ingichka (4px) va yumaloq; aktiv qism accent rangida. */
+    .watch-player .udp-seek { height: 36px; min-width: 0; }
     .watch-player .udp-seek-track {
         height: 4px;
         border-radius: 999px;
         box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
     }
     .watch-player .udp-seek:hover .udp-seek-track { height: 4px; }
-    .watch-player .udp-seek-thumb { width: 10px; height: 10px; }
+    .watch-player .udp-seek-progress { background: var(--accent); }
+    .watch-player .udp-seek-thumb {
+        width: 12px; height: 12px;
+        box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.35);
+    }
 
-    /* --- 2-QATOR (pastda): TUGMALAR — chapda o'ynash, o'ngda boshqalar --- */
+    /* --- 2-QATOR (pastda): TUGMALAR — bitta gorizontal flex qator:
+       -10s · Play · +10s  |  Mute  |  1x · Auto · Fullscreen --- */
     .watch-player .udp-controls-row1 {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 0;
-        height: 56px;
+        height: 48px;
     }
     .watch-player .udp-controls-row1-left,
     .watch-player .udp-controls-row1-right {
         display: flex;
         align-items: center;
-        gap: 1.2px;
+        gap: 2px;
     }
-    .watch-player .udp-controls-row1-center { order: 0; }  /* o'yin — birinchi */
+    .watch-player .udp-controls-row1-center { order: 0; }  /* ±10 + play — birinchi */
     .watch-player .udp-controls-row1-left   { order: 1; }  /* ovoz — uning yonida */
-    .watch-player .udp-controls-row1-right  { order: 2; }  /* sifat/pip/ekran — o'ngda */
+    .watch-player .udp-controls-row1-right  { order: 2; }  /* tezlik/sifat/ekran — o'ngda */
 
-    /* Tugmalar: 36x36, doira, bosilganda 0.9 ga kichrayadi */
+    /* Tugmalar: 40x40 (minimal barmoq teginish maydoni), doira */
     .watch-player .udp-btn {
-        width: 36px;
-        height: 36px;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
     }
     .watch-player .udp-btn:active { transform: scale(0.9); }
-    .watch-player .udp-btn svg { width: 18px; height: 18px; }
+    .watch-player .udp-btn svg { width: 20px; height: 20px; }
 
-    /* Ovoz slayderi — balandligi teginish uchun yetarli */
-    .watch-player .udp-volume { gap: 6px; }
-    .watch-player .udp-volume-bar { width: 56px; }
+    /* ±10s tugmalari KO'RINADI (desktopda yashirin edi) — ikonka
+       burchagida "10" yorlig'i (`.udp-seek10-num`) turadi. */
+    .watch-player .udp-seek10 { display: inline-flex; }
 
-    /* Sifat/o'rnatish tugmasi — anibla kabi 56x56 kvadrat (shu sabab
-       butun qator 56px baland bo'ladi). Ikonka tepada, "HD" yorlig'i ostida. */
-    .watch-player .udp-settings {
-        order: -1;
-        width: 56px;
-        height: 56px;
-        flex-direction: column;
-        gap: 3px;
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.1);
+    /* Tezlik (1x) va Sifat (Auto) — yorliqli kichik "pill" tugmalar */
+    .watch-player .udp-speed-btn,
+    .watch-player .udp-quality-btn {
+        display: inline-flex;
+        min-width: 44px;
+        height: 40px;
+        border-radius: 999px;
+        padding: 0 10px;
+        background: rgba(255, 255, 255, 0.12);
     }
-    .watch-player .udp-settings:hover { background: rgba(255, 255, 255, 0.16); }
-    .watch-player .udp-quality-label {
-        position: static;
-        min-width: 0;
-        font-size: 9px;
-        font-weight: 800;
-        color: rgba(255, 255, 255, 0.92);
-        background: none;
-        border-radius: 0;
-        padding: 0;
-        box-shadow: none;
+    .watch-player .udp-speed-btn:active,
+    .watch-player .udp-quality-btn:active { transform: none; background: rgba(255, 255, 255, 0.24); }
+    .watch-player .udp-speed-lbl,
+    .watch-player .udp-quality-lbl { font-size: 11.5px; }
+
+    /* Ovoz slayderi ixcham qatorga sig'maydi — faqat MUTE tugmasi qoladi
+       (foydalanuvchi talabi: bitta gorizontal qatorda Mute). */
+    .watch-player .udp-volume { gap: 0; }
+    .watch-player .udp-volume-bar { display: none; }
+
+    /* Qatorni quvib yuboradigan ortiqcha tugmalar YASHIRILADI: gear
+       (sozlamalar) va pip — foydalanuvchi talabidagi yagona gorizontal
+       qatorga mos kelish uchun. Menyu JS'da `openMenu()` orqali
+       to'g'ridan-to'g'ri panelga (`.udp-controls`) ulanadi. */
+    .watch-player .udp-settings,
+    .watch-player .udp-pip { display: none; }
+
+    /* Mobil menyu panelning o'ng chekkasiga tekislanadi (tugmaga emas) */
+    .watch-player .udp-menu {
+        right: 8px;
+        margin-bottom: 10px;
+        min-width: 240px;
+        max-width: calc(100% - 16px);
     }
 
     /* --- TAYYORLASH PANELI (`.tgs-prep`) — ixchamlashtirish.
@@ -294,36 +316,27 @@
     .watch-player .tgs-prep-note { display: none; }
 }
 
-/* Pleer QUTISI — kengligi 42rem dan kichik bo'lsa (anibla kabi):
-     • burchak 0
-     • sahifa chetlariga to'liq tegib turadi (full-bleed)
+/* Pleer QUTISI — kengligi 42rem dan kichik bo'lsa:
+     • burchak 14px SAQLANADI (foydalanuvchi talabi: 12–16px yumaloq,
+       "full-bleed" EMAS)
+     • sahifa chekkasidagi padding (`.ig-page`) ichida qoladi
    `@container` ichida konteynerning O'ZIGA qoida yozib bo'lmaydi,
    shuning uchun bu yerda ekran kengligi bo'yicha. */
 @media (max-width: 42rem) {
     .watch-player {
-        border-radius: 0;
-        margin-left: -14px;
-        margin-right: -14px;
-        width: calc(100% + 28px);
+        border-radius: 14px;
+        margin-left: auto;
+        margin-right: auto;
+        width: 100%;
     }
-    /* `player.css:744` dagi `width: calc(100% + 32px) !important` full-bleed
-       haqiqiyda KESISH berardi: `.watch-player` `overflow: hidden` bo'lgani
-       uchun chetlaridagi 16px yopqib qolardi — video ham, boshqaruv paneli ham
-       kesilib chiqardi (panel pleerdan 16px kengroq bo'lib qolardi).
-       Endi full-bleed yuqoridagi `.watch-player` da bajariladi, shuning uchun
-       bu yerda bekor qilinadi. */
+    /* `player.css` dagi ≤640px full-bleed qoidasi (`margin-left:-16px
+       !important; width: calc(100% + 32px) !important`) shu yerda bekor
+       qilinadi — aks holda yumaloq burchaklar chetga chiqib ketardi va
+       `overflow: hidden` tufayli video chetlari kesilardi. */
     .watch-player .player-wrap.has-video-container {
         width: 100% !important;
         margin-left: 0 !important;
         margin-right: 0 !important;
-    }
-}
-@media (max-width: 560px) {
-    /* Sahifa chet bo'shligi 14px dan 10px ga kamayadi — shunga mos. */
-    .watch-player {
-        margin-left: -10px;
-        margin-right: -10px;
-        width: calc(100% + 20px);
     }
 }
 
@@ -799,6 +812,12 @@ body.share-lock { overflow: hidden; }
 }
 .watch-ep-find-go:hover { background: var(--accent); color: #fff; }
 
+/* --- Fasl tanlash chiplari (mobil grid uchun) -------------------------
+   Faqat MOBIL'da ko'rinadi (watch.js `renderSeasons()` to'ldiradi);
+   desktopda klassik bitta ro'yxat ko'rinishida qoladi. */
+.watch-ep-seasons { display: none; }
+.watch-ep-season { font-family: inherit; }
+
 /* Asosiy talab: qismlar ro'yxati balandga-pastga aylanadi. */
 .watch-side-list {
     padding: 8px;
@@ -956,16 +975,183 @@ body.share-lock { overflow: hidden; }
 @media (max-width: 560px) {
     .ig-page.watch-page { padding: 10px; }
     .watch-title { font-size: 17px; }
-    /* `.watch-player` burchagi endi yuqoridagi `@media (max-width: 42rem)`
-       qoidasi bilan boshqariladi (mobil pleer anibla kabi burchaksiz).
-       Bu yerda qo'yilmadi — aks holda u keyingi qoida bo'lib, mobil
-       ko'rinishni bosib ketardi. */
+    /* `.watch-player` burchagi `@media (max-width: 42rem)` qoidasida —
+       mobil'da ham 14px yumaloq (foydalanuvchi talabi). */
     .watch-side-head { padding: 10px 12px; }
     .watch-comments-list { max-height: 460px; }
     /* Tor ekranda kenglik kam bo'lgani uchun rasm ham kichrayadi. */
     .watch-rec-thumb { width: 132px; }
     .watch-rec-ttl { font-size: 13.5px; }
     .watch-rec-meta { font-size: 12px; }
+}
+
+/* ==================================================================
+   MOBIL "QISM TANLASH" — pleyer OSTIDAGI 2–3 ustunli EPIZOD GRID
+   ==================================================================
+   Foydalanuvchi talabi:
+     • sarlavha: "QISM TANLASH" + faol fasl tugmasi (masalan "1-fasl")
+     • ixcham qidiruv maydoni (nom YOKI raqam bo'yicha)
+     • qismlar 2–3 ustunli grid (auto-fill, minmax(100px, 1fr))
+     • faol qism OCHIQ KO'K (accent) belgi
+     • teginish maydoni ≥40px, to'q fon (#181818/#222222)
+
+   JOYLASHUV: `.watch-grid` va ustunlarini `display: contents` bilan
+   "ochib yuboramiz" — shunda `.watch-side-eps` bevosita flex elementi
+   bo'lib, `order` orqali pleyerdan KEYIN, sarlavhadan OLDIN turadi
+   (anibla.uz dagi kabi). */
+@media (max-width: 768px) {
+    /* --- Ustun "qutilarini" ochish va tartiblash --- */
+    .watch-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .watch-main,
+    .watch-side { display: contents; }
+    .watch-player     { order: 1; }
+    .watch-side-eps   { order: 2; }
+    .watch-head       { order: 3; }
+    .watch-desc       { order: 4; }
+    .watch-main > .watch-block { order: 5; }
+    .watch-side-rec   { order: 6; }
+
+    /* Umumiy panel kassetasi yo'qoldi — QISMLAR o'z kassetasiga ega. */
+    .watch-side-eps {
+        background: var(--card-2);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    /* Endi eps va rec qo'shni emas (oraliqda sarlavha/izohlar bor). */
+    .watch-side-eps:not([hidden]) + .watch-side-rec { border-top: 0; }
+
+    /* --- Sarlavha: QISM TANLASH + fasl chiplari --- */
+    .watch-side-head { padding: 14px 14px 10px; }
+    .watch-side-title {
+        text-transform: uppercase;
+        font-size: 12.5px;
+        letter-spacing: .08em;
+        color: var(--muted);
+        font-weight: 800;
+    }
+    .watch-side-count { display: none; }
+    .watch-ep-seasons {
+        display: flex;
+        gap: 6px;
+        margin-top: 12px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .watch-ep-seasons::-webkit-scrollbar { display: none; }
+    .watch-ep-season {
+        flex: 0 0 auto;
+        min-height: 40px;
+        padding: 0 16px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background .14s ease, color .14s ease, border-color .14s ease;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .watch-ep-season.on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #04202e;
+    }
+
+    /* --- Ixcham qidiruv (≥40px teginish) --- */
+    .watch-ep-find {
+        margin-top: 10px;
+        height: 40px;
+        border-radius: 12px;
+    }
+    .watch-ep-find-in { font-size: 14px; }
+    .watch-ep-find-go { width: 26px; height: 26px; border-radius: 8px; }
+
+    /* --- EPIZOD GRID: 2–3 ustun --- */
+    .watch-side-eps .watch-side-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 8px;
+        padding: 4px 14px 14px;
+        max-height: none;
+        overflow-y: visible;
+    }
+    .watch-ep {
+        display: block;
+        position: relative;
+        aspect-ratio: 16 / 10;
+        padding: 0;
+        border: 2px solid transparent;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #181818;
+    }
+    .watch-ep:active { transform: scale(.96); }
+    .watch-ep-thumb {
+        width: 100%;
+        height: 100%;
+        aspect-ratio: auto;
+        border-radius: 0;
+    }
+    .watch-ep-fb {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        font-size: 26px;
+    }
+    .watch-ep-num {
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        z-index: 2;
+        width: auto;
+        min-width: 24px;
+        height: 22px;
+        line-height: 22px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, .72);
+        color: #fff;
+        font-size: 12px;
+        text-align: center;
+    }
+    .watch-ep-text {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+        padding: 18px 7px 6px;
+        background: linear-gradient(0deg, rgba(0, 0, 0, .9), transparent);
+    }
+    .watch-ep-ttl {
+        -webkit-line-clamp: 1;
+        font-size: 11.5px;
+        font-weight: 700;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        display: block;
+        overflow: hidden;
+    }
+    .watch-ep-meta { display: none; }
+    .watch-ep .watch-ep-dur { font-size: 10px; }
+
+    /* Faol qism — OCHIQ KO'K (accent) belgi */
+    .watch-ep.on {
+        background: rgba(42, 171, 238, .14);
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(42, 171, 238, .35);
+    }
+    .watch-ep.on .watch-ep-num { background: var(--accent); color: #04202e; }
 }
 
 /* ==================================================================
