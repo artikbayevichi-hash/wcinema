@@ -543,4 +543,5 @@ $NAV_ACTIVE = 'home';
          (chat alohida `chat.php` sahifasida). Skriptni yuklamaslik tezlik
          uchun ham foyda: yana bir katta fayl (telegram ulanishlari yo'q). */ ?>
 <script src="assets/js/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/player.js') ?: 1; ?>"></script>
+<script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
 <script src="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>"></script>

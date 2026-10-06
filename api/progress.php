@@ -2,7 +2,13 @@
 // Ko'rish progressini saqlash (davomiylik - qayerda to'xtaganingiz)
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-requireUser();
+// Foydalanuvchi PHP sessiyasidan YOKI brauzerdagi MTProto (`tg_me`) dan
+// aniqlanadi - davomiylik ("qayerda to'xtagansiz") MTProto foydalanuvchisi
+// uchun ham saqlanishi kerak.
+$userId = clientUserId();
+if ($userId <= 0) {
+    Auth::fail('Avval tizimga kiring', 401);
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     fail('POST so\'raladi', 405);

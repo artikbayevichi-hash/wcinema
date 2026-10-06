@@ -405,6 +405,9 @@
   function countView() {
     if (S.viewed || !D.id) return;
     S.viewed = true;
+    // MTProto (PHP sessiyasi yo'q) uchun ko'rish tarixini mahalliy saqlaymiz:
+    // profilning "Tarix" yorlig'i aynan shu localStorage'dan o'qiydi.
+    if (!W.loggedIn) mirrorLib('history', true);
     var body = new URLSearchParams();
     body.set('id', D.id);
     var tg = tgUserId();
@@ -423,9 +426,9 @@
     progTimer = setTimeout(function () { progTimer = null; saveProgress(v); }, 10000);
   }
   function saveProgress(v) {
-    if (!W.loggedIn || !v) return;
+    if (!isLoggedIn() || !v) return;
     if (!v.duration || !isFinite(v.duration)) return;
-    fetch(base + '/api/progress.php', {
+    fetch(withMeQS(base + '/api/progress.php'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       credentials: 'same-origin',
@@ -612,11 +615,77 @@
      avval PHP sessiyasini, bo'lmasa `tg_me` ni tekshiradi. Saytning
      qolgan qismi (reels / notifications / profile) ham shu kalitni
      `localStorage['wc_tg_me_v1']` dan o'zi qo'shib yuboradi. */
+  /* Joriy Telegram akkaunt (MTProto) JSON satri. Avval localStorage keshi
+     (`wc_tg_me_v1`), bo'lmasa tirik `TgStream.me()` dan olinadi: ba'zi
+     holatlarda kesh hali yozilmagan bo'ladi, lekin klient ulangan bo'ladi.
+     `wc-lib.js` dagi `tgId()` bilan bir xil mantiq. */
+  function tgMeRaw() {
+    try { var v = localStorage.getItem('wc_tg_me_v1'); if (v) return v; } catch (e) {}
+    try {
+      if (global.TgStream && typeof global.TgStream.me === 'function') {
+        var m = global.TgStream.me();
+        if (m && m.id) {
+          return JSON.stringify({
+            id: String(m.id),
+            firstName: m.firstName || '',
+            lastName: m.lastName || '',
+            username: m.username || ''
+          });
+        }
+      }
+    } catch (e) {}
+    return '';
+  }
+
   function withMeQS(path) {
-    var m = '';
-    try { m = localStorage.getItem('wc_tg_me_v1') || ''; } catch (e) {}
+    var m = tgMeRaw();
     if (!m) return path;
     return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'tg_me=' + encodeURIComponent(m);
+  }
+
+  /* Foydalanuvchi kirganmi? PHP sessiyasi (`W.loggedIn`) YOKI brauzerdagi
+     MTProto akkaunt (`wc_tg_me_v1` / `TgStream.me()`) yetarli. Sayt asosan
+     MTProto orqali ishlaydi - u yerda serverda PHP sessiyasi bo'lmaydi va
+     `W.loggedIn` false qoladi; shu sabab yoqdi/saqlash bosilganda noto'g'ri
+     login oynasiga qaytarilardi. */
+  function isLoggedIn() {
+    if (W.loggedIn) return true;
+    if (tgMeRaw()) return true;
+    // Saytning o'z "kirilgan" belgisi (nav guard ham shuni tekshiradi):
+    // kalit bo'lsa login oynasiga aylantirmaymiz; server tanimasa - amal
+    // mahalliy bajariladi (`localVote` / `localSave`).
+    try {
+      var k = localStorage.getItem('wc_mtproto_auth_v1');
+      return !!(k && k.length > 20);
+    } catch (e) { return false; }
+  }
+
+  /* Mahalliy kutubxona yozuvi uchun element (`app.js` dagi `libItem` bilan
+     bir xil maydonlar). */
+  function libItem() {
+    return {
+      id: D.id,
+      title: D.title,
+      poster: D.poster,
+      category: D.category,
+      year: D.year
+    };
+  }
+
+  /* Server amali bajarilgach mahalliy kutubxonani ham yangilaymiz: PHP
+     sessiyasi bo'lmagan (MTProto) foydalanuvchining profili "Saqlanganlar /
+     Yoqqanlar / Tarix"ni aynan shu localStorage'dan ko'rsatadi. Server
+     javob bermay qolsa ham amal foydalanuvchiga ko'rinadi. */
+  function mirrorLib(kind, on) {
+    // PHP sessiyasi bor foydalanuvchining profili serverdan o'qiydi -
+    // mahalliy nusxa kerak emas (va chalkashtirmaydi).
+    if (W.loggedIn) return;
+    var lib = global.WCLib;
+    if (!lib) return;
+    try {
+      if (on) lib.add(kind, libItem());
+      else lib.remove(kind, D.id);
+    } catch (e) {}
   }
 
   /* Saqlash menyusini yopish. Elementni doim ID orqali qidirish shart
@@ -661,6 +730,15 @@
   function renderActions() {
     var box = el('watchActions');
     if (!box) return;
+
+    // PHP sessiyasi bo'lmasa (MTProto) "yoqdi/saqlash" holatini mahalliy
+    // kutubxonadan olamiz: server `WATCH.content` ni sessiyasiz hisoblaydi
+    // (has_liked=false), asl holat esa `index.php`/profil kabi localStorage'da.
+    if (!W.loggedIn && global.WCLib) {
+      D.has_liked    = global.WCLib.has('liked', D.id);
+      D.in_watchlist = global.WCLib.has('saved', D.id);
+    }
+
     var likes = Number(D.likes) || 0;
     var dislikes = Number(D.dislikes) || 0;
 
@@ -720,26 +798,48 @@
       animCount(el('actDislikeN'), oldD, D.dislikes, function (n) { return voteTxt(n, 'Yoqmadi'); });
     }
 
+    /* Server 401 qaytarsa (foydalanuvchini tanimadi) login oynasiga emas,
+       amalni mahalliy bajarib qo'yamiz - aks holda MTProto foydalanuvchisi
+       login <-> watch orasida aylanib qolardi. */
+    function localVote(type) {
+      var lib = global.WCLib;
+      if (!lib) { needLogin(); return; }
+      if (type === 'like') {
+        var on = lib.toggle('liked', libItem());
+        D.has_liked    = on;
+        D.has_disliked = false;
+        D.likes = Math.max(0, (Number(D.likes) || 0) + (on ? 1 : -1));
+      } else {
+        D.has_disliked = !D.has_disliked;
+        if (D.has_disliked && D.has_liked) { lib.remove('liked', D.id); D.has_liked = false; }
+        D.dislikes = Math.max(0, (Number(D.dislikes) || 0) + (D.has_disliked ? 1 : -1));
+      }
+      voteSync({ liked: D.has_liked, disliked: D.has_disliked, likes: D.likes, dislikes: D.dislikes });
+    }
+
     function bindVote(btnId, type) {
       var b = el(btnId);
       if (!b) return;
       b.onclick = function () {
-        if (!W.loggedIn) { needLogin(); return; }
+        if (!isLoggedIn()) { needLogin(); return; }
         b.classList.add('busy');
-        fetch(base + '/api/like.php', {
+        fetch(withMeQS(base + '/api/like.php'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           credentials: 'same-origin',
           body: 'id=' + encodeURIComponent(D.id)
                 + '&type=' + encodeURIComponent(type)
         }).then(function (raw) {
-          // Sessiya muddati o'tgan - javob 401: login oynasiga yo'naltiramiz.
-          if (raw.status === 401) { needLogin(); return null; }
+          // 401: PHP sessiyasi ham, server tan oladigan `tg_me` ham yo'q.
+          // Login oynasiga aylantirmasdan amalni mahalliy bajaramiz.
+          if (raw.status === 401) { localVote(type); return null; }
           return raw.json();
         }).then(function (r) {
           if (!r) return;
           if (r.success === false) throw new Error(r.message || 'Xato');
           voteSync(r);
+          // Profilning "mahalliy" rejimi (MTProto) shu nusxadan ko'rsatadi.
+          mirrorLib('liked', !!D.has_liked);
         }).catch(function (err) {
           toast(err.message || 'Xatolik');
         }).finally(function () { b.classList.remove('busy'); });
@@ -771,22 +871,34 @@
 
     function ensureSaved() {
       if (D.in_watchlist) return Promise.resolve(true);
-      return fetch(base + '/api/watchlist.php', {
+      return fetch(withMeQS(base + '/api/watchlist.php'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         credentials: 'same-origin',
         body: 'id=' + encodeURIComponent(D.id)
       }).then(function (raw) {
-        // Sessiya muddati o'tgan - javob 401: login oynasiga yo'naltiramiz.
-        if (raw.status === 401) { needLogin(); return null; }
+        // 401: server tanimadi - mahalliy kutubxonaga qo'shib qo'yamiz.
+        if (raw.status === 401) { return localSave(); }
         return raw.json();
       }).then(function (r) {
         if (!r) return false;
         if (r.success === false) throw new Error(r.message || 'Xato');
         D.in_watchlist = !!r.in_watchlist;
         if (w) w.classList.toggle('on', D.in_watchlist);
+        // Profilning "mahalliy" rejimi uchun nusxa.
+        mirrorLib('saved', D.in_watchlist);
         return D.in_watchlist;
       });
+    }
+
+    /* Serverga saqlab bo'lmasa (401) mahalliy kutubxonaga qo'shamiz. */
+    function localSave() {
+      var lib = global.WCLib;
+      if (!lib) return false;
+      try { lib.add('saved', libItem()); } catch (e) {}
+      D.in_watchlist = true;
+      if (w) w.classList.toggle('on', true);
+      return true;
     }
 
     var sm = el('actSaveMenu');
@@ -795,7 +907,7 @@
         ev.stopPropagation();
         var it = ev.target.closest && ev.target.closest('[data-go]');
         if (!it) return;
-        if (!W.loggedIn) { needLogin(); closeSaveMenu(); return; }
+        if (!isLoggedIn()) { needLogin(); closeSaveMenu(); return; }
         it.classList.add('busy');
         ensureSaved().then(function () {
           // `nav.php` dagi Kutubxona bo'limi:

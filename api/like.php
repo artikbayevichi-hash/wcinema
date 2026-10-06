@@ -19,7 +19,13 @@
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-requireUser();
+// Foydalanuvchi PHP sessiyasidan YOKI brauzerdagi MTProto (`tg_me`) dan
+// aniqlanadi. Aks holda faqat sessiyali foydalanuvchi yoqdi qo'ya olardi:
+// MTProto orqali kirganlarning har bosishi 401 -> login oynasiga qaytarardi.
+$userId = clientUserId();
+if ($userId <= 0) {
+    Auth::fail('Avval tizimga kiring', 401);
+}
 
 $contentId = contentIdInput();
 if ($contentId <= 0) {

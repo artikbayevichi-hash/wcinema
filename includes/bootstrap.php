@@ -145,14 +145,17 @@ function requireUser() {
 }
 
 /**
- * Reels yuklash uchun joriy foydalanuvchi ID'si (0 bo'lsa — aniqlanmadi).
+ * Joriy foydalanuvchi ID'si (0 bo'lsa — aniqlanmadi).
+ *
+ * Avval PHP sessiyasi (`$user`), bo'lmasa brauzerdagi MTProto akkaunt
+ * identifikatori `tg_me` (`localStorage['wc_tg_me_v1']`) dan aniqlanadi.
  *
  * Sayt brauzerdagi MTProto orqali ishlaganda serverda PHP sessiyasi
- * bo'lmaydi. Shu sabab brauzer `tg_me` (wc_tg_me_v1) yuboradi; undan
- * foydalanuvchi topiladi yoki yaratiladi. Bu amal FAQAT kontent
- * qo'shish uchun — admin huquqi BERMAYDI (yuklama moderatsiyaga tushadi).
+ * bo'lmaydi. Shu sabab mijoz har so'rovga `tg_me=...` qo'shadi; undan
+ * foydalanuvchi topiladi yoki yaratiladi. Bu amal FAQAT o'z amallari
+ * (yoqdi/saqlash/davomiylik/yuklash) uchun — admin huquqi BERMAYDI.
  */
-function reelUserId() {
+function clientUserId() {
     global $user, $auth;
     if ($user) {
         return (int) $user['id'];
@@ -166,6 +169,16 @@ function reelUserId() {
         return 0;
     }
     return (int) $auth->ensureUserFromClient($tg);
+}
+
+/**
+ * Reels yuklash uchun joriy foydalanuvchi ID'si (0 bo'lsa — aniqlanmadi).
+ *
+ * `clientUserId()` bilan bir xil; nom tarixiy sabab bilan saqlangan
+ * (reels/reel-upload/notifications shu nomni chaqiradi).
+ */
+function reelUserId() {
+    return clientUserId();
 }
 
 /** Faqat admin. JSON API uchun (boshqa joyda esa sahifa 403). */

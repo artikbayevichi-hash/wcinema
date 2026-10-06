@@ -11,7 +11,13 @@
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 
-requireUser();
+// Foydalanuvchi PHP sessiyasidan YOKI brauzerdagi MTProto (`tg_me`) dan
+// aniqlanadi (like.php bilan bir xil) - MTProto foydalanuvchisi ham
+// kutubxonaga qo'sha olishi kerak.
+$userId = clientUserId();
+if ($userId <= 0) {
+    Auth::fail('Avval tizimga kiring', 401);
+}
 
 $contentId = contentIdInput();
 
