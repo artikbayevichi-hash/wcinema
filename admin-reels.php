@@ -37,9 +37,9 @@ $counts  = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Moderatsiya — <?php echo htmlspecialchars(SITE_NAME); ?></title>
-    <link rel="stylesheet" href="assets/css/style.css">
-    <link rel="stylesheet" href="assets/css/reels.css">
-    <link rel="stylesheet" href="assets/css/instagram.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/css/reels.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/reels.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
 </head>
 <body class="adm-body ig-shell">

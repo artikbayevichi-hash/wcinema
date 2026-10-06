@@ -28,9 +28,9 @@ $meId       = $user ? (int) $user['id'] : null;
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?></title>
     <meta name="description" content="Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?>">
-    <link rel="stylesheet" href="assets/css/style.css">
-    <link rel="stylesheet" href="assets/css/profile.css">
-    <link rel="stylesheet" href="assets/css/instagram.css">
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/css/profile.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/profile.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <!-- Telegram Web App &mdash; FAQAT Telegram ilovasi ichida kerak. Oddiy
          tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani
