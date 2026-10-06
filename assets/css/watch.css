@@ -328,23 +328,105 @@
 }
 
 /* ======================================================== SARLAVHA / AMALLAR */
+/* YouTube YERLASUVI:
+     <h1> sarlavha
+     .watch-meta  ->  flex
+       .watch-meta-l  (chap)  = kanal bloki + statistika qatori
+       .watch-meta-r  (o'ng)  = kinomanba belgilari + harakat tugmalari
+
+   Kanal bloki va harakatlar bitta qatorda yonma-yon turadi, lekin
+   ICHKI qatorda vertikal markazlashgan — xuddi shunday YouTube'da. */
 .watch-head { margin: 14px 0 0; }
 .watch-title {
     font-size: 21px; font-weight: 800; line-height: 1.25;
-    margin: 0 0 6px; color: var(--text);
+    margin: 0 0 10px; color: var(--text);
 }
+
+/* --- Meta qatori (kanal | belgilar + tugmalar) ------------------------ */
+/* `flex` qiymatlari NIMA UCHUN shunday:
+     .watch-meta-l -> `1 1 auto`  chap tomon KONTENT bo'yicha o'lchanadi
+                                   va bo'sh joyni to'ldiradi;
+     .watch-meta-r -> `0 0 auto`  o'ng tomon hech qachon kichiklashmaydi.
+   Avvalchapda `1 1 240px` + `0 1 auto` edi: 240 + 525 = 765px, konteyner
+   esa 757px — 8px yetishmaydi, shuning uchun `.watch-meta` dagi
+   `flex-wrap: wrap` qatorni IKKITA qatorga sindirardi (kanal yuqorida,
+   tugmalar ostida). YouTube'da esa ular bir qatorda yonma-yon turadi. */
+.watch-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px 18px; flex-wrap: wrap;
+}
+.watch-meta-l {
+    display: flex; flex-direction: column; gap: 5px;
+    min-width: 0; flex: 1 1 auto;
+}
+.watch-meta-r {
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 8px; flex: 0 0 auto;
+    /* Xavfsizlik: agar ekran torayib qator baribir sindirilsa ham,
+       harakatlar o'ngda qoladi (YouTube'dagi kabi). */
+    margin-left: auto;
+}
+
+/* --- Kanal (avatar + nom + obunachi) --------------------------------- */
+/* YouTube'da avatar 40px aylana, nom 16px yirg' (semibold), obunachi
+   12px kulrang va ostida turadi. */
+.watch-channel {
+    display: flex; align-items: center; gap: 12px; min-width: 0;
+}
+.watch-channel-av {
+    flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
+    overflow: hidden; background: var(--card-2);
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.watch-channel-av img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.watch-channel-tx { display: flex; flex-direction: column; min-width: 0; }
+.watch-channel-name {
+    font-size: 16px; font-weight: 700; line-height: 1.2;
+    color: var(--text); text-decoration: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.watch-channel-name:hover { color: var(--accent); }
+.watch-channel-subs {
+    font-size: 12px; color: var(--muted); line-height: 1.3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* --- Statistika qatori (ko'rish + vaqt) ------------------------------ */
+/* YouTube'da bu kanal qatorining OSTIDA turadi — shuning uchun
+   `.watch-meta-l` ichida, vertikal joylashuvda. */
 .watch-sub {
     font-size: 13px; color: var(--muted);
-    display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+    display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center;
+    padding-left: 52px;   /* avatar (40) + gap (12) — kanal bilan tekislashadi */
 }
 .watch-sub .watch-chip {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 9px; border-radius: 999px;
-    background: var(--card); border: 1px solid var(--line);
-    font-size: 12px; color: var(--text); font-weight: 600;
+    padding: 0; border-radius: 0;
+    background: none; border: 0;
+    font-size: 13px; color: var(--muted); font-weight: 400;
 }
+
+/* --- Kinomanba belgilari (★ reyting, yil, sifat) --------------------- */
+/* "Obuna" tugmasi o'rni. YouTube'da bu yerda kanalga obuna bo'ladi;
+   bizda kanal tugmasi yo'q, shuning uchun filmning o'z ma'lumoti. */
+.watch-badges {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    font-size: 13px; font-weight: 700;
+}
+.watch-badges[hidden] { display: none; }
+.watch-badge-rating { color: var(--gold); }
+.watch-badge-year   { color: var(--muted); font-weight: 600; }
+.watch-badge-q {
+    color: var(--muted); font-weight: 600;
+    background: var(--card-2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px 8px; font-size: 12px;
+}
+
+/* --- Harakat tugmalari ---------------------------------------------- */
 .watch-actions {
-    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
 }
 .watch-act {
     display: inline-flex; align-items: center; gap: 7px;
@@ -360,6 +442,50 @@
 .watch-act.on     { background: var(--accent); border-color: var(--accent); color: #fff; }
 .watch-act.busy   { opacity: .6; pointer-events: none; }
 .watch-act svg    { width: 17px; height: 17px; flex: 0 0 auto; }
+
+/* Yoqdi | Yoqmadi — YOPIQ juftlik (YouTube kabi). Ichki chegara
+   ikki tugmani bitta tugma kabi ko'rsatadi. */
+.watch-vote {
+    display: inline-flex; align-items: stretch;
+    border-radius: 999px; overflow: hidden;
+    background: var(--card-2); border: 1px solid var(--line);
+}
+.watch-vote .watch-act {
+    border: 0; border-radius: 0; background: none;
+}
+/* MUHIM: quyidagi ikki qoida `.watch-act:hover` / `.watch-act.on`
+   bilan BIR XIL kuchsizlikka ega (0,2,0), lekin ULAR SHU QATORDAN
+   keyin keladi — ya'ni yutish ularning qo'liga o'tadi. Shuning uchun
+   hover va "bosilgan" holatlar alohida, kuchliroq yoziladi. */
+.watch-vote .watch-act:hover { background: var(--line); }
+.watch-vote .watch-act.on,
+.watch-vote .watch-act.on:hover {
+    background: var(--accent); color: #fff;
+}
+.watch-vote .watch-act + .watch-act {
+    border-left: 1px solid var(--line);
+}
+/* Bitta tugma faqat ikonalash — YouTube'da ham shunday (son yo'q). */
+.watch-act-vote-d { padding: 9px 13px; }
+
+/* --- O'RTA EKRAN: tugmalar FAQAT IKONKA (YouTube'dagi kabi) ---------
+   Nima uchun 1180px:
+     Chap ustun kengligi = sahifa (V-28) - yon panel (max(300, 27%)) - 18.
+     Tugmalar matnlari bilan 525px + kanal 230px + bo'shliq 18px = 773px.
+     Bu 773px chiroyli faqat ~1115px dan kattagonal ekranda sig'di; 1100px
+     kenglikdagi noutbukda (masalan 1280x800 da oyna 1115px) `.watch-meta`
+     dagi `flex-wrap: wrap` qatorni sindirib, kanal va tugmalar ustma-ust
+     tushardi — YouTube'da esa ular har doim bir qatorda.
+
+   YouTube ham aynan shunday qiladi: ekran torayganda "Ulashish",
+   "Yuklab olish", "Saqlash" tugmalari matnini yo'qotib, faqat ikonka
+   qilib qoladi. Bizda matn `.watch-act-t` bilan ajratilgan; like SONI
+   (`.watch-act-vote-n`) esa har doim ko'rinadi — YouTube'da "3,9 ming"
+   yozuvi ham ikonka qilib qisqartirilmaydi. */
+@media (max-width: 1180px) {
+    .watch-act-t { display: none; }
+    .watch-act { padding: 9px 13px; }
+}
 
 /* ============================================================ TAQSIF */
 .watch-desc {
@@ -616,6 +742,40 @@
     /* Qismlar kassetasi mobil'da ham vertikal skroll qoladi - 100+ qismli
        serialda butun ro'yxat ekranni to'ldirib yuboradi. */
     .watch-side-eps .watch-side-list { max-height: 60dvh; }
+}
+/* --- Meta qatori: kichik ekranda VERTIKAL (YouTube mobildek) ---
+   Tor ekranda kanal bloki va harakatlar yonma-yon sig'maydi, shuning
+   uchun ustma-ust tushadi: kanal -> ★/yil -> statistika -> tugmalar.
+   Tugmalar qatori to'liq kenglikda va ko'lda siljitiladi (YouTube'da
+   ham shunday qilib qilinadi — ular sig'may qolganda). */
+@media (max-width: 700px) {
+    .watch-meta { flex-direction: column; align-items: stretch; gap: 10px; }
+    /* MUHIM — `min-width: 0; max-width: 100%`:
+       `.watch-meta` da `flex-wrap: wrap` bor. Ustun (column) flex
+       konteynerida qatorning KENGIGI kontentdan olinadi va u hech qachon
+       kontentdan kichik qilinmaydi. Tugmalar qatori esa `nowrap` +
+       `overflow-x: auto` — ya'ni max-content kengligi 481px. `max-width`
+       yo'q bo'lsa, butun meta qatori 390px ekranda 459px ga chiqib,
+       butun SAHIFA gorizontal silinsa kerak bo'lardi. `max-width: 100%`
+       qatorni joyida ushlab turadi, `.watch-actions` esa ICHIDA
+       silinadi — YouTube'dagi kabi. */
+    .watch-meta-l, .watch-meta-r { min-width: 0; max-width: 100%; }
+    .watch-meta-l { flex: 1 1 auto; }
+    .watch-meta-r {
+        flex: 1 1 auto; align-items: stretch;
+        border-top: 1px solid var(--line); padding-top: 10px;
+    }
+    /* ★ reyting va yil endi tugmalardan oldingi qatorning chapida —
+       kanal qatori ostida (YouTube'dagi kabi). */
+    .watch-badges { font-size: 12.5px; }
+    .watch-actions {
+        flex-wrap: nowrap; overflow-x: auto; gap: 6px;
+        -webkit-overflow-scrolling: touch; scrollbar-width: none;
+        padding-bottom: 2px;
+    }
+    .watch-actions::-webkit-scrollbar { display: none; }
+    .watch-act { padding: 8px 12px; font-size: 13px; flex: 0 0 auto; }
+    .watch-vote { flex: 0 0 auto; }
 }
 @media (max-width: 560px) {
     .ig-page.watch-page { padding: 10px; }

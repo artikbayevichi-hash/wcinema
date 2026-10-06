@@ -188,6 +188,10 @@ $WATCH = [
     'botName'   => TELEGRAM_BOT_USERNAME,
     'miniApp'   => MINI_APP_URL,
     'loggedIn'  => (bool) $user,
+    // YouTube uslubidagi kanal qatori uchun: kanal nomi (SITE_NAME) va
+    // "N obunachi". Bular serverda hisoblanadi - frontend hisoblamaydi.
+    'siteName'  => SITE_NAME,
+    'subscribers' => $catalog->getSubscriberCount(),
     'content'   => $item ? $catalog->toPublicArray($item, $userId) : null,
     'genres'    => $genres,
     'episodes'  => $episodes,
@@ -283,11 +287,45 @@ $NAV_ACTIVE = 'home';
             <!-- Video -->
             <div class="watch-player" id="watchPlayer"></div>
 
-            <!-- Sarlavha + harakatlar -->
+            <!-- Sarlavha + YouTube uslubidagi meta qatori
+
+     YouTube YERLAŞUVI (desktop):
+         <h1> Sarlavha
+         ┌──────────────────────────────────────────────────────┐
+         │ [av] Kanal nomi        ★ 8.0  2024                 │
+         │      N obunachi    [👍 3,9 ming][👎] [📚] [🔗] [📋] │
+         └──────────────────────────────────────────────────────┘
+         📅 1,2 ming ko'rildi · 3 kun oldin
+
+     Ya'ni kanal bloki CHAPDA, harakat tugmalari O'NGDA, ko'rish/vaqt
+     esa IKKINCHI qatorda (YouTube'dagi kabi). "Obuna" tugmasi yo'q -
+     uning o'rnida kino ma'lumoti (reyting + yil). -->
             <div class="watch-head">
                 <h1 class="watch-title" id="watchTitle"></h1>
-                <div class="watch-sub" id="watchSub"></div>
-                <div class="watch-actions" id="watchActions"></div>
+                <div class="watch-meta">
+
+                    <!-- CHAP: kanal + statistika -->
+                    <div class="watch-meta-l">
+                        <div class="watch-channel">
+                            <span class="watch-channel-av">
+                                <?php echo wc_logo_img(SITE_NAME, 'width="40" height="40"'); ?>
+                            </span>
+                            <span class="watch-channel-tx">
+                                <a class="watch-channel-name" href="index.php"><?php
+                                    echo htmlspecialchars(SITE_NAME);
+                                ?></a>
+                                <span class="watch-channel-subs" id="watchSubs"></span>
+                            </span>
+                        </div>
+                        <div class="watch-sub" id="watchSub"></div>
+                    </div>
+
+                    <!-- O'NG: kinomanba ma'lumoti + harakat tugmalari -->
+                    <div class="watch-meta-r">
+                        <div class="watch-badges" id="watchBadges"></div>
+                        <div class="watch-actions" id="watchActions"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Qisqa tavsif -->

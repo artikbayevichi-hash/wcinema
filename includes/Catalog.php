@@ -765,43 +765,88 @@ class Catalog {
     }
 
     // =========================================================================
-    // Like
+    // Like / Dislike  (YouTube uslubi)
     // =========================================================================
-    public function hasLiked($userId, $contentId) {
-        $row = $this->db()->fetchOne(
-            "SELECT id FROM likes WHERE user_id = ? AND content_id = ? LIMIT 1",
+    //
+    // NIMA UCHUN type maydoni: `likes` jadvalida `type ENUM('like','dislike')`
+    // allaqachon bor, lekin avval kod faqat `like` yozardi va `hasLiked()` /
+    // `getLikeCount()` `type` ni UMUMTA filtrlamasdi. Ya'ni dislike qo'shilsa,
+    // u ham "yoqdi" deb hisoblanardi. Endi har bir so'rov aniq turga bog'langan.
+    //
+    // YouTube qoidasi (bizda ham shu):
+    //   · xuddi shu tugma yana bosilsa  -> BEKOR QILINADI (qator o'chadi);
+    //   · qarama-qarshi tugma bosilsa -> ALMASHADI (bitta qator qoladi).
+    // Demak foydalanuvchi hech qachon bitta videoni ham yoqgan, ham yoqmay
+    // degandek ko'rinmaydi - bu hisoblar ham to'g'ri qoladi.
+
+    /** Bitta foydalanuvchi + kontent uchun yagona qator (toggle uchun). */
+    private function voteRow($userId, $contentId) {
+        return $this->db()->fetchOne(
+            "SELECT id, type FROM likes WHERE user_id = ? AND content_id = ? LIMIT 1",
             [(int) $userId, (int) $contentId]
+        );
+    }
+
+    private function hasVote($userId, $contentId, $type) {
+        $row = $this->db()->fetchOne(
+            "SELECT id FROM likes WHERE user_id = ? AND content_id = ? AND type = ? LIMIT 1",
+            [(int) $userId, (int) $contentId, (string) $type]
         );
         return (bool) $row;
     }
 
-    public function toggleLike($contentId, $userId) {
+    public function hasLiked($userId, $contentId) {
+        return $this->hasVote($userId, $contentId, 'like');
+    }
+
+    public function hasDisliked($userId, $contentId) {
+        return $this->hasVote($userId, $contentId, 'dislike');
+    }
+
+    /**
+     * `type` = 'like' | 'dislike'. Bir marta bosiladi - holat o'zgaradi.
+     *
+     * @return array{success:bool, message?:string, liked:bool, disliked:bool}
+     */
+    public function toggleVote($contentId, $userId, $type = 'like') {
+        $type = ((string) $type === 'dislike') ? 'dislike' : 'like';
+
         $item = $this->getContent($contentId);
         if (!$item) {
             return ['success' => false, 'message' => 'Kontent topilmadi'];
         }
 
-        $existing = $this->db()->fetchOne(
-            "SELECT id FROM likes WHERE user_id = ? AND content_id = ? LIMIT 1",
-            [(int) $userId, (int) $contentId]
-        );
+        $existing = $this->voteRow($userId, $contentId);
 
-        if ($existing) {
+        // --- xuddi shu tugma yana bosildi -> bekor qilish ---------------
+        if ($existing && (string) $existing['type'] === $type) {
             $this->db()->query("DELETE FROM likes WHERE id = ?", [$existing['id']]);
-            return ['success' => true, 'liked' => false];
+            return $this->voteResult($contentId, $userId);
         }
 
-        $ok = $this->db()->insert('likes', [
-            'user_id'    => (int) $userId,
-            'content_id' => (int) $contentId,
-            'type'       => 'like',
-        ]);
-        if (!$ok) {
-            return ['success' => false, 'message' => 'Like saqlanmadi'];
+        // --- qarama-qarshi tugma -> qatorni ALMASHISH --------------------
+        // (INSERT yo'q, UPDATE bor - shuning uchun bildirishnoma ham bir marta
+        //  chiqadi va eski turi bilan emas, YANGI turi bilan yuboriladi.)
+        if ($existing) {
+            $this->db()->query(
+                "UPDATE likes SET type = ? WHERE id = ?",
+                [$type, $existing['id']]
+            );
+        } else {
+            $ok = $this->db()->insert('likes', [
+                'user_id'    => (int) $userId,
+                'content_id' => (int) $contentId,
+                'type'       => $type,
+            ]);
+            if (!$ok) {
+                return ['success' => false, 'message' => 'Baho saqlanmadi'];
+            }
         }
 
-        // Muallifga xabar (agar boshqa foydalanuvchi bo'lsa)
-        if (!empty($item['user_id']) && (int) $item['user_id'] !== (int) $userId) {
+        // Muallifga xabar. Faqat YOQISH haqida - "yoqmadi" xabarsiz qoladi,
+        // aks holda har bir manfiy baho muallifga yozish yuborardi.
+        if ($type === 'like' && !empty($item['user_id'])
+            && (int) $item['user_id'] !== (int) $userId) {
             $this->db()->insert('notifications', [
                 'user_id'    => (int) $item['user_id'],
                 'type'       => 'like',
@@ -811,14 +856,55 @@ class Catalog {
             ]);
         }
 
-        return ['success' => true, 'liked' => true];
+        return $this->voteResult($contentId, $userId);
+    }
+
+    /** Sahifaga qaytariladigan yagona javob shakli (Frontend bitta joyda ishlaydi). */
+    private function voteResult($contentId, $userId) {
+        return [
+            'success'  => true,
+            'liked'    => $this->hasLiked($userId, $contentId),
+            'disliked' => $this->hasDisliked($userId, $contentId),
+            'likes'    => $this->getLikeCount($contentId),
+            'dislikes' => $this->getDislikeCount($contentId),
+        ];
+    }
+
+    /** Eski chaqiruv uchun qisqacha (`api/like.php` `type` bermasa ham ishlaydi). */
+    public function toggleLike($contentId, $userId) {
+        return $this->toggleVote($contentId, $userId, 'like');
     }
 
     public function getLikeCount($contentId) {
         $row = $this->db()->fetchOne(
-            "SELECT COUNT(*) AS n FROM likes WHERE content_id = ?", [(int) $contentId]
+            "SELECT COUNT(*) AS n FROM likes WHERE content_id = ? AND type = 'like'",
+            [(int) $contentId]
         );
         return (int) ($row['n'] ?? 0);
+    }
+
+    public function getDislikeCount($contentId) {
+        $row = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS n FROM likes WHERE content_id = ? AND type = 'dislike'",
+            [(int) $contentId]
+        );
+        return (int) ($row['n'] ?? 0);
+    }
+
+    /**
+     * Kanal qatoridagi "N obunachi" soni.
+     *
+     * YouTube'da kanal = kontentni nashr etuvchi. Bu saytda ham shunaqa:
+     * kinolar Telegram'dan olinadi, lekin kanal SITE_NAME. Shuning uchun
+     * obunachi = ro'yxatdan o'tgan foydalanuvchilar soni.
+     */
+    public function getSubscriberCount() {
+        try {
+            $row = $this->db()->fetchOne("SELECT COUNT(*) AS n FROM users");
+            return (int) ($row['n'] ?? 0);
+        } catch (Throwable $e) {
+            return 0;
+        }
     }
 
     // =========================================================================
@@ -1045,10 +1131,15 @@ class Catalog {
             'is_premium'  => !empty($c['is_premium']),
         ];
 
+        // Baholar har doim kerak (kirish holatidan qat'i nazar) - frontend
+        // ulashgan odam ham sonni ko'radi.
+        $out['likes']     = $this->getLikeCount($c['id']);
+        $out['dislikes']  = $this->getDislikeCount($c['id']);
+
         if ($viewerId) {
             $out['has_liked']     = $this->hasLiked($viewerId, $c['id']);
+            $out['has_disliked']  = $this->hasDisliked($viewerId, $c['id']);
             $out['in_watchlist']  = $this->inWatchlist($viewerId, $c['id']);
-            $out['likes']         = $this->getLikeCount($c['id']);
         }
 
         return $out;

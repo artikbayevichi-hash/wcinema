@@ -1,10 +1,17 @@
 <?php
 // ============================================================================
-// like.php - kontentga yoqish / yoqishni bekor qilish
+// like.php - kontentga yoqish / YOQMASLIK va bularni bekor qilish
 //
 // DIQQAT: GET va POST turli vazifani bajaradi:
-//   GET  ?id=N  -> hozirgi holatni O'QISH (hech narsa o'zgartirmaydi)
-//   POST id=N   -> YOQISH / BEKOR QILISH (holatni o'zgartiradi)
+//   GET  ?id=N             -> hozirgi holatni O'QISH (hech narsa o'zgartirmaydi)
+//   POST id=N [&type=...]  -> BAHOLASH / BEKOR QILISH (holatni o'zgartiradi)
+//
+// `type` = `like` (yoqdi) | `dislike` (yoqmadi). Berilmasa `like`.
+//
+// YouTube qoidasi (Catalog::toggleVote ham shunday):
+//   · xuddi shu tugma yana bosilsa  -> bekor qilinadi (qator o'chadi);
+//   · qarama-qarshi tugma bosilsa -> almashtiriladi (bitta qator qoladi).
+// Demak bitta odam bitta videoni ham yoqib ham yoqmay qolmaydi.
 //
 // Bu farq muhim: agar GET ham o'zgartirsa, foydalanuvchi linkni oldindan
 // ochsa ("prefetch") yoki saytga begona sayt ishlatib CSRF hujjum qilsa,
@@ -22,27 +29,34 @@ if (!$catalog->getContent($contentId)) {
     fail('Kontent topilmadi', 404);
 }
 
+$type = (string) (input('type', '', 10));
+if ($type !== 'dislike') {
+    $type = 'like';
+}
+
 // --- O'qish (GET): hech narsani o'zgartirmaydi
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    $count = $catalog->getLikeCount($contentId);
+    $likes = $catalog->getLikeCount($contentId);
     Auth::ok([
-        // DIQQAT: hasLiked() argument tartibi (userId, contentId)
+        // DIQQAT: hasLiked()/hasDisliked() argument tartibi (userId, contentId)
         'liked'       => $catalog->hasLiked($userId, $contentId),
-        'likes'       => $count,
-        'likes_count' => $count,
+        'disliked'    => $catalog->hasDisliked($userId, $contentId),
+        'likes'       => $likes,
+        'likes_count' => $likes,
+        'dislikes'    => $catalog->getDislikeCount($contentId),
     ]);
 }
 
 // --- O'zgartirish (POST)
-$result = $catalog->toggleLike($contentId, $userId);
+$result = $catalog->toggleVote($contentId, $userId, $type);
 if (!$result['success']) {
-    fail($result['message'] ?? 'Like muvaffaqiyatsiz');
+    fail($result['message'] ?? 'Baho muvaffaqiyatsiz');
 }
 
-$count = $catalog->getLikeCount($contentId);
-
 Auth::ok([
-    'liked'       => $result['liked'],
-    'likes'       => $count,
-    'likes_count' => $count,
+    'liked'       => (bool) $result['liked'],
+    'disliked'    => (bool) $result['disliked'],
+    'likes'       => (int) $result['likes'],
+    'likes_count' => (int) $result['likes'],
+    'dislikes'    => (int) $result['dislikes'],
 ]);

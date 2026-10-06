@@ -443,6 +443,22 @@
   }
 
   // ============================================================ SARLAVHA
+  //
+  // YouTube YERLASUVI (sarlavha ostidagi bo'sh joy ham):
+  //
+  //   <h1> Sinov anime 1 — 2-qism
+  //   +--------------------------------------------------------+
+  //   | [av] W CINEMA          ★ 8.0   2024                 |
+  //   |      8 ta obunachi    [👍 3,9 ming][👎] [📚] [🔗] [📋]|
+  //   +--------------------------------------------------------+
+  //   📅 1,2 ming ko'rildi · 3 kun oldin
+  //
+  // O'ZGARISH: avval hammasi bitta "chiplar" qatorida edi
+  // (📅 ko'rildi · 🎩 1-fasl · 1-qism · ★ reyting · yil · sifat).
+  // Endi:
+  //   · 🎩 "1-fasl · 1-qism" YO'QOLDI (kinomanba saytdan olib tashlandi);
+  //   · ★ reyting va yil kanal qatoriga ko'chdi ("Obuna" tugmasi o'rniga);
+  //   · ko'rish + vaqt ikkinchi qatorda qoldi — YouTube'dagi kabi.
   function renderHead() {
     var t = el('watchTitle');
     var e = curEp();
@@ -452,22 +468,43 @@
         : D.title;
     }
 
+    // --- Kanal qatori: "N obunachi" ------------------------------------
+    // YouTube'da kanal = videoni nashr etuvchi. Bu saytda kinolar
+    // Telegram'dan olinadi, lekin kanal SITE_NAME ("W CINEMA") — shuning
+    // uchun obunachi soni ham ro'yxatdan o'tgan foydalanuvchilar soni
+    // (`Catalog::getSubscriberCount()`, serverda hisoblanadi).
+    var subs = el('watchSubs');
+    if (subs) {
+      var sn = Number(W.subscribers) || 0;
+      subs.textContent = sn > 0 ? fmtViews(sn) + ' ta obunachi' : 'Yangi kanal';
+    }
+
+    // --- Ikkinchi qator: ko'rish + vaqt --------------------------------
     var sub = el('watchSub');
     if (sub) {
       var views = Number(D.views) || 0;
       var parts = [];
       parts.push('<span class="watch-chip">\u{1F4E5} '
         + (views > 0 ? fmtViews(views) + ' ko‘rildi' : 'Yangi') + '</span>');
-      if (e && e.number) {
-        parts.push('<span class="watch-chip">\u{1F3A9} ' + esc(e.season)
-          + '-fasl · ' + esc(e.number) + '-qism</span>');
-      }
-      if (D.rating) parts.push('<span class="watch-chip">★ ' + Number(D.rating).toFixed(1) + '</span>');
-      if (D.year)    parts.push('<span class="watch-chip">' + esc(D.year) + '</span>');
-      if (D.quality) parts.push('<span class="watch-chip">' + esc(D.quality) + '</span>');
       var ago = fmtAgo(D.added_at || D.created_at);
       if (ago) parts.push('<span>' + esc(ago) + '</span>');
       sub.innerHTML = parts.join('');
+    }
+
+    // --- Kinomanba ma'lumoti (kanal qatorida, "Obuna" o'rniga) ---------
+    // YouTube'da shu yerda "Obuna" tugmasi turadi. Bizda kanal
+    // tugmasi kerak emas, shuning uchun filmning o'z ma'lumoti:
+    // reyting, yil va sifat.
+    var bg = el('watchBadges');
+    if (bg) {
+      var b = [];
+      if (D.rating) b.push('<span class="watch-badge-rating">★ '
+        + Number(D.rating).toFixed(1) + '</span>');
+      if (D.year)   b.push('<span class="watch-badge-year">' + esc(D.year) + '</span>');
+      if (D.quality) b.push('<span class="watch-badge-q">'
+        + esc(D.quality) + '</span>');
+      bg.innerHTML = b.join('');
+      bg.hidden = b.length === 0;
     }
 
     renderActions();
@@ -505,45 +542,88 @@
     }
   }
 
+  // ============================================== HARAKAT TUGMASI (YouTube)
+  //
+  // YouTube action-bar tartibi:
+  //   [👍 3,9 ming | 👎]  [Share]  [Download]  [Save]  [⋯]
+  //
+  // Bizda:
+  //   [👍 3,9 ming | 👎]  [📚 Kutubxona]  [🔗 Ulashish]  [📋 Qismlar]
+  //
+  // Muhim: 👍 va 👎 BITTAGINA yopiq guruhda (`.watch-vote`) turadi -
+  // YouTube'da ham shunday, chiziqcha ularni ajratib turadi.
   function renderActions() {
     var box = el('watchActions');
     if (!box) return;
     var likes = Number(D.likes) || 0;
-    box.innerHTML =
-      '<button type="button" class="watch-act" id="actLike" title="Yoqdi">'
-      + '\u{1F44D} <span>' + (likes > 0 ? fmtViews(likes) : 'Yoqdi') + '</span></button>'
-      + '<button type="button" class="watch-act" id="actWatchlist" title="Kutubxonaga qo‘shish">'
-      + '\u{1F4DA} <span>Kutubxona</span></button>'
-      + '<button type="button" class="watch-act" id="actShare">'
-      + '\u{1F517} <span>Ulashish</span></button>'
+
+    // Yoqdi/Yoqmadi — bitta yopiq juftlik.
+    //
+    // DIQQAT — `.watch-act-vote-n` (like SONI) boshqa tugmalardan
+    // ataylab ajratilgan: tor ekranda CSS matnlarni yashiradi, lekin
+    // like soni har doim ko'rinib turadi (YouTube'da ham shunday —
+    // "3,9 ming" yozuvi ikona qilib qisqartirilmaydi).
+    var likeTxt = likes > 0 ? fmtViews(likes) : 'Yoqdi';
+    var vote = '<div class="watch-vote">'
+      + '<button type="button" class="watch-act watch-act-vote' + (D.has_liked ? ' on' : '') + '"'
+      +     ' id="actLike" title="Yoqdi" aria-label="Yoqdi">'
+      +     '👍 <span class="watch-act-vote-n">' + esc(likeTxt) + '</span></button>'
+      + '<button type="button" class="watch-act watch-act-vote watch-act-vote-d' + (D.has_disliked ? ' on' : '') + '"'
+      +     ' id="actDislike" title="Yoqmadi" aria-label="Yoqmadi">'
+      +     '👎</button>'
+      + '</div>';
+
+    // Qolgan tugmalardagi matnlar `.watch-act-t` — 1180px dan kichikda
+    // CSS ularni yashiradi va tugma faqat ikonkaga aylanadi.
+    box.innerHTML = vote
+      + '<button type="button" class="watch-act" id="actWatchlist" title="Kutubxonaga qo\'shish" aria-label="Kutubxona">'
+      +   '📚 <span class="watch-act-t">Kutubxona</span></button>'
+      + '<button type="button" class="watch-act" id="actShare" title="Ulashish" aria-label="Ulashish">'
+      +   '🔗 <span class="watch-act-t">Ulashish</span></button>'
       + (S.sideEpisodes && S.episodes.length > 1
-        ? '<button type="button" class="watch-act" id="actAllEps">'
-          + '\u{1F4CF} <span>Qismlar</span></button>'
+        ? '<button type="button" class="watch-act" id="actAllEps" title="Qismlar ro\'yxati" aria-label="Qismlar">'
+          + '📋 <span class="watch-act-t">Qismlar</span></button>'
         : '');
 
-    // --- Like (YouTube uslubidagi "👍 Yoqdi")
-    var lk = el('actLike');
-    if (lk) {
-      lk.classList.toggle('on', !!D.has_liked);
-      lk.onclick = function () {
-        if (!W.loggedIn) { toast('Yoqish uchun kiring'); return; }
-        lk.classList.add('busy');
+    // --- Yoqish / Yoqmaslik ------------------------------------------
+    // Ikkalasi bitta so'rov (POST /api/like.php?type=...). Server
+    // `type` bo'yicha qaror qabul qiladi va javobda IKKALA holatni ham
+    // qaytaradi - shuning uchun frontend qayta so'rov yubormaydi.
+    function voteSync(r) {
+      D.has_liked    = !!r.liked;
+      D.has_disliked = !!r.disliked;
+      D.likes        = Number(r.likes) || 0;
+      D.dislikes     = Number(r.dislikes) || 0;
+      var lk = el('actLike'), dk = el('actDislike');
+      if (lk) {
+        lk.classList.toggle('on', D.has_liked);
+        lk.querySelector('span').textContent = D.likes > 0 ? fmtViews(D.likes) : 'Yoqdi';
+      }
+      if (dk) dk.classList.toggle('on', D.has_disliked);
+    }
+
+    function bindVote(btnId, type, guardMsg) {
+      var b = el(btnId);
+      if (!b) return;
+      b.onclick = function () {
+        if (!W.loggedIn) { toast(guardMsg); return; }
+        b.classList.add('busy');
         fetch(base + '/api/like.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           credentials: 'same-origin',
           body: 'id=' + encodeURIComponent(D.id)
+                + '&type=' + encodeURIComponent(type)
         }).then(function (r) { return r.json(); }).then(function (r) {
           if (r.success === false) throw new Error(r.message || 'Xato');
-          D.has_liked = !!r.liked;
-          D.likes = Number(r.likes) || 0;
-          lk.classList.toggle('on', D.has_liked);
-          lk.querySelector('span').textContent = D.likes > 0 ? fmtViews(D.likes) : 'Yoqdi';
+          voteSync(r);
         }).catch(function (err) {
           toast(err.message || 'Xatolik');
-        }).finally(function () { lk.classList.remove('busy'); });
+        }).finally(function () { b.classList.remove('busy'); });
       };
     }
+    bindVote('actLike', 'like', 'Yoqish uchun kiring');
+    bindVote('actDislike', 'dislike', 'Yoqmaslik uchun kiring');
 
     var w = el('actWatchlist');
     if (w) {
