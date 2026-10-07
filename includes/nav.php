@@ -542,7 +542,13 @@ window.addEventListener('DOMContentLoaded', function () {
         if (c.category) sub.push(c.category);
         if (c.year) sub.push(c.year);
         if (c.is_series && (c.episodes || c.total_episodes)) {
-            sub.push((c.episodes || c.total_episodes) + ' qism');
+            if (c.category_slug === 'anime') {
+                var isRel = parseInt(c.episodes, 10) || 0;
+                var isTot = parseInt(c.total_episodes, 10) || 0;
+                sub.push(isTot > isRel ? (isRel + '/' + isTot) : String(isRel || isTot));
+            } else {
+                sub.push((c.episodes || c.total_episodes) + ' qism');
+            }
         }
         return '<a class="ig-sres" href="watch.php?c=' + (parseInt(c.id, 10) || 0) + '">'
              + '<div class="ig-sres-thumb">' + poster + '</div>'

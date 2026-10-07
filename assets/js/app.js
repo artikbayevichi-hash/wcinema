@@ -110,8 +110,12 @@
         const fallback = poster ? '' :
             `<div class="poster-fallback">${esc(c.category || '🎬')}</div>`;
 
+        // Anime kartochkalarida "N QISM" yorlig'i va davomiylik o'rniga
+        // thumbnail'da "chiqqan/jami" qism (masalan 3/12) ko'rsatiladi.
+        const isAnime = c.category_slug === 'anime';
+
         const badges = [];
-        if (opts.series && c.is_series) {
+        if (opts.series && c.is_series && !isAnime) {
             badges.push(`<span class="badge badge-series">${esc(c.episodes || c.total_episodes || 0)} QISM</span>`);
         }
         if (opts.episodeLabel) {
@@ -123,7 +127,17 @@
 
         // YouTube uslubi: thumbnail burchagidagi davomiylik (12:34 / 1:32:05)
         const durSec = Number(c.duration) || 0;
-        const dur = durSec > 0 ? `<span class="yt-dur">${fmtTime(durSec)}</span>` : '';
+        let dur = durSec > 0 ? `<span class="yt-dur">${fmtTime(durSec)}</span>` : '';
+
+        // Anime: davomiylik o'rniga chiqarilgan/jami qism (3/12).
+        // To'liq chiqqan bo'lsa — faqat soni (12).
+        if (isAnime && c.is_series) {
+            const rel = Number(c.episodes) || 0;
+            const tot = Number(c.total_episodes) || 0;
+            dur = (rel > 0 || tot > 0)
+                ? `<span class="yt-dur yt-eps">${esc(tot > rel ? rel + '/' + tot : String(rel || tot))}</span>`
+                : '';
+        }
 
         // Meta: "1.2K ko'rildi · 3 kun oldin"
         const meta = [];
@@ -134,7 +148,7 @@
 
         const sub = [];
         if (c.category) sub.push(esc(c.category));
-        if (c.is_series && !opts.series) {
+        if (c.is_series && !opts.series && !isAnime) {
             sub.push(esc(c.episodes || c.total_episodes || 0) + ' qism');
         }
         if (c.year) sub.push(esc(c.year));
