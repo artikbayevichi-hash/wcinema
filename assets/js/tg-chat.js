@@ -26,7 +26,10 @@
     roomPeer: null,
     gifBot: null,
     pickerMode: '',
-    openedPeerId: 0
+    openedPeerId: 0,
+    dmLastId: 0,
+    dmPoll: null,
+    dmTypingTmr: null
   };
 
   // ----------------------------------------------------------- yordamchilar
@@ -49,6 +52,37 @@
     var raw = meRaw();
     if (raw) params.set('tg_me', raw);
     return params;
+  }
+
+  // ------------------------------------------------- shaxsiy xabarlar (server)
+  // DM endi SAYT serverida saqlanadi (api/dm.php) - brauzerdagi Telegram DM
+  // emas. Shu sabab qabul qiluvchi xabarni HAR DOIM oladi (serverda turadi).
+  function dmGet(params) {
+    return fetchJson(baseUrl('api/dm.php?' + withMe(new URLSearchParams(params)).toString()), {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin'
+    });
+  }
+  function dmPost(params) {
+    return fetchJson(baseUrl('api/dm.php'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: withMe(new URLSearchParams(params)).toString(),
+      credentials: 'same-origin'
+    });
+  }
+  // Yon paneldagi / pastki paneldagi "Chat" belgisini yangilaydi.
+  function updateChatBadge(n) {
+    n = Number(n) || 0;
+    var ids = ['igChatBadge', 'igChatBadgeM'];
+    for (var i = 0; i < ids.length; i++) {
+      var b = el(ids[i]);
+      if (!b) continue;
+      b.textContent = n > 99 ? '99+' : String(n);
+      b.hidden = !(n > 0);
+    }
   }
 
   function roomEmoji(key) {
@@ -91,17 +125,30 @@
   }
 
   // ============================================================ KONTAKTLAR
+  /** Suhbatlar ro'yxati: server DM (oxirgi xabar + o'qilmagan) va kontaktlar. */
   function loadContacts() {
     var box = el('chatContacts');
     if (!box) return;
-    fetchJson(baseUrl('api/chat.php?action=contacts&' + withMe(new URLSearchParams()).toString()), {
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin'
-    }).then(function (d) {
-      C.contacts = (d && d.contacts) || [];
+    dmGet({ action: 'threads' }).then(function (d) {
+      if (d && Array.isArray(d.threads)) C.contacts = d.threads;
+      else if (d && d.contacts) C.contacts = d.contacts;
+      else C.contacts = [];
       renderContacts();
+      if (d && typeof d.unread === 'number') updateChatBadge(d.unread);
     }).catch(function () {
       box.innerHTML = '<div class="chat-empty">Xabarlarni yuklab bo\'lmadi</div>';
     });
+  }
+
+  /** Ro'yxat uchun qisqa ko'rinish matni. */
+  function dmPreviewText(last) {
+    if (!last) return '';
+    var t = last.body || '';
+    if (!t) {
+      if (last.kind === 'photo') t = '📷 Rasm';
+      else if (last.kind === 'voice') t = '🎤 Ovozli xabar';
+    }
+    return (last.mine ? 'Siz: ' : '') + t;
   }
 
   function renderContacts() {
@@ -117,10 +164,16 @@
       var av = u.avatar
         ? '<img src="' + esc(u.avatar) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
         : '<span class="chat-cb-ph">' + esc((u.first_name || '?').charAt(0).toUpperCase()) + '</span>';
-      return '<button type="button" class="chat-contact" data-peer="' + u.id + '">'
+      var unread = Number(u.unread || 0);
+      var prev = u.last ? dmPreviewText(u.last) : (u.username ? '@' + u.username : 'Xabar yozish');
+      var right = unread
+        ? '<span class="chat-badge">' + (unread > 99 ? '99+' : unread) + '</span>'
+        : (u.last && u.last.ts ? '<span class="chat-when">' + esc(M().relTime(u.last.ts)) + '</span>' : '');
+      return '<button type="button" class="chat-contact' + (unread ? ' has-unread' : '') + '" data-peer="' + u.id + '">'
         + '<span class="chat-cav">' + av + '</span>'
         + '<span class="chat-cmain"><b>' + esc(name) + '</b>'
-        + '<span>' + esc(u.username ? '@' + u.username : 'Xabar yozish') + '</span></span>'
+        + '<span class="chat-prev">' + esc(prev) + '</span></span>'
+        + right
         + '</button>';
     }).join('');
     box.onclick = function (e) {
@@ -164,7 +217,7 @@
     if (C.voice) C.voice.close();
     closePicker();                        // emoji/stiker/GIF paneli ham yopiladi
     try { toggleFmt(false); } catch (e) {} // formatlash menyusi yopiladi
-    if (C.active && C.active.type === 'dm') loadContacts();
+    if (C.active && C.active.type === 'dm') { stopDmPoll(); loadContacts(); }
     C.active = null;
     C.locked = false; C.lockedReason = '';
     var lv = el('chatListView'), th = el('chatThread');
@@ -205,6 +258,7 @@
   function openRoom(room) {
     C.active = { type: 'room', room: room, topicId: room.topic_id ? Number(room.topic_id) : 0, title: room.title };
     C.locked = false; C.lockedReason = '';
+    stopDmPoll();
     openChat(room.title, room.url || '');
     if (!CHAT) { status('Chat sozlanmagan'); return; }
     if (!room.topic_id) { status('Bu xona hozircha tayyor emas'); return; }
@@ -240,7 +294,9 @@
   // ============================================================ DM OCHISH
   function openDM(contact) {
     C.active = { type: 'dm', peer: contact, peerEntity: null, title: contactName(contact) };
-    // Blok bo'lsa kompozitor o'chadi (server ham `can_message` ni tekshiradi).
+    C.dmLastId = 0;
+    stopDmPoll();
+    // Blok bo'lsa kompozitor o'chadi (server ham blokni tekshiradi).
     var blocked = !!contact.blocked;
     C.locked = blocked;
     C.lockedReason = blocked
@@ -257,31 +313,11 @@
       }
       return;
     }
-    if (!contact.telegram_user_id) { status('Bu foydalanuvchi bilan chat ochib bo\'lmaydi'); return; }
-    resolveUserEntity(contact.telegram_user_id)
-      .then(function (entity) { C.active.peerEntity = entity; return readDM(); })
-      .catch(function (e) { status('Chatni ochib bo\'lmadi: ' + esc(errMsg(e))); });
+    loadDM().then(function () { startDmPoll(); });
   }
 
   function contactName(u) {
     return [u.first_name, u.last_name].filter(Boolean).join(' ') || (u.username ? '@' + u.username : 'Chat');
-  }
-
-  function resolveUserEntity(tgId) {
-    return getClient().then(function (c) {
-      return c.getInputEntity(Number(tgId)).catch(function () {
-        var A = Api();
-        return c.invoke(new A.users.GetUsers({
-          id: [new A.InputUser({ userId: tgId, accessHash: 0 })]
-        })).then(function (users) {
-          var u = users && users[0];
-          if (u && u.className === 'User') {
-            if (u.accessHash) return new A.InputPeerUser({ userId: u.id, accessHash: u.accessHash });
-          }
-          throw new Error('Foydalanuvchi topilmadi');
-        });
-      });
-    });
   }
 
   // ============================================================ O'QISH
@@ -301,21 +337,202 @@
     }).then(function (res) { renderResult(res); });
   }
 
-  function readDM() {
-    var A = Api();
-    var a = C.active;
-    return getClient().then(function (c) {
-      return c.invoke(new A.messages.GetHistory({
-        peer: a.peerEntity, offsetId: 0, offsetDate: 0, addOffset: 0,
-        limit: 60, maxId: 0, minId: 0, hash: 0
-      }));
-    }).then(function (res) { renderResult(res); });
-  }
-
+  /** Faol suhbatni qayta yuklaydi (xona - Telegram, DM - server). */
   function reloadActive() {
     if (!C.active) return;
     if (C.active.type === 'room') return readRoom().catch(function () {});
-    return readDM().catch(function () {});
+    return loadDM();
+  }
+
+  // ============================================================ SHAXSIY XABAR
+  // Server DM uchun render + yuborish + poll. Telegram MTProto ishlatilmaydi.
+  function dmFeed() { return el('chatFeed'); }
+
+  function peerAvatarHtml() {
+    var p = C.active && C.active.peer;
+    if (!p) return '<div class="reels-c-av">?</div>';
+    if (p.avatar) {
+      return '<img class="reels-c-av" src="' + esc(p.avatar) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()">';
+    }
+    return '<div class="reels-c-av">' + esc((p.first_name || '?').charAt(0).toUpperCase()) + '</div>';
+  }
+
+  function dmMediaHtml(m) {
+    if (m.kind === 'photo' && m.media_url) {
+      return '<div class="chat-dm-media"><img src="' + esc(m.media_url) + '" alt="" loading="lazy" referrerpolicy="no-referrer"></div>';
+    }
+    if (m.kind === 'voice' && m.media_url) {
+      return '<div class="chat-dm-media chat-dm-voice"><audio controls preload="metadata" src="' + esc(m.media_url) + '"></audio></div>';
+    }
+    return '';
+  }
+
+  function dmRowHtml(m) {
+    var mine = !!m.mine;
+    var when = M().relTime(m.ts);
+    var media = dmMediaHtml(m);
+    var text = m.body
+      ? '<div class="chat-bub"><div class="chat-txt">' + esc(m.body) + '</div>'
+        + '<span class="chat-time">' + when + '</span></div>'
+      : '';
+    var timeOnly = (!m.body && media) ? '<span class="chat-time chat-time-free">' + when + '</span>' : '';
+    if (!media && !text) {
+      text = '<div class="chat-bub"><div class="chat-txt chat-txt-empty">—</div><span class="chat-time">' + when + '</span></div>';
+    }
+    var av = mine ? '' : '<div class="chat-avw">' + peerAvatarHtml() + '</div>';
+    return '<div class="chat-row' + (mine ? ' mine' : '') + '" data-mid="' + esc(String(m.id)) + '">'
+      + av + '<div class="chat-col">' + media + text + timeOnly + '</div></div>';
+  }
+
+  function drawDmFeed(msgs) {
+    var feed = el('chatFeed');
+    if (!feed) return;
+    if (!msgs.length) {
+      feed.innerHTML = '<div class="chat-status">Hozircha xabar yo\'q. Birinchi bo\'lib yozing 👋</div>';
+      return;
+    }
+    feed.innerHTML = msgs.map(dmRowHtml).join('');
+    scrollBottom(true);
+  }
+
+  function appendDmMessage(m) {
+    var feed = el('chatFeed');
+    if (!feed) return;
+    if (feed.querySelector('[data-mid="' + String(m.id) + '"]')) return;
+    var empty = feed.querySelector('.chat-status');
+    if (empty) feed.innerHTML = '';
+    feed.insertAdjacentHTML('beforeend', dmRowHtml(m));
+    scrollBottom(true);
+  }
+
+  function replaceDmRow(tmpId, real) {
+    var feed = el('chatFeed');
+    if (!feed || !real) return;
+    var row = feed.querySelector('[data-mid="' + String(tmpId) + '"]');
+    if (row) row.outerHTML = dmRowHtml(real);
+  }
+
+  function removeDmRow(id) {
+    var feed = el('chatFeed');
+    if (!feed) return;
+    var row = feed.querySelector('[data-mid="' + String(id) + '"]');
+    if (row && row.parentNode) row.parentNode.removeChild(row);
+  }
+
+  function loadDM() {
+    var a = C.active;
+    if (!a || a.type !== 'dm') return Promise.resolve();
+    var peerId = Number(a.peer.id);
+    dmGet({ action: 'messages', peer_id: peerId }).then(function (d) {
+      if (!C.active || C.active.type !== 'dm' || Number(C.active.peer.id) !== peerId) return;
+      var msgs = (d && d.messages) || [];
+      C.dmLastId = msgs.length ? Number(msgs[msgs.length - 1].id) : 0;
+      drawDmFeed(msgs);
+      markDmRead();
+      setTypingIndicator(!!(d && d.typing));
+    }).catch(function (e) {
+      status('Xabarlarni yuklab bo\'lmadi: ' + esc(errMsg(e)));
+    });
+    return Promise.resolve();
+  }
+
+  function markDmRead() {
+    var a = C.active;
+    if (!a || a.type !== 'dm') return;
+    dmPost({ action: 'read', peer_id: a.peer.id }).then(function (d) {
+      if (d && typeof d.unread === 'number') updateChatBadge(d.unread);
+    }).catch(function () {});
+  }
+
+  function sendDmText(text) {
+    var a = C.active;
+    if (!a || a.type !== 'dm' || guardSend()) return Promise.resolve(false);
+    var tmpId = 'local-' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
+    var clientId = 'c' + Date.now() + Math.floor(Math.random() * 1e6);
+    appendDmMessage({ id: tmpId, body: text, kind: 'text', mine: true, ts: Math.floor(Date.now() / 1000) });
+    return dmPost({ action: 'send', peer_id: a.peer.id, body: text, client_id: clientId })
+      .then(function (d) {
+        if (!d || d.success === false || !d.message) throw new Error((d && d.message) || 'Yuborilmadi');
+        replaceDmRow(tmpId, d.message);
+        C.dmLastId = Math.max(C.dmLastId, Number(d.message.id) || 0);
+        return true;
+      }).catch(function (e) {
+        removeDmRow(tmpId);
+        toast('Yuborilmadi: ' + (e && e.message ? e.message : errMsg(e)));
+        return false;
+      });
+  }
+
+  function sendDmMedia(file, kind, duration) {
+    var a = C.active;
+    if (!a || a.type !== 'dm' || guardSend() || !file) return Promise.resolve(false);
+    var fd = new FormData();
+    fd.append('peer_id', a.peer.id);
+    fd.append('action', 'send_media');
+    fd.append('kind', kind);
+    if (duration) fd.append('duration', String(duration));
+    fd.append('file', file, kind === 'voice' ? 'voice.webm' : (file.name || 'photo.jpg'));
+    var raw = meRaw();
+    if (raw) fd.append('tg_me', raw);
+    return fetch(baseUrl('api/dm.php'), {
+      method: 'POST', body: fd, credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || d.success === false || !d.message) throw new Error((d && d.message) || 'Yuborilmadi');
+      appendDmMessage(d.message);
+      C.dmLastId = Math.max(C.dmLastId, Number(d.message.id) || 0);
+      return true;
+    }).catch(function (e) {
+      toast('Yuborilmadi: ' + (e && e.message ? e.message : errMsg(e)));
+      return false;
+    });
+  }
+
+  // --- Polling: ochiq suhbatda yangi xabarlarni 3 sekundda oladi ---
+  function startDmPoll() {
+    stopDmPoll();
+    C.dmPoll = setInterval(dmPollTick, 3000);
+  }
+  function stopDmPoll() {
+    if (C.dmPoll) { clearInterval(C.dmPoll); C.dmPoll = null; }
+    setTypingIndicator(false);
+  }
+  function dmPollTick() {
+    var a = C.active;
+    if (!a || a.type !== 'dm') return;
+    var peerId = Number(a.peer.id);
+    var after = C.dmLastId;
+    dmGet({ action: 'messages', peer_id: peerId, after_id: after }).then(function (d) {
+      if (!C.active || C.active.type !== 'dm' || Number(C.active.peer.id) !== peerId) return;
+      var msgs = (d && d.messages) || [];
+      var hasNew = false;
+      msgs.forEach(function (m) {
+        if (Number(m.id) > C.dmLastId) {
+          C.dmLastId = Number(m.id);
+          appendDmMessage(m);
+          hasNew = true;
+        }
+      });
+      if (hasNew) markDmRead();
+      setTypingIndicator(!!(d && d.typing));
+    }).catch(function () {});
+  }
+
+  function setTypingIndicator(on) {
+    var t = el('chatTitle');
+    if (!t || !C.active || C.active.type !== 'dm') return;
+    t.textContent = on ? (contactName(C.active.peer) + ' · yozmoqda…') : contactName(C.active.peer);
+  }
+
+  // Foydalanuvchi yozayotganda "yozmoqda..." yuboramiz (throttle).
+  var typeSentAt = 0;
+  function notifyTyping() {
+    var a = C.active;
+    if (!a || a.type !== 'dm' || guardSend()) return;
+    var now = Date.now();
+    if (now - typeSentAt < 2500) return;
+    typeSentAt = now;
+    dmPost({ action: 'typing', peer_id: a.peer.id }).catch(function () {});
   }
 
   function collectUsers(res) {
@@ -453,6 +670,8 @@
   function sendText(text) {
     text = (text || '').trim();
     if (!text || !C.active || guardSend()) return Promise.resolve(false);
+    // Shaxsiy chat - server orqali (qabul qiluvchiga kafolatlangan yetib boradi).
+    if (C.active.type === 'dm') return sendDmText(text);
     var A = Api();
     var a = C.active;
     var c = composeText(text);
@@ -479,6 +698,7 @@
 
   function sendPhoto(file) {
     if (!file || !C.active || guardSend()) return Promise.resolve(false);
+    if (C.active.type === 'dm') return sendDmMedia(file, 'photo', 0);
     var A = Api();
     return getClient().then(function (c) {
       return c.uploadFile({ file: file, workers: 1 });
@@ -489,6 +709,7 @@
 
   function sendStickerDoc(doc) {
     if (!doc || !C.active || guardSend()) return Promise.resolve(false);
+    if (C.active.type === 'dm') { toast('Shaxsiy chatda stiker hozircha mavjud emas'); return Promise.resolve(false); }
     var A = Api();
     var inputDoc = new A.InputDocument({
       id: doc.id, accessHash: doc.accessHash, fileReference: doc.fileReference
@@ -501,6 +722,7 @@
   // (`DocumentAttributeAudio { voice: true }` -> Telegram'dagi "ovozli xabar").
   function sendVoice(blob, duration) {
     if (!blob || !C.active || guardSend()) return Promise.resolve(false);
+    if (C.active.type === 'dm') return sendDmMedia(blob, 'voice', duration);
     var V = global.TgVoice;
     if (!V) { toast('Ovoz moduli topilmadi'); return Promise.resolve(false); }
     return V.uploadMedia(blob, duration).then(function (media) {
@@ -562,6 +784,17 @@
     { key: 'photo',   label: '📷',   title: 'Rasm' }
   ];
 
+  /**
+   * Faol suhbat uchun mavjud picker bo'limlari. Shaxsiy chat SERVER orqali
+   * ishlagani uchun stiker/GIF (Telegram) mavjud emas - faqat emoji va rasm.
+   */
+  function pickerTabs() {
+    if (C.active && C.active.type === 'dm') {
+      return TABS.filter(function (t) { return t.key === 'emoji' || t.key === 'photo'; });
+    }
+    return TABS;
+  }
+
   function closePicker() {
     var p = picker();
     if (p) { p.hidden = true; p.innerHTML = ''; }
@@ -586,11 +819,12 @@
     C.pickerMode = tab;
     var ab = el('chatAttachBtn');
     if (ab) ab.setAttribute('aria-expanded', 'true');
+    var tabsHtml = pickerTabs().map(function (t) {
+      return '<button type="button" class="chat-picker-tab" data-tab="' + t.key + '" title="' + t.title + '">' + t.label + '</button>';
+    }).join('');
     p.innerHTML =
       '<div class="chat-picker-tabs" id="chatPickerTabs">'
-      + TABS.map(function (t) {
-          return '<button type="button" class="chat-picker-tab" data-tab="' + t.key + '" title="' + t.title + '">' + t.label + '</button>';
-        }).join('')
+      + tabsHtml
       + '<button type="button" class="chat-picker-x" id="chatPickerX" aria-label="Yopish">&times;</button>'
       + '</div>'
       + '<div class="chat-picker-body" id="chatPickerBody"></div>';
@@ -608,7 +842,8 @@
   }
 
   function switchTab(tab) {
-    var t = TABS.some(function (o) { return o.key === tab; }) ? tab : 'emoji';
+    var allowed = pickerTabs().some(function (o) { return o.key === tab; }) ? tab : 'emoji';
+    var t = allowed;
     C.pickerMode = t;
     var p = picker();
     if (p) {
@@ -940,6 +1175,7 @@
 
   function sendGifResult(result, queryId) {
     if (!result || !C.active) return;
+    if (C.active.type === 'dm') { toast('Shaxsiy chatda GIF hozircha mavjud emas'); return; }
     var A = Api();
     var a = C.active;
     var gb = el('chatGifBody');
@@ -972,6 +1208,7 @@
       input.addEventListener('input', function () {
         input.style.height = 'auto';
         input.style.height = Math.min(120, input.scrollHeight) + 'px';
+        notifyTyping();
       });
       form.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -1079,6 +1316,9 @@
     initUI();
     loadRooms();
     loadContacts();
+    // Ro'yxat ochiq turganda yangi suhbat/xabarlarni vaqti-vaqti bilan
+    // yangilab turamiz (ochiq suhbat bo'lsa uni dmPollTick yangilaydi).
+    setInterval(function () { if (!C.active) loadContacts(); }, 15000);
 
     // profile.php "Xabar" tugmasi: chat.php?u=ID
     var u = 0;

@@ -172,7 +172,10 @@ function wc_logo_img($alt = '', $attrs = '') {
         <?php echo ig_item('reels.php', 'reels', 'reels', 'Reels', $NAV_ACTIVE); ?>
 
         <!-- Chat -->
-        <?php echo ig_item('chat.php', 'chat', 'chat', 'Chat', $NAV_ACTIVE); ?>
+        <a class="ig-item<?php echo $NAV_ACTIVE === 'chat' ? ' active' : ''; ?>" href="chat.php" title="Chat">
+            <span class="ig-ico"><?php echo ig_svg('chat'); ?><span class="ig-ntf-badge" id="igChatBadge" hidden></span></span>
+            <span class="ig-txt">Chat</span>
+        </a>
 
         <div class="ig-sep"></div>
 
@@ -252,7 +255,7 @@ function wc_logo_img($alt = '', $attrs = '') {
 <nav class="ig-tabbar">
     <a href="index.php" class="<?php echo $NAV_ACTIVE === 'home' ? 'active' : ''; ?>" aria-label="Bosh sahifa"><?php echo ig_svg('home'); ?></a>
     <a href="reels.php" class="<?php echo $NAV_ACTIVE === 'reels' ? 'active' : ''; ?>" aria-label="Reels"><?php echo ig_svg('reels'); ?></a>
-    <a href="chat.php" class="<?php echo $NAV_ACTIVE === 'chat' ? 'active' : ''; ?>" aria-label="Chat"><?php echo ig_svg('chat'); ?></a>
+    <a href="chat.php" class="<?php echo $NAV_ACTIVE === 'chat' ? 'active' : ''; ?>" aria-label="Chat"><?php echo ig_svg('chat'); ?><span class="ig-ntf-badge ig-tab-badge" id="igChatBadgeM" hidden></span></a>
     <a href="index.php" data-nav-search="1" aria-label="Qidiruv" class="<?php echo $NAV_ACTIVE === 'search' ? 'active' : ''; ?>"><?php echo ig_svg('search'); ?></a>
     <a href="<?php echo $igProfileH; ?>" class="ig-tab-profile <?php echo $NAV_ACTIVE === 'profile' ? 'active' : ''; ?>" aria-label="Profil"><?php echo $igAvatar; ?></a>
 </nav>
@@ -647,4 +650,5 @@ window.addEventListener('DOMContentLoaded', function () {
 </script>
 <script src="assets/js/tv-mode.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/tv-mode.js') ?: 1; ?>"></script>
 <script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/notifications.js') ?: 1; ?>"></script>
+<script src="assets/js/dm-badge.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/dm-badge.js') ?: 1; ?>"></script>
 <?php /* Eski `tv.js` spatial navigatsiyasi `tv-mode.js` ichiga ko'chirildi. */ ?>

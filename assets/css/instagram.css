@@ -264,6 +264,10 @@ body.ig-shell { transition: padding-left .2s ease; }
     font-size: 22px; color: var(--text); text-decoration: none;
     position: relative;
 }
+/* Chat tabida o'qilmagan xabarlar badge'i - ikonka yoniga joylashadi. */
+.ig-tabbar a .ig-tab-badge {
+    top: 6px; right: auto; left: 50%; margin-left: 6px;
+}
 .ig-tabbar a.active::after {
     content: '';
     position: absolute; top: 0; left: 50%;
