@@ -30,6 +30,9 @@ $opt = [
     'sort'          => in_array($sort, ['new', 'popular', 'rating', 'az'], true) ? $sort : 'new',
     'limit'         => $perPage,
     'offset'        => ($page - 1) * $perPage,
+    // Har yuklanishda tartib yangilanadi (RAND(seed)). Faqat "new" tartibda
+    // qo'llanadi; aniq saralashlar (popular/rating/az) o'z ma'nosini saqlaydi.
+    'seed'          => max(0, inputInt('seed', 0)),
 ];
 
 $items = $catalog->listContent($opt);

@@ -113,9 +113,9 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <main>
     <!-- ================================================= Bosh sahifa -->
     <section id="homeView">
-        <div class="row" id="continueRow" hidden>
-            <h2 class="row-title">Davom etish</h2>
-            <div class="grid" id="continueGrid"></div>
+        <div class="row">
+            <h2 class="row-title">Yangi qo‘shilganlar</h2>
+            <div class="grid" id="newGrid"></div>
         </div>
 
         <div class="row">
@@ -123,9 +123,9 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
             <div class="grid" id="trendingGrid"></div>
         </div>
 
-        <div class="row">
-            <h2 class="row-title">Yangi qo‘shilganlar</h2>
-            <div class="grid" id="newGrid"></div>
+        <div class="row" id="continueRow" hidden>
+            <h2 class="row-title">Davom etish</h2>
+            <div class="grid" id="continueGrid"></div>
         </div>
 
         <div id="catRows"></div>

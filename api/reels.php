@@ -60,7 +60,7 @@ if ($method === 'GET' || $method === 'HEAD') {
     // "Saqlanganlar" bo'limi uchun. Qolganlari odatdagi oqim.
     $items = $sort === 'saved'
         ? $reels->savedGrid($userId, $limit, $offset)
-        : $reels->getFeed($userId, $limit, $offset, $sort);
+        : $reels->getFeed($userId, $limit, $offset, $sort, max(0, inputInt('seed', 0)));
 
     ok([
         'items'      => $items,

@@ -23,6 +23,21 @@
         hls: null           // HLS misoli (tozalash uchun)
     };
 
+    // Har sahifa yuklanishida (yangilanishda) katalogni yangidan
+    // aralashtirish uchun seed. Server `RAND(seed)` qo'llaydi: bitta ochilish
+    // davomida sahifalash bir xil tartibda ketadi, lekin har refreshda boshqacha.
+    const FEED_SEED = Math.floor(Math.random() * 900000000) + 1;
+
+    // Massivni yangi (ya'ni sahifa ochilgan vaqt) tartibga tashlaydi.
+    function shuffle(arr) {
+        const a = (arr || []).slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
     // ---------------------------------------------------------------- helper
     async function api(path, opts) {
         const url = base + '/api/' + path;
@@ -300,8 +315,11 @@
             renderRow('#continueGrid', cont, true);
             if ($('#continueRow')) $('#continueRow').hidden = !(cont && cont.length);
 
-            renderRow('#trendingGrid', notSeen(d.trending));
-            renderRow('#newGrid', notSeen(d.new));
+            // "Yangi qo'shilganlar" / "Trending" / "Barchasi" qatorlarida itemlar
+            // seti (eng yangi N yoki eng mashhur N) o'zgarmaydi, lekin ORDER
+            // har yangilanishda yangilanadi — YouTube feed kabi.
+            renderRow('#trendingGrid', shuffle(notSeen(d.trending)));
+            renderRow('#newGrid', shuffle(notSeen(d.new)));
 
             // Bosh sahifada kino / anime / multfilm ARALASH ko'rsatiladi
             // (kategoriya bo'yicha alohida qatorlarga bo'linmaydi).
@@ -318,7 +336,7 @@
                 sec.className = 'row';
                 sec.innerHTML = `
                     <h2 class="row-title">Barchasi</h2>
-                    <div class="grid">${mixed.map(c => cardHTML(c, { series: true })).join('')}</div>`;
+                    <div class="grid">${shuffle(mixed).map(c => cardHTML(c, { series: true })).join('')}</div>`;
                 catRows.appendChild(sec);
             }
 
@@ -471,7 +489,8 @@
         const q = new URLSearchParams({
             page: state.page,
             sort: state.sort,
-            per_page: 24
+            per_page: 24,
+            seed: FEED_SEED
         });
         if (state.category) q.set('category', state.category);
         if (state.genre) q.set('genre', state.genre);

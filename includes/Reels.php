@@ -73,9 +73,10 @@ class Reels {
      * @param int   $offset
      * @param string $sort  'new' | 'top' | 'mine'
      */
-    public function getFeed($userId, $limit = 10, $offset = 0, $sort = 'new') {
+    public function getFeed($userId, $limit = 10, $offset = 0, $sort = 'new', $seed = 0) {
         $limit  = max(1, min(30, (int) $limit));
         $offset = max(0, (int) $offset);
+        $seed   = max(0, (int) $seed);
 
         // DIQQAT: "mine" saralash faqat o'z reel'larini ko'rsatadi -
         // shuning uchun status filtri qo'yilmaydi (kutilmoqda bo'lsa ham
@@ -96,6 +97,12 @@ class Reels {
             $order = ($sort === 'top')
                 ? '(r.views_count * 10 + r.likes_count * 3) DESC, r.id DESC'
                 : 'r.id DESC';
+            // YouTube uslubidagi yangilanish: har ochilishda oqim tartibi
+            // tasodifiy aralashadi. `seed` sahifa ochilganda bir marta
+            // generatsiya qilinadi - sahifalashda takrorlanmaydi.
+            if ($seed > 0 && $sort !== 'top') {
+                $order = 'RAND(' . $seed . ')';
+            }
         }
 
         // Bloklangan foydalanuvchilarning reelslari oqimda KO'RINMAYDI

@@ -82,6 +82,11 @@
     };
 
     // ---------------------------------------------------------------- state
+    // Har ochilishda (refresh) oqim tartibini yangilash uchun seed:
+    // server `RAND(seed)` bilan saralaydi, shuning uchun "ko'p yuklash"
+    // (offset) davomida ham bir xil tartib va nusxa takrorlanmaydi.
+    const FEED_SEED = Math.floor(Math.random() * 900000000) + 1;
+
     const state = {
         sort: 'new',
         items: [],
@@ -292,7 +297,8 @@
             const q = new URLSearchParams({
                 sort: state.sort,
                 limit: 10,
-                offset: state.offset
+                offset: state.offset,
+                seed: FEED_SEED
             });
             withMe(q);
             const d = await api('api/reels.php?' + q.toString());

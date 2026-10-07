@@ -109,8 +109,20 @@ class Catalog {
             default    => 'c.created_at DESC, c.id DESC',
         };
 
+        // YouTube uslubidagi yangilanish: har bir sahifa yuklanishida "yangi"
+        // tartib tasodifiy aralashtiriladi. `seed` bir marta (sahifa ochilganda)
+        // generatsiya qilinadi va sahifalash davomida bir xil qoladi — shu
+        // sababli LIMIT/OFFSET bilan takrorlanmaydi.
+        $seed = (int) ($opt['seed'] ?? 0);
+        if ($seed > 0 && $sort === 'new') {
+            $order = 'RAND(' . $seed . ')';
+        }
+
         $sql = "SELECT c.*, cat.name AS category_name, cat.slug AS category_slug,
-                       (SELECT COUNT(*) FROM episodes e WHERE e.content_id = c.id) AS episode_count
+                       (SELECT COUNT(*) FROM episodes e WHERE e.content_id = c.id) AS episode_count,
+                       (SELECT e.duration FROM episodes e
+                         WHERE e.content_id = c.id AND e.duration > 0
+                         ORDER BY e.episode_number ASC, e.id ASC LIMIT 1) AS episode_duration
                 FROM content c
                 JOIN categories cat ON cat.id = c.category_id
                 WHERE " . implode(' AND ', $where) . "
@@ -219,6 +231,9 @@ class Catalog {
         $rows = $this->db()->fetchAll(
             "SELECT c.*, cat.name AS category_name, cat.slug AS category_slug,
                     (SELECT COUNT(*) FROM episodes e WHERE e.content_id = c.id) AS episode_count,
+                    (SELECT e.duration FROM episodes e
+                      WHERE e.content_id = c.id AND e.duration > 0
+                      ORDER BY e.episode_number ASC LIMIT 1) AS episode_duration,
                     CASE WHEN c.category_id = ? THEN 0 ELSE 1 END AS same_cat
              FROM content c
              JOIN categories cat ON cat.id = c.category_id
@@ -1118,6 +1133,17 @@ class Catalog {
         $isSeries = !empty($c['is_series']);
         $epCount  = isset($c['episode_count']) ? (int) $c['episode_count'] : 0;
 
+        // Davomiylik — kartochkadagi YouTube uslubidagi "video uzunligi".
+        //   * Serial/anime: 1-qismning davomiyligi (content.duration u yerda
+        //     "umumiy daqiqa" sifatida kiritiladi yoki bo'sh qoladi).
+        //   * Film/klip:   content.duration; u bo'sh bo'lsa qism davomiyligi.
+        // Maqsad: bosh sahifadagi HAR bir kartochkada vaqt ko'rinishi.
+        $epDur = (isset($c['episode_duration']) && $c['episode_duration'] !== null)
+            ? (int) $c['episode_duration'] : 0;
+        $ownDur = (isset($c['duration']) && $c['duration'] !== null)
+            ? (int) $c['duration'] : 0;
+        $duration = ($isSeries ? ($epDur ?: $ownDur) : ($ownDur ?: $epDur)) ?: null;
+
         $out = [
             'id'          => (int) $c['id'],
             'title'       => $c['title'],
@@ -1129,8 +1155,7 @@ class Catalog {
             'year'        => $c['release_year'] !== null ? (int) $c['release_year'] : null,
             'rating'      => (float) $c['rating'],
             'views'       => (int) $c['views'],
-            'duration'    => isset($c['duration']) && $c['duration'] !== null
-                                ? (int) $c['duration'] : null,
+            'duration'    => $duration,
             'added_at'    => $c['created_at'] ?? null,
             'studio'      => $c['studio'] ?? null,
             'director'    => $c['director'] ?? null,
