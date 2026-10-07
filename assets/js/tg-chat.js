@@ -204,6 +204,7 @@
     if (a) { if (tgUrl) { a.href = tgUrl; a.hidden = false; } else { a.hidden = true; } }
     var feed = el('chatFeed'); if (feed) feed.innerHTML = '<div class="chat-status"><span class="spinner"></span></div>';
     if (C.voice) C.voice.close();
+    closeSharePlayer();
     closePicker();
     setComposerLocked(!!C.locked, C.lockedReason || '');
   }
@@ -215,6 +216,7 @@
   function closeChat() {
     // Yozib turilayotgan ovozni to'xtatamiz (mikrofon yoniq qolmasin).
     if (C.voice) C.voice.close();
+    closeSharePlayer();
     closePicker();                        // emoji/stiker/GIF paneli ham yopiladi
     try { toggleFmt(false); } catch (e) {} // formatlash menyusi yopiladi
     if (C.active && C.active.type === 'dm') { stopDmPoll(); loadContacts(); }
@@ -364,7 +366,107 @@
     if (m.kind === 'voice' && m.media_url) {
       return '<div class="chat-dm-media chat-dm-voice"><audio controls preload="metadata" src="' + esc(m.media_url) + '"></audio></div>';
     }
+    if (m.kind === 'video') {
+      return sharedVideoHtml(m);
+    }
     return '';
+  }
+
+  /** mm:ss / h:mm:ss ko'rinishidagi davomiylik. */
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    if (!sec) return '';
+    var h = Math.floor(sec / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    var s = sec % 60;
+    var mm = (h && m < 10) ? '0' + m : String(m);
+    var ss = s < 10 ? '0' + s : String(s);
+    return (h ? h + ':' + mm : String(m)) + ':' + ss;
+  }
+
+  /**
+   * Chatga ulashilgan video (reel/kino) kartasi: poster + "play" tugmasi.
+   * Bosilganda video chat ichida (Telegram orqali) yoki yangi oynada ochiladi.
+   */
+  function sharedVideoHtml(m) {
+    var ref = m.ref || null;
+    var poster = m.media_url ? esc(m.media_url) : '';
+    var dur = fmtDur(m.duration);
+    // Oqim ma'lumotini DOM'ga saqlaymiz (keyin bosilganda ishlatiladi).
+    var refObj = { poster: m.media_url || '' };
+    if (ref) { for (var k in ref) { if (Object.prototype.hasOwnProperty.call(ref, k)) refObj[k] = ref[k]; } }
+    var hasPlay = !!ref;
+    return '<div class="chat-share' + (hasPlay ? '' : ' no-play') + '"'
+      + ' data-ref="' + esc(JSON.stringify(refObj)) + '">'
+      + '<button type="button" class="chat-share-thumb" aria-label="Videoni ochish">'
+      +   (poster
+            ? '<img src="' + poster + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
+            : '<span class="chat-share-ph">🎬</span>')
+      +   (hasPlay
+            ? '<span class="chat-share-play" aria-hidden="true">'
+              + '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>'
+            : '')
+      +   (dur ? '<span class="chat-share-dur">' + dur + '</span>' : '')
+      + '</button>'
+      + '</div>';
+  }
+
+  /** Ulashilgan videoni chat ichida ochadi (overlay + TgStream yoki <video>). */
+  function openSharePlayer(ref) {
+    if (!ref) return;
+    var existing = document.querySelector('.chat-player');
+    if (existing) existing.remove();
+    try { if (T() && T().stop) T().stop(); } catch (e) {}
+
+    var overlay = document.createElement('div');
+    overlay.className = 'chat-player';
+    overlay.innerHTML = '<button type="button" class="chat-player-close" aria-label="Yopish">&#10005;</button>'
+      + '<div class="chat-player-box"></div>';
+    document.body.appendChild(overlay);
+    var box = overlay.querySelector('.chat-player-box');
+
+    function close() {
+      try { if (T() && T().stop) T().stop(); } catch (e) {}
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKey);
+    overlay.querySelector('.chat-player-close').onclick = close;
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+
+    var type = ref.type || '';
+    if (type === 'telegram' && T() && typeof T().mount === 'function' && ref.channel && ref.post) {
+      T().mount(box, {
+        channel: ref.channel,
+        post:    Number(ref.post) || 0,
+        url:     ref.url || '',
+        deep:    ref.deep || '',
+        poster:  ref.poster || ''
+      });
+      return;
+    }
+    if ((type === 'direct' || type === 'file') && ref.url) {
+      box.innerHTML = '<video src="' + esc(ref.url) + '" controls autoplay playsinline></video>';
+      return;
+    }
+    if (type === 'embed' && ref.url) {
+      box.innerHTML = '<iframe src="' + esc(ref.url) + '" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe>';
+      return;
+    }
+    if (ref.link) {
+      try { window.open(ref.link, '_blank'); } catch (e) {}
+      close();
+      return;
+    }
+    box.innerHTML = '<div class="chat-player-msg">Videoni ochib bo\u{2018}lmadi</div>';
+  }
+
+  /** Ochiq share-pleerni yopadi va Telegram oqimini to'xtatadi. */
+  function closeSharePlayer() {
+    var ov = document.querySelector('.chat-player');
+    if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+    try { if (T() && typeof T().stop === 'function') T().stop(); } catch (e) {}
   }
 
   function dmRowHtml(m) {
@@ -463,7 +565,19 @@
       });
   }
 
-  function sendDmMedia(file, kind, duration) {
+  // Ovozli xabar kengaytmasini brauzer yozgan formatga qarab tanlaymiz.
+  // Chrome (audio/webm), Firefox (audio/ogg), ba'zan audio/mp4 chiqaradi;
+  // noto'g'ri kengaytma server tomonda faylni rad etishiga olib kelardi.
+  function voiceFileName(file, mime) {
+    var t = String(mime || (file && file.type) || '').toLowerCase();
+    if (t.indexOf('ogg') >= 0) return 'voice.ogg';
+    if (t.indexOf('mpeg') >= 0 || t.indexOf('mp3') >= 0) return 'voice.mp3';
+    if (t.indexOf('mp4') >= 0 || t.indexOf('m4a') >= 0 || t.indexOf('aac') >= 0) return 'voice.m4a';
+    if (t.indexOf('wav') >= 0) return 'voice.wav';
+    return 'voice.webm';
+  }
+
+  function sendDmMedia(file, kind, duration, mime) {
     var a = C.active;
     if (!a || a.type !== 'dm' || guardSend() || !file) return Promise.resolve(false);
     var fd = new FormData();
@@ -471,7 +585,7 @@
     fd.append('action', 'send_media');
     fd.append('kind', kind);
     if (duration) fd.append('duration', String(duration));
-    fd.append('file', file, kind === 'voice' ? 'voice.webm' : (file.name || 'photo.jpg'));
+    fd.append('file', file, kind === 'voice' ? voiceFileName(file, mime) : (file.name || 'photo.jpg'));
     var raw = meRaw();
     if (raw) fd.append('tg_me', raw);
     return fetch(baseUrl('api/dm.php'), {
@@ -720,9 +834,9 @@
 
   // Ovozli xabar: `tg-voice.js` yozib beradi, bu yerda Telegram'ga yuklanadi
   // (`DocumentAttributeAudio { voice: true }` -> Telegram'dagi "ovozli xabar").
-  function sendVoice(blob, duration) {
+  function sendVoice(blob, duration, mime) {
     if (!blob || !C.active || guardSend()) return Promise.resolve(false);
-    if (C.active.type === 'dm') return sendDmMedia(blob, 'voice', duration);
+    if (C.active.type === 'dm') return sendDmMedia(blob, 'voice', duration, mime);
     var V = global.TgVoice;
     if (!V) { toast('Ovoz moduli topilmadi'); return Promise.resolve(false); }
     return V.uploadMedia(blob, duration).then(function (media) {
@@ -1199,6 +1313,19 @@
     var back = el('chatBack');
     if (back) back.addEventListener('click', goBack);
 
+    // Chatga ulashilgan video kartasi bosilganda o'ynatish.
+    if (feed) feed.addEventListener('click', function (e) {
+      var card = e.target.closest && e.target.closest('.chat-share');
+      if (!card) return;
+      if (card.classList.contains('no-play')) {
+        // Oqim yo'q - oddiy matn/silka sifatida qoldiriladi.
+        return;
+      }
+      var ref = null;
+      try { ref = JSON.parse(card.getAttribute('data-ref') || 'null'); } catch (err) { ref = null; }
+      openSharePlayer(ref);
+    });
+
     var form = el('chatComposer');
     var input = el('chatInput');
     if (form && input) {
@@ -1302,7 +1429,7 @@
       send: send,
       // Mikrofon TEZ bosilsa skripkaga aylanadi; skripka bosilsa rasm tanlanadi.
       file: el('chatPhoto'),
-      onSend: function (blob, duration) { sendVoice(blob, duration); },
+      onSend: function (blob, duration, mime) { sendVoice(blob, duration, mime); },
       onError: function (msg) { toast(msg); }
     });
   }

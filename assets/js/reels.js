@@ -643,8 +643,56 @@
         finally { btn.classList.remove('busy'); }
     }
 
+    // "Suhbatga yuborish" moduli (`share-chat.js`) faqat ulashish bosilganda
+    // yuklanadi — barcha sahifalarga oldindan qo'shish shart emas.
+    let shareModPromise = null;
+    function loadShareMod() {
+        if (window.TgShare) return Promise.resolve(window.TgShare);
+        if (shareModPromise) return shareModPromise;
+        shareModPromise = new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'assets/js/share-chat.js?v=' + Date.now();
+            s.onload = () => (window.TgShare ? resolve(window.TgShare) : reject(new Error('modul yuklanmadi')));
+            s.onerror = () => reject(new Error('modul yuklanmadi'));
+            document.head.appendChild(s);
+        });
+        return shareModPromise;
+    }
+
     async function shareReel(r, el) {
         const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'reels.php?reel=' + r.id;
+        const pb = r.playback || {};
+
+        // Asosiy oqim: tanlangan suhbatga video kartani YUBORISH.
+        try {
+            await loadShareMod();
+        } catch (e) { /* modul yuklanmasa — pastdagi zaxira ishlaydi */ }
+
+        if (window.TgShare && typeof window.TgShare.open === 'function') {
+            window.TgShare.open({
+                title:    r.title || 'Reels',
+                poster:   r.poster || pb.poster || '',
+                duration: r.duration || 0,
+                type:     pb.type || '',
+                id:       r.id,
+                episode:  (r.source && r.source.episode) || 0,
+                channel:  pb.channel || '',
+                post:     Number(pb.post) || 0,
+                url:      pb.url || '',
+                deep:     pb.deep || '',
+                link:     url
+            });
+            fetch('api/reels.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                credentials: 'same-origin',
+                body: withMe(new URLSearchParams({ id: r.id, action: 'share' }))
+            }).catch(() => {});
+            r.shares = (r.shares || 0) + 1;
+            return;
+        }
+
+        // Zaxira (modul yuklanmagan bo'lsa): tizim ulashish oynasi.
         try {
             if (navigator.share) {
                 await navigator.share({ title: r.title, url: url });

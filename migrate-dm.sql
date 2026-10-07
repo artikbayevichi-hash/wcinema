@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS dm_messages (
     body TEXT NULL,
     kind VARCHAR(16) NOT NULL DEFAULT 'text',
     media_url VARCHAR(500) NULL,
+    ref TEXT NULL,
     mime VARCHAR(80) NULL,
     duration INT NOT NULL DEFAULT 0,
     width INT NOT NULL DEFAULT 0,

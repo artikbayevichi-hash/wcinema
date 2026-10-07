@@ -967,23 +967,72 @@
     document.body.classList.remove('share-lock');
   }
 
-  function sendToContact(id, name) {
-    // DIQQAT: `window.open(..., '_blank', 'noopener')` CHROMEDA `null`
-    // qaytaradi (opener uzilganligi sababli). Bu esa bizda "ochilmadi"
-    // deb talqin qilinib, sahifa O'ZI ham chatga ketib qolardi —
-    // natijada ikkita ochilardi. Shuning uchun `noopener` ishlatilmaydi,
-    // `opener` esa keyin o'zimiz uzamiz.
-    var url = base + '/chat.php?u=' + encodeURIComponent(id);
-    var win = null;
-    try { win = window.open(url, '_blank'); } catch (e) { win = null; }
-    if (win) { try { win.opener = null; } catch (e) {} }
-    copyText(shareUrl()).then(function () {
-      toast('\u{1F517} Havola nusxalandi — ' + (name ? name + ' bilan ' : '') + 'chatda yuboring');
-    }).catch(function () {
-      toast('Havolani nusxalab bo‘lmadi: ' + shareUrl());
+  function shareCardData() {
+    // Chatga yuboriladigan video karta uchun oqim ma'lumotlari. Video
+    // serverga ko'chirilmaydi - faqat manzil/poster/sarlavha ketadi va
+    // qabul qiluvchi chatda o'sha yerda o'ynatadi.
+    var pb = S.playback || {};
+    var e = curEp();
+    var title = D.title || 'Video';
+    if (e && e.number && D.is_series) title += ' \u00b7 ' + e.number + '-qism';
+    return {
+      title:    title,
+      poster:   pb.poster || D.poster || '',
+      duration: (e && e.duration) ? e.duration : (Number(D.duration) || 0),
+      type:     pb.type || '',
+      id:       D.id,
+      episode:  S.selectedId || 0,
+      channel:  pb.channel || '',
+      post:     pb.post || 0,
+      url:      pb.url || '',
+      deep:     pb.deep || '',
+      link:     shareUrl()
+    };
+  }
+
+  function postShareToChat(peerId, data) {
+    var params = new URLSearchParams();
+    params.set('action', 'share');
+    params.set('peer_id', String(peerId));
+    Object.keys(data).forEach(function (k) {
+      var v = data[k];
+      if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
     });
-    if (win) closeShare();
-    else location.href = url;                  // popup bloklangan bo'lsa
+    var raw = tgMeRaw();
+    if (raw) params.set('tg_me', raw);
+    return fetch(base + '/api/dm.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || d.success === false || !d.message) {
+        throw new Error((d && d.message) || 'Yuborilmadi');
+      }
+      return d;
+    });
+  }
+
+  function sendToContact(id, name) {
+    // DIQQAT: avval havola nusxalanadi va chat yangi tabda ochilardi - bu
+    // "yuborish" emas edi (foydalanuvchi qo'lda yopishtirishi kerak edi).
+    // Endi video karta to'g'ridan-to'g'ri suhbatga YUBORILADI.
+    if (!isLoggedIn()) { needLogin(); return; }
+    postShareToChat(id, shareCardData()).then(function () {
+      toast('\u2705 Yuborildi' + (name ? ' \u2014 ' + name : ''));
+      closeShare();
+      // Xohlasa suhbatni yangi oynada ochib ko'rsatamiz.
+      var url = base + '/chat.php?u=' + encodeURIComponent(id);
+      try {
+        var win = window.open(url, '_blank');
+        if (win) { try { win.opener = null; } catch (e) {} }
+      } catch (e) { /* popup bloklandi - muhim emas, xabar yuborildi */ }
+    }).catch(function (e) {
+      toast('Yuborilmadi: ' + (e && e.message ? e.message : 'xatolik'));
+    });
   }
 
   function sharePlatItems() {

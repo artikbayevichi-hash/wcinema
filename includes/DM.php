@@ -88,6 +88,14 @@ class DM
                     PRIMARY KEY (user_id, peer_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             );
+            // `ref` ustuni keyinchalik qo'shildi: ulashilgan video kartasi
+            // (reel/kino) uchun oqim ma'lumotlari (JSON) shu yerda saqlanadi.
+            // Eski jadvalda bo'lmasa - qo'shamiz (CREATE ... IF NOT EXISTS
+            // mavjud jadvalga ustun qo'shmaydi).
+            $hasRef = $this->db->fetchOne("SHOW COLUMNS FROM dm_messages LIKE 'ref'");
+            if (!$hasRef) {
+                $this->db->query("ALTER TABLE dm_messages ADD COLUMN ref TEXT NULL AFTER media_url");
+            }
             self::$schemaReady = true;
         } catch (Throwable $e) {
             error_log('DM: jadval yaratilmadi - ' . $e->getMessage());
@@ -211,6 +219,74 @@ class DM
         }
         $this->touchContacts($from, $to);
         $row = $this->db->fetchOne("SELECT * FROM dm_messages WHERE id = ? LIMIT 1", [$id]);
+        return ['ok' => true, 'message' => $this->normalize($row, $from)];
+    }
+
+    /**
+     * Ulashilgan video kartasini yuboradi (chatga "reel/kino" tashlash).
+     *
+     * Tashqi video fayl yuklanmaydi: video Telegram kanalida turadi, shuning
+     * uchun faqat oqim ma'lumotlari (`ref`) + poster + sarlavha saqlanadi.
+     * Qabul qiluvchi chatda kartani bosib videoni o'sha yerda ko'radi.
+     *
+     * @param array $data {
+     *   title, poster, duration,
+     *   type: 'telegram'|'direct'|'file'|'hls'|'embed',
+     *   id, episode, channel, post, url, deep, link
+     * }
+     * @return array{ok:bool, error?:string, message?:array}
+     */
+    public function sendShare($from, $to, array $data)
+    {
+        $from = (int) $from;
+        $to   = (int) $to;
+        if ($from <= 0 || $to <= 0 || $from === $to) {
+            return ['ok' => false, 'error' => 'Xabar yuborib bo\u{2018}lmaydi'];
+        }
+        $perm = $this->permission($from, $to);
+        if (!$perm['ok']) {
+            return ['ok' => false, 'error' => $perm['reason']];
+        }
+        if (!$this->userExists($to)) {
+            return ['ok' => false, 'error' => 'Foydalanuvchi topilmadi'];
+        }
+
+        $title  = trim((string) ($data['title'] ?? ''));
+        $poster = trim((string) ($data['poster'] ?? ''));
+
+        // Oqim ma'lumotlari: faqat kerakli maydonlar, uzunlik cheklangan.
+        $type = strtolower((string) ($data['type'] ?? ''));
+        $type = preg_replace('/[^a-z_]/', '', $type);
+        $ref = [
+            'type'    => substr((string) $type, 0, 20),
+            'id'      => max(0, (int) ($data['id'] ?? 0)),
+            'episode' => max(0, (int) ($data['episode'] ?? 0)),
+            'channel' => substr((string) ($data['channel'] ?? ''), 0, 120),
+            'post'    => max(0, (int) ($data['post'] ?? 0)),
+            'url'     => substr((string) ($data['url'] ?? ''), 0, 500),
+            'deep'    => substr((string) ($data['deep'] ?? ''), 0, 500),
+            'link'    => substr((string) ($data['link'] ?? ''), 0, 500),
+        ];
+        // Bo'sh maydonlarni tashlab ketamiz (JSON kichik bo'lsin).
+        $ref = array_filter($ref, static function ($v) {
+            return $v !== '' && $v !== 0;
+        });
+
+        $id = $this->db->insert('dm_messages', [
+            'sender_id'    => $from,
+            'recipient_id' => $to,
+            'body'         => mb_substr($title, 0, self::MAX_LEN),
+            'kind'         => 'video',
+            'media_url'    => $poster !== '' ? mb_substr($poster, 0, 500) : null,
+            'ref'          => $ref ? json_encode($ref, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null,
+            'duration'     => max(0, (int) ($data['duration'] ?? 0)),
+            'created_at'   => date('Y-m-d H:i:s'),
+        ]);
+        if (!$id) {
+            return ['ok' => false, 'error' => 'Xabar yuborilmadi'];
+        }
+        $this->touchContacts($from, $to);
+        $row = $this->db->fetchOne("SELECT * FROM dm_messages WHERE id = ? LIMIT 1", [(int) $id]);
         return ['ok' => true, 'message' => $this->normalize($row, $from)];
     }
 
@@ -515,8 +591,10 @@ class DM
             $allowExt = ['webm', 'ogg', 'oga', 'mp4', 'm4a', 'mp3', 'wav'];
             $allowMime = [
                 'audio/webm', 'video/webm', 'audio/ogg', 'video/ogg',
-                'audio/mp4', 'video/mp4', 'audio/x-m4a', 'audio/mpeg',
-                'audio/wav', 'audio/x-wav', 'application/octet-stream',
+                'application/ogg', 'application/x-ogg', 'audio/opus',
+                'audio/mp4', 'video/mp4', 'audio/x-m4a', 'audio/aac',
+                'audio/mpeg', 'audio/wav', 'audio/x-wav',
+                'video/quicktime', 'application/octet-stream',
             ];
         } else {
             $limit    = 12 * 1024 * 1024;
@@ -591,6 +669,7 @@ class DM
             'kind'       => (string) ($row['kind'] ?? 'text'),
             'media_url'  => $row['media_url'] ?? null,
             'mime'       => $row['mime'] ?? null,
+            'ref'        => $this->decodeRef($row['ref'] ?? null),
             'duration'   => (int) ($row['duration'] ?? 0),
             'width'      => (int) ($row['width'] ?? 0),
             'height'     => (int) ($row['height'] ?? 0),
@@ -611,7 +690,13 @@ class DM
                 $body = '📷 Rasm';
             } elseif ($kind === 'voice') {
                 $body = '🎤 Ovozli xabar';
+            } elseif ($kind === 'video') {
+                $body = '🎬 Video';
             }
+        }
+        // Video kartasida sarlavha bo'lsa - oldiga belgi qo'yamiz.
+        if ($kind === 'video' && $body !== '' && mb_substr($body, 0, 1) !== '🎬') {
+            $body = '🎬 ' . $body;
         }
         return [
             'body' => mb_substr($body, 0, 140),
@@ -643,6 +728,16 @@ class DM
     public function exists($id)
     {
         return $this->userExists($id);
+    }
+
+    /** `ref` JSON ni massivga aylantiradi (noto'g'ri/bo'sh bo'lsa - null). */
+    private function decodeRef($raw)
+    {
+        if (!is_string($raw) || $raw === '') {
+            return null;
+        }
+        $d = json_decode($raw, true);
+        return is_array($d) ? $d : null;
     }
 
     /** client_id ni xavfsiz shaklga keltiradi (null - ishlatilmaydi). */

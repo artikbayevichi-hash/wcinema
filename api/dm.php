@@ -9,6 +9,7 @@
 //   GET  ?action=messages&peer_id=N[&after_id=X]  -> suhbat xabarlari
 //   POST ?action=send&peer_id=N&body=...&client_id=..
 //   POST ?action=send_media&peer_id=N&kind=photo|voice  (multipart `file`)
+//   POST ?action=share&peer_id=N                       (ulashilgan video karta)
 //   POST ?action=read&peer_id=N                   -> o'qilgan deb belgilash
 //   GET  ?action=poll&after_id=X                  -> global yangi xabarlar
 //   GET  ?action=unread                           -> o'qilmaganlar soni
@@ -102,6 +103,33 @@ switch ($action) {
             $up['height'] ?? 0,
             (string) ($_POST['caption'] ?? '')
         );
+        if (empty($r['ok'])) {
+            fail($r['error'] ?? 'Xabar yuborilmadi', 403);
+        }
+        ok(['message' => $r['message']]);
+    }
+
+    // ------------------------------------------------------- ulashilgan video
+    // Chatga "reel/kino" kartasini yuborish. Fayl yuklanmaydi - video
+    // Telegram kanalida qoladi, `ref` da oqim manzili saqlanadi.
+    case 'share': {
+        $peerId = inputInt('peer_id', 0);
+        if ($peerId <= 0) {
+            fail('peer_id kerak');
+        }
+        $r = $dm->sendShare($me, $peerId, [
+            'title'    => (string) ($_POST['title'] ?? ''),
+            'poster'   => (string) ($_POST['poster'] ?? ''),
+            'duration' => inputInt('duration', 0),
+            'type'     => input('type', '', 20),
+            'id'       => inputInt('id', 0),
+            'episode'  => inputInt('episode', 0),
+            'channel'  => input('channel', '', 120),
+            'post'     => inputInt('post', 0),
+            'url'      => input('url', '', 500),
+            'deep'     => input('deep', '', 500),
+            'link'     => input('link', '', 500),
+        ]);
         if (empty($r['ok'])) {
             fail($r['error'] ?? 'Xabar yuborilmadi', 403);
         }
