@@ -17,6 +17,7 @@ const state = {
     loading: false,
     data: null,     // api javobi (user, stats, is_me...)
     locked: false,  // profil maxfiy — grid ko'rsatilmaydi
+    avatarOnly: false, // modal faqat rasmni tahrirlayapti (MTProto rejimi)
 };
 
 // Grid yorliqlari (localStorage rejimi uchun alohida ro'yxat bor)
@@ -50,6 +51,10 @@ const els = {
     modal:     $('#pfModal'),
     editForm:  $('#pfEditForm'),
     editErr:   $('#pfEditErr'),
+    modalTitle:$('#pfModalTitle'),
+    avPreview: $('#pfAvPreview'),
+    avFile:    $('#pfInAvatarFile'),
+    avRemove:  $('#pfAvRemove'),
     tabs:      $('#pfTabs'),
 };
 
@@ -57,6 +62,14 @@ const els = {
 // kirilgan. Ma'lumot localStorage'dan (wc_tg_me_v1 + WCLib) olinadi.
 const LOCAL = !PROFILE_ME_ID && !PROFILE_VIEW_ID;
 if (LOCAL && (state.tab === 'reels' || state.tab === '' || state.tab === 'posts' || state.tab === 'videos')) state.tab = 'saved';
+
+// Saytga yuklangan profil rasmi kaliti. U `wc_tg_photo_v1` (Telegram rasmi)
+// dan ustun turadi va navigatsiya/izohlar/chatda ham ishlatiladi.
+const AVATAR_KEY = 'wc_avatar_url_v1';
+
+// Modal ichidagi vaqtinchalik avatar holati.
+let avatarFile   = null;   // tanlangan File (hali yuklanmagan)
+let avatarRemove = false;  // "o'chirish" bosilgan
 
 // =======================================================================
 // Kichik yordamchilar
@@ -170,7 +183,7 @@ function renderActions() {
             <a class="pf-btn ghost" href="settings.php">&#9881; Sozlamalar</a>
             ${isAdmin ? `
             <a class="pf-btn ghost" href="admin-content.php">&#128736; Admin</a>` : ''}`;
-        $('#pfEditBtn').onclick = openModal;
+        $('#pfEditBtn').onclick = () => openEditModal(false);
     } else {
         const following = !!state.data.following;
         els.actions.innerHTML = `
@@ -425,16 +438,101 @@ function renderEmpty() {
 // =======================================================================
 // Tahrirlash modali
 // =======================================================================
-function openModal() {
-    const u = state.data.user;
-    els.editForm.first_name.value = u.first_name || '';
-    els.editForm.last_name.value  = u.last_name || '';
-    els.editForm.username.value   = u.username || '';
-    els.editForm.avatar.value     = u.avatar || '';
-    els.editForm.bio.value        = u.bio || '';
+// Modalni ochadi. `avatarOnly = true` bo'lsa (MTProto/Telegram rejimi)
+// faqat profil rasmi ko'rinadi va tahrirlanadi.
+function openEditModal(avatarOnly) {
+    state.avatarOnly = !!avatarOnly;
     els.editErr.textContent = '';
+    if (els.avFile) els.avFile.value = '';
+    avatarFile = null;
+    avatarRemove = false;
+
+    if (avatarOnly) {
+        els.modal.classList.add('avatar-only');
+        if (els.modalTitle) els.modalTitle.textContent = '\uD83D\uDCF7 Profil rasmi';
+        // Ism maydoni yashirin; `required` validatsiyasi formani to'smasin.
+        els.editForm.first_name.required = false;
+        els.editForm.first_name.disabled = true;
+        const u = localTgUser();
+        els.editForm.first_name.value = u.firstName || '';
+        els.editForm.last_name.value  = u.lastName  || '';
+        els.editForm.username.value   = u.username  || '';
+        els.editForm.bio.value        = '';
+        renderModalAvatar(localPhoto());
+    } else {
+        els.modal.classList.remove('avatar-only');
+        if (els.modalTitle) els.modalTitle.textContent = '\u270E Profilni tahrirlash';
+        els.editForm.first_name.required = true;
+        els.editForm.first_name.disabled = false;
+        const u = (state.data && state.data.user) ? state.data.user : {};
+        els.editForm.first_name.value = u.first_name || '';
+        els.editForm.last_name.value  = u.last_name  || '';
+        els.editForm.username.value   = u.username   || '';
+        els.editForm.bio.value        = u.bio        || '';
+        renderModalAvatar(u.avatar || '');
+    }
     els.modal.hidden = false;
     els.modal.classList.add('open');
+}
+
+// --- Profil rasmi (avatar) yordamchilari -------------------------------
+
+// Brauzerdagi MTProto identifikatori (JSON). PHP sessiyasi bo'lmasa
+// `api/avatar.php` foydalanuvchini shu orqali topadi.
+function tgMeRawFull() {
+    const raw = localMeRaw();
+    if (raw) return raw;
+    if (window.TgStream && typeof window.TgStream.me === 'function') {
+        try {
+            const m = window.TgStream.me();
+            if (m && m.id) return JSON.stringify(m);
+        } catch (e) {}
+    }
+    return '';
+}
+
+// Rasmni hamma joyga (navigatsiya, izohlar, chat) tarqatamiz.
+function mirrorAvatar(url) {
+    try {
+        if (url) localStorage.setItem(AVATAR_KEY, url);
+        else localStorage.removeItem(AVATAR_KEY);
+    } catch (e) {}
+    try { window.dispatchEvent(new Event('wc:tgPhoto')); } catch (e) {}
+}
+
+function renderModalAvatar(url) {
+    if (!els.avPreview) return;
+    if (!url) {
+        const ch = ((els.name.textContent || '?').charAt(0) || '?').toUpperCase();
+        els.avPreview.innerHTML = '<span class="pf-av-init">' + esc(ch) + '</span>';
+        return;
+    }
+    els.avPreview.innerHTML = '<img src="' + esc(url) + '" alt="">';
+}
+
+async function uploadAvatarFile(file) {
+    const fd = new FormData();
+    fd.append('avatar', file);
+    const raw = tgMeRawFull();
+    if (raw) fd.append('tg_me', raw);
+    const r = await fetch('api/avatar.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+    const d = await r.json().catch(() => null);
+    if (!r.ok || !d || !d.success) throw new Error((d && d.message) || 'Rasm yuklanmadi');
+    return d.avatar || '';
+}
+
+async function removeAvatarRemote() {
+    const body = new URLSearchParams({ remove: '1' });
+    const raw = tgMeRawFull();
+    if (raw) body.set('tg_me', raw);
+    const r = await fetch('api/avatar.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+    });
+    const d = await r.json().catch(() => null);
+    if (!r.ok || !d || !d.success) throw new Error((d && d.message) || 'Rasm o\u2019chirilmadi');
+    return '';
 }
 
 function closeModal() {
@@ -446,39 +544,76 @@ els.editForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     els.editErr.textContent = '';
 
-    const body = new URLSearchParams();
-    body.set('first_name', els.editForm.first_name.value.trim());
-    body.set('last_name',  els.editForm.last_name.value.trim());
-    body.set('username',   els.editForm.username.value.trim());
-    body.set('avatar',     els.editForm.avatar.value.trim());
-    body.set('bio',        els.editForm.bio.value.trim());
-
     const saveBtn = $('#pfModalSave');
     const oldTxt = saveBtn.textContent;
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saqlanmoqda…';
 
     try {
-        const r = await fetch('api/profile-update.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
-        });
-        const d = await r.json().catch(() => null);
-        if (r.ok && d && d.updated) {
-            closeModal();
-            showToast(d.message || '✅ Profil yangilandi');
-            await loadProfile();
-        } else {
-            els.editErr.textContent = (d && d.message) || 'Xatolik yuz berdi';
+        // 1) Profil rasmi — tanlangan yoki o'chirilgan bo'lsa.
+        if (avatarFile || avatarRemove) {
+            const url = avatarFile ? await uploadAvatarFile(avatarFile) : await removeAvatarRemote();
+            mirrorAvatar(url || '');
         }
+
+        // 2) Qolgan maydonlar — faqat PHP hisobi uchun (MTProto rejimida
+        //    ism/username Telegram'dan keladi, serverda tahrirlanmaydi).
+        if (!state.avatarOnly) {
+            const body = new URLSearchParams();
+            body.set('first_name', els.editForm.first_name.value.trim());
+            body.set('last_name',  els.editForm.last_name.value.trim());
+            body.set('username',   els.editForm.username.value.trim());
+            body.set('bio',        els.editForm.bio.value.trim());
+
+            const r = await fetch('api/profile-update.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString(),
+            });
+            const d = await r.json().catch(() => null);
+            if (!r.ok || !d || !d.updated) {
+                els.editErr.textContent = (d && d.message) || 'Xatolik yuz berdi';
+                return;
+            }
+        }
+
+        closeModal();
+        showToast('✅ Saqlandi');
+        if (LOCAL) renderLocalHeader();
+        else await loadProfile();
     } catch (err) {
-        els.editErr.textContent = 'Tarmoq xatosi';
+        els.editErr.textContent = (err && err.message) ? err.message : 'Tarmoq xatosi';
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = oldTxt;
     }
 });
+
+// Avatar fayli tanlanganda — darhol ko'rinish (preview).
+if (els.avFile) {
+    els.avFile.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        avatarRemove = false;
+        avatarFile = f || null;
+        if (f) {
+            let url = '';
+            try { url = URL.createObjectURL(f); } catch (err) {}
+            renderModalAvatar(url);
+        } else {
+            renderModalAvatar('');
+        }
+    });
+}
+
+// "O'chirish" — keyingi saqlashda rasm olib tashlanadi.
+if (els.avRemove) {
+    els.avRemove.addEventListener('click', () => {
+        avatarFile = null;
+        avatarRemove = true;
+        if (els.avFile) els.avFile.value = '';
+        renderModalAvatar('');
+    });
+}
 
 // =======================================================================
 // Yorliqlar va scroll
@@ -524,7 +659,11 @@ function localTgUser() {
 
 // Telegram profil rasmi (TgStream tomonidan data-URL sifatida saqlanadi).
 function localPhoto() {
-    try { return localStorage.getItem('wc_tg_photo_v1') || ''; } catch (e) { return ''; }
+    try {
+        // Avval saytga yuklangan rasm, u bo'lmasa Telegram rasmi.
+        return localStorage.getItem(AVATAR_KEY)
+            || localStorage.getItem('wc_tg_photo_v1') || '';
+    } catch (e) { return ''; }
 }
 
 function localCell(c) {
@@ -593,10 +732,13 @@ function renderLocalHeader() {
     els.uploadBtn.hidden = true;
     els.logoutBtn.hidden = true;
 
-    // Amallar: Sozlamalar + Telegram bot
+    // Amallar: Tahrirlash (rasm) + Sozlamalar + Telegram bot
     els.actions.innerHTML = `
-        <button class="pf-btn prim" id="pfSetBtn">⚙️ Sozlamalar</button>
-        <a class="pf-btn ghost" href="https://t.me/${esc(APP_BOT || 'w_cinema_uz_bot')}" target="_blank" rel="noopener">✈️ Bot</a>`;
+        <button class="pf-btn prim" id="pfEditAvatarBtn">&#9998; Tahrirlash</button>
+        <button class="pf-btn" id="pfSetBtn">&#9881;&#65039; Sozlamalar</button>
+        <a class="pf-btn ghost" href="https://t.me/${esc(APP_BOT || 'w_cinema_uz_bot')}" target="_blank" rel="noopener">&#9992;&#65039; Bot</a>`;
+    const ab = $('#pfEditAvatarBtn');
+    if (ab) ab.addEventListener('click', () => openEditModal(true));
     const sb = $('#pfSetBtn');
     if (sb) sb.addEventListener('click', () => {
         const more = document.getElementById('igMoreBtn') || document.getElementById('igMoreBtnM');

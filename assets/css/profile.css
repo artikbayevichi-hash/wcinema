@@ -443,6 +443,44 @@
 .pf-modal-btns { display: flex; gap: 10px; margin-top: 18px; }
 .pf-modal-btns .pf-btn { flex: 1; padding: 11px; }
 
+/* Profil rasmi (avatar) tahriri */
+.pf-av-edit {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 4px;
+}
+.pf-av-preview {
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #101018;
+    border: 1px solid var(--pf-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--pf-sub);
+}
+.pf-av-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pf-av-btns { display: flex; flex-direction: column; gap: 8px; }
+.pf-av-edit label.pf-av-pick {
+    display: block;
+    margin: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 14px;
+    text-align: center;
+    cursor: pointer;
+}
+/* MTProto (Telegram) rejimida faqat rasm ko'rinadi */
+.pf-modal.avatar-only .pf-field { display: none; }
+.pf-modal.avatar-only .pf-field-av { display: block; }
+.pf-modal.avatar-only .pf-av-edit { margin-top: 0; }
+
 /* ------------------------------------------------------------- Toast */
 .pf-toast {
     position: fixed;

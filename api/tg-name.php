@@ -54,8 +54,9 @@ if ($method === 'POST') {
 }
 
 // GET - bir nechta id uchun nomlarni qaytaramiz.
-$idsRaw = input('ids', '', 2000);
-$names  = [];
+$idsRaw  = input('ids', '', 2000);
+$names   = [];
+$avatars = [];
 if ($idsRaw !== '') {
     $ids = [];
     foreach (explode(',', $idsRaw) as $x) {
@@ -71,7 +72,20 @@ if ($idsRaw !== '') {
         foreach ($rows as $r) {
             $names[(string) $r['tg_id']] = $r['username'];
         }
+
+        // Saytga yuklangan profil rasmlari (uploads/avatars/...). Ularni
+        // Telegram id bo'yicha qaytaramiz - shunda izohlar va chatda o'sha
+        // rasm hammaga ko'rinadi. Telegram Login Widget `photo_url` (http)
+        // qaytarilmaydi: u Telegram tomonida allaqachon mavjud.
+        $avRows = $db->fetchAll(
+            "SELECT telegram_user_id, avatar FROM users
+              WHERE telegram_user_id IN ($ph) AND avatar LIKE 'uploads/avatars/%'",
+            $ids
+        );
+        foreach ($avRows as $r) {
+            $avatars[(string) $r['telegram_user_id']] = $r['avatar'];
+        }
     }
 }
 
-ok(['names' => (object) $names]);
+ok(['names' => (object) $names, 'avatars' => (object) $avatars]);

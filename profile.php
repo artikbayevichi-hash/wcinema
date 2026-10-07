@@ -118,22 +118,39 @@ $meId       = $user ? (int) $user['id'] : null;
 <!-- Tahrirlash modali -->
 <div class="pf-modal" id="pfModal" hidden>
     <div class="pf-modal-box">
-        <h3>&#9998; Profilni tahrirlash</h3>
+        <h3 id="pfModalTitle">&#9998; Profilni tahrirlash</h3>
         <form id="pfEditForm" autocomplete="off">
-            <label>Ism *</label>
-            <input name="first_name" id="pfInName" maxlength="100" required>
+            <div class="pf-field pf-field-av">
+                <label>Profil rasmi</label>
+                <div class="pf-av-edit">
+                    <span class="pf-av-preview" id="pfAvPreview">?</span>
+                    <div class="pf-av-btns">
+                        <label class="pf-btn ghost pf-av-pick" for="pfInAvatarFile">&#128247; Rasm tanlash</label>
+                        <input type="file" id="pfInAvatarFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                        <button type="button" class="pf-btn ghost" id="pfAvRemove">&#128465; O&#8217;chirish</button>
+                    </div>
+                </div>
+            </div>
 
-            <label>Familiya</label>
-            <input name="last_name" id="pfInLast" maxlength="100">
+            <div class="pf-field">
+                <label>Ism *</label>
+                <input name="first_name" id="pfInName" maxlength="100" required>
+            </div>
 
-            <label>Username</label>
-            <input name="username" id="pfInUser" maxlength="40" placeholder="@username">
+            <div class="pf-field">
+                <label>Familiya</label>
+                <input name="last_name" id="pfInLast" maxlength="100">
+            </div>
 
-            <label>Avatar URL</label>
-            <input name="avatar" id="pfInAvatar" maxlength="500" placeholder="https://&hellip; (ixtiyoriy)">
+            <div class="pf-field">
+                <label>Username</label>
+                <input name="username" id="pfInUser" maxlength="40" placeholder="@username">
+            </div>
 
-            <label>Bio</label>
-            <textarea name="bio" id="pfInBio" maxlength="500" rows="3" placeholder="O'zingiz haqingizda&hellip;"></textarea>
+            <div class="pf-field">
+                <label>Bio</label>
+                <textarea name="bio" id="pfInBio" maxlength="500" rows="3" placeholder="O'zingiz haqingizda&hellip;"></textarea>
+            </div>
 
             <div class="pf-modal-err" id="pfEditErr"></div>
             <div class="pf-modal-btns">

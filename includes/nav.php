@@ -379,9 +379,16 @@ window.addEventListener('DOMContentLoaded', function () {
 
     // Telegram profil rasmi (TgStream saqlagan data-URL) avatar o'rniga
     // qo'yiladi — chap paneldagi va pastki paneldagi profil tugmalarida.
+    // Profil rasmi avatar o'rniga qo'yiladi — chap paneldagi va pastki
+    // paneldagi profil tugmalarida. Avval saytga YUKLANGAN rasm
+    // (`wc_avatar_url_v1`), u bo'lmasa Telegram'dan olingan data-URL
+    // (`wc_tg_photo_v1`, TgStream saqlagan).
     function igApplyPhoto() {
         var ph = null;
-        try { ph = localStorage.getItem('wc_tg_photo_v1'); } catch (e) {}
+        try {
+            ph = localStorage.getItem('wc_avatar_url_v1')
+              || localStorage.getItem('wc_tg_photo_v1');
+        } catch (e) {}
         if (!ph) return;
         var nodes = document.querySelectorAll('.ig-profile-top .ig-avatar, .ig-tab-profile .ig-avatar');
         for (var i = 0; i < nodes.length; i++) {

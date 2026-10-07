@@ -32,6 +32,7 @@
     peer: null,
     users: {},
     names: {},
+    avatars: {},       // tg id -> saytga yuklangan rasm URL
     byId: {},
     meId: null,
     replyTo: 0,
@@ -77,8 +78,14 @@
   function listEl() { return el('commentsList'); }
   function countEl() { return el('commentsCount'); }
 
+  // Joriy foydalanuvchi rasmi: avval saytga YUKLANGAN rasm
+  // (`wc_avatar_url_v1`), u bo'lmasa Telegram'dan olingan rasm
+  // (`wc_tg_photo_v1`).
   function currentUserPhoto() {
-    try { return localStorage.getItem('wc_tg_photo_v1') || ''; } catch (e) { return ''; }
+    try {
+      return localStorage.getItem('wc_avatar_url_v1')
+          || localStorage.getItem('wc_tg_photo_v1') || '';
+    } catch (e) { return ''; }
   }
 
   // ------------------------------------------------------- @username (nom)
@@ -114,6 +121,10 @@
       .then(function (d) {
         if (d && d.names) {
           for (var k in d.names) { if (d.names[k]) S.names[k] = d.names[k]; }
+        }
+        // Saytga yuklangan rasmlar (hammaga ko'rinadi).
+        if (d && d.avatars) {
+          for (var a in d.avatars) { if (d.avatars[a]) S.avatars[a] = d.avatars[a]; }
         }
       }).catch(function () {});
   }
@@ -396,7 +407,10 @@
   function avatarHtml(authorId, name) {
     var me = T() && T().me ? T().me() : null;
     var mineId = me && me.id ? String(me.id) : '';
-    var photo = (String(authorId) === mineId) ? currentUserPhoto() : '';
+    var key = String(authorId);
+    // Avval saytga yuklangan rasm (hamma ko'radi), keyin o'zimning Telegram
+    // rasmim (faqat shu brauzerda ko'rinadi).
+    var photo = S.avatars[key] || ((key === mineId) ? currentUserPhoto() : '');
     if (photo) {
       return '<img class="reels-c-av" src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer">';
     }
