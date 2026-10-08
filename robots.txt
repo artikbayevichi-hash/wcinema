@@ -8,4 +8,4 @@ Disallow: /settings.php
 Disallow: /profile.php
 Disallow: /api/
 
-Sitemap: https://plc-charts-asthma-drop.trycloudflare.com/tele_uzdub/sitemap.xml
+Sitemap: https://radio-drugs-rely-chances.trycloudflare.com/tele_uzdub/sitemap.xml
