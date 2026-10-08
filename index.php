@@ -113,12 +113,7 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <main>
     <!-- ================================================= Bosh sahifa -->
     <section id="homeView">
-        <div class="row" id="continueRow" hidden>
-            <h2 class="row-title">Davom etish</h2>
-            <div class="grid" id="continueGrid"></div>
-        </div>
-
-        <!-- Bitta aralash feed: yangi qo'shilganlar birinchi, qolgani
+        <!-- Yagona aralash feed: yangi qo'shilganlar birinchi, qolgani
              seed bo'yicha aralashtiriladi. Scroll bilan cheksiz yuklanadi. -->
         <div class="row">
             <div class="grid" id="homeFeed"></div>

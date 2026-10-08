@@ -320,20 +320,12 @@
             homeFeed.done = !d.has_more;
             homeFeed.loading = false;
 
-            // "Davom etish": avval server (PHP hisob), bo'lmasa mahalliy tarix.
+            // Ko'rilgan/tarix ro'yxati — mahalliy filter va pastdagi float
+            // "Davom etish" kartochkasi uchun.
             let watched = [];
             if (window.WCLib) { try { watched = window.WCLib.list('history') || []; } catch (e) {} }
             const watchedIds = new Set(watched.map((x) => String(x.id)));
             const notSeen = (arr) => (arr || []).filter((c) => !watchedIds.has(String(c.id)));
-
-            let cont = d.continue || [];
-            if (!cont.length && watched.length) {
-                cont = watched.slice(0, 12).map((x) => ({
-                    id: x.id, title: x.title, poster: x.poster, category: x.category
-                }));
-            }
-            renderRow('#continueGrid', cont, true);
-            if ($('#continueRow')) $('#continueRow').hidden = !(cont && cont.length);
 
             // Bitta aralash feed: yangi (3 kun) birinchi, qolgani RAND(seed).
             // Server allaqachon ko'rilgan (tarixga tushgan) va "Davom etish"da
@@ -515,18 +507,6 @@
         showListView();
         updateListTitle();
         loadList(true);
-    }
-
-    function renderRow(sel, items, isContinue) {
-        const el = $(sel);
-        if (!el) return;
-        if (!items || !items.length) { el.innerHTML = ''; return; }
-        el.innerHTML = items.map(c => cardHTML(c, isContinue ? {
-            series: true,
-            percent: c.percent,
-            episodeId: c.episode_id,
-            episodeLabel: c.episode_id > 0 ? c.episode_id + '-qism' : null
-        } : { series: true })).join('');
     }
 
     // Kategoriya chiplari. Ro'yxat API'dan keladi - shu sabab bazaga yangi

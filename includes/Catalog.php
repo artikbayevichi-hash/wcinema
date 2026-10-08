@@ -203,18 +203,20 @@ class Catalog {
     /**
      * Bosh sahifa feedidan yashiriladigan kontent sharti (EXISTS ... ).
      *
-     * Qoidalar:
-     *   · Seriya/anime (`is_series=1` yoki anime/serial kategoriyasi):
-     *     HAR QANDAY progress (biror qism boshlangan yoki tugatilgan)
-     *     → yashiriladi (u "Davom etish" blokida turibdi).
-     *   · Kino/multfilm:
-     *       - tugatilgan (`is_completed=1`) → yashiriladi;
-     *       - boshlangan va qolgan vaqt HOME_HIDE_REMAINING_SEC dan
-     *         ko'p bo'lsa → yashiriladi (hali ko'p qolgan);
-     *       - boshlanmagan yoki qolgan vaqt kichik (≤ chegaraga)
-     *         → feedda QOLADI.
-     *     Davomiylik noma'lum (`duration_seconds<=0`) bo'lsa, boshlangan
+     * Yagona qoida — kontent turidan qat'i nazar (kino, anime, multfilm,
+     * serial — hammasi bir xil ishlaydi):
+     *   · tugatilgan (`is_completed=1`) → yashiriladi
+     *     ("bir marta ko'rilganlar qayta chiqmasin");
+     *   · boshlangan va qolgan vaqt HOME_HIDE_REMAINING_SEC dan
+     *     ko'p bo'lsa → yashiriladi (hali ko'p qolgan);
+     *   · boshlanmagan yoki qolgan vaqt kichik (≤ chegaraga)
+     *     → feedda QOLADI (tugatishi mumkin).
+     *   · Davomiylik noma'lum (`duration_seconds<=0`) bo'lsa, boshlangan
      *     (position>0) → yashiriladi.
+     *
+     * Seriya/anime uchun alohida "istalgan progress yashiriladi" qoidasi
+     * YO'Q — u anime/multfilmlarni feeddan butunlay siqib chiqarardi
+     * (faqat kinolar qolardi). Barcha turlar bitta xolis qoidaga bo'ysunadi.
      *
      * @return array [sql-fragment, params]
      */
@@ -223,14 +225,14 @@ class Catalog {
             SELECT 1 FROM watch_progress wp
             WHERE wp.user_id = ? AND wp.content_id = c.id
               AND (
-                (c.is_series = 1 OR cat.slug IN ('anime','serial'))
-                  AND (wp.position_seconds > 0 OR wp.is_completed = 1)
-                OR
                 wp.is_completed = 1
-                OR (wp.position_seconds > 0 AND (
-                      wp.duration_seconds <= 0
-                      OR (wp.duration_seconds - wp.position_seconds) > ?
-                ))
+                OR (
+                  wp.position_seconds > 0
+                  AND (
+                    wp.duration_seconds <= 0
+                    OR (wp.duration_seconds - wp.position_seconds) > ?
+                  )
+                )
               )
         )";
         return [$sql, [(int) $userId, HOME_HIDE_REMAINING_SEC]];
@@ -338,7 +340,7 @@ class Catalog {
      */
     public static function autoPoster($poster, $title = '', $categorySlug = '', $categoryName = '') {
         $p = trim((string) ($poster ?? ''));
-        if ($p !== '' && strpos($p, 'placeholder:') !== 0) {
+        if ($p !== '' && !self::isPlaceholderPoster($p)) {
             return self::posterSrc($poster);
         }
         $title = trim((string) $title);
@@ -381,6 +383,31 @@ class Catalog {
         $svg .= '</svg>';
 
         return 'data:image/svg+xml;charset=utf-8,' . rawurlencode($svg);
+    }
+
+    /**
+     * Poster "haqiqiy rasm" emasligini tekshiradi:
+     * bo'sh, `placeholder:` prefiksli yoki namuna-/placeholder-xizmat
+     * (via.placeholder.com, placehold.co, dummyimage.com, ...) bo'lsa
+     * — true. Bunday qadriyatlar uchun autoPoster avtomatik fon yaratadi.
+     */
+    private static function isPlaceholderPoster($url) {
+        $s = trim((string) $url);
+        if ($s === '' || strpos($s, 'placeholder:') === 0) {
+            return true;
+        }
+        $host = strtolower((string) parse_url($s, PHP_URL_HOST));
+        if ($host === '') {
+            return false; // tushunarsiz URL — o'zgartirilmaydi
+        }
+        return in_array($host, [
+            'via.placeholder.com',
+            'placehold.co',
+            'placehold.jp',
+            'dummyimage.com',
+            'placeholdit.imgix.net',
+            'fakeimg.pl',
+        ], true);
     }
 
     private static function catEmoji($slug, $name = '') {
