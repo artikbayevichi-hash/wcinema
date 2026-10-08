@@ -1125,7 +1125,12 @@ body.share-lock { overflow: hidden; }
 
     /* --- EPIZODLAR: BIR QATOR + GORIZONTAL SCROLL (foydalanuvchi talabi) ---
        Eski holat: 2–3 ustunli grid. Endi bitta gorizontal qator —
-       qismlar chapdan o'ngga silinadi, o'ng tomondan davom etadi. */
+       qismlar chapdan o'ngga silinadi, o'ng tomondan davom etadi.
+
+       KENGLIK: `calc((100% - 8px) / 2)` — BOSHIDA ANIQ 2 TA QISM
+       ko'rinadi (har qanday ekran kengligida), qolganlari gorizontal
+       scroll bilan o'ngga ketadi. Eski `width: 150px` esa telefonga
+       qarab 2 ta ham, 2.4 ta ham chiqar edi. */
     .watch-side-eps .watch-side-list {
         display: flex;
         flex-direction: row;
@@ -1138,11 +1143,11 @@ body.share-lock { overflow: hidden; }
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         scroll-snap-type: x proximity;
+        scroll-padding-left: 14px; /* snap chap paddingni yemaydi — birinchi qism 14px dan boshlanadi */
     }
     .watch-side-eps .watch-side-list::-webkit-scrollbar { display: none; }
     .watch-ep {
-        flex: 0 0 auto;          /* qatorda cho'kmaydi — o'lchamini saqlaydi */
-        width: 150px;
+        flex: 0 0 calc((100% - 8px) / 2); /* qatorda cho'kmaydi — aniq 2 ta qism */
         scroll-snap-align: start;
         display: block;
         position: relative;
