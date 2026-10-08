@@ -207,16 +207,24 @@ class Catalog {
      * serial — hammasi bir xil ishlaydi):
      *   · tugatilgan (`is_completed=1`) → yashiriladi
      *     ("bir marta ko'rilganlar qayta chiqmasin");
-     *   · boshlangan va qolgan vaqt HOME_HIDE_REMAINING_SEC dan
-     *     ko'p bo'lsa → yashiriladi (hali ko'p qolgan);
-     *   · boshlanmagan yoki qolgan vaqt kichik (≤ chegaraga)
-     *     → feedda QOLADI (tugatishi mumkin).
-     *   · Davomiylik noma'lum (`duration_seconds<=0`) bo'lsa, boshlangan
-     *     (position>0) → yashiriladi.
+     *   · kontentning KAMIDA YARIMI ko'rilgan (`position_seconds` >=
+     *     davomiylikning yarmi) VA qolgan vaqt HOME_HIDE_REMAINING_SEC
+     *     dan ko'p bo'lsa → yashiriladi (hali ko'p qolgan).
+     *   · Boshlanmagan, ozgina boshlangan (yarmidan kam) yoki qolgan
+     *     vaqt kichik (≤ chegaraga) → feedda QOLADI.
+     *   · Davomiylik noma'lum (`duration_seconds<=0`) bo'lsa, hatto
+     *     qisman boshlangan kontent ham QOLADI — noma'lum qolgan vaqtni
+     *     yashirish uchun asos qilib bo'lmaydi.
+     *
+     * Nima uchun "yarmi" sharti: `pos > 0` ning o'zi yetarli emas —
+     * foydalanuvchi videoni bir-ikki soniya ochib ko'rgan bo'lsa ham
+     * (masalan `pos=1`) butun kontent yashirilib, feed bo'shab
+     * qolardi. Talab bo'yicha faqat SEZILARLI ko'rilgan va hali ko'p
+     * qolgan kontent lentadan chiqadi.
      *
      * Seriya/anime uchun alohida "istalgan progress yashiriladi" qoidasi
-     * YO'Q — u anime/multfilmlarni feeddan butunlay siqib chiqarardi
-     * (faqat kinolar qolardi). Barcha turlar bitta xolis qoidaga bo'ysunadi.
+     * YO'Q — u anime/multfilmlarni feeddan butunlay siqib chiqarardi.
+     * Barcha turlar bitta xolis qoidaga bo'ysunadi.
      *
      * @return array [sql-fragment, params]
      */
@@ -228,10 +236,9 @@ class Catalog {
                 wp.is_completed = 1
                 OR (
                   wp.position_seconds > 0
-                  AND (
-                    wp.duration_seconds <= 0
-                    OR (wp.duration_seconds - wp.position_seconds) > ?
-                  )
+                  AND wp.duration_seconds > 0
+                  AND wp.position_seconds >= (wp.duration_seconds / 2)
+                  AND (wp.duration_seconds - wp.position_seconds) > ?
                 )
               )
         )";
