@@ -1080,8 +1080,8 @@ body.share-lock { overflow: hidden; }
     .watch-main,
     .watch-side { display: contents; }
     .watch-player     { order: 1; }
-    .watch-side-eps   { order: 2; }
-    .watch-head       { order: 3; }
+    .watch-head       { order: 2; }
+    .watch-side-eps   { order: 3; }
     .watch-desc       { order: 4; }
     .watch-main > .watch-block { order: 5; }
     .watch-side-rec   { order: 6; }
@@ -1123,12 +1123,27 @@ body.share-lock { overflow: hidden; }
        shu yerda ham amal qiladi. */
     .watch-ep-seasons { display: none; }
 
-    /* Sarlavha/meta qatori ("Sarlavha — N-qism", W CINEMA, ko'rishlar,
-       ★/yil, 👍👎📚🔗📋) va tavsif+janrlar ("Bu sinov anime",
-       "Komediya/Fantaziya") telefonda OLIB TASHLANDI. JS elementlarni
-       joyida saqlaydi — desktop YouTube uslubi o'zgarmaydi. */
-    .watch-head,
+    /* Sarlavha/meta qatori ("Sinov anime 1 — 1-qism", W CINEMA, ko'rishlar,
+       ★/yil, 👍👎📚🔗📋) telefonda KO'RSATILADI (foydalanuvchi talabi) —
+       pleyerdan keyin SIQ va chiroyli: kichik sarlavha, bitta qatorda
+       badges, tugmalar gorizontal skroll bilan. Tavsif+janrlar esa
+       yashirilgan qoladi. */
+    .watch-head { margin: 0; }
+    .watch-title {
+        font-size: 16px;
+        line-height: 1.3;
+        margin: 0 0 8px;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    /* Meta qatorini ham siq: kanal qatori + tugmalar qatori orasidagi
+       bo'shliq kichrayadi, chiziqli ajratgich olib tashlanadi. */
+    .watch-meta { gap: 8px; }
+    .watch-meta-r { border-top: 0; padding-top: 0; }
     .watch-desc { display: none; }
+    /* Izohlar bloki grid gapidan tashqari qo'shimcha 22px margin
+       olmasin — video va izohlar orasi siq bo'lsin. */
+    .watch-main > .watch-block { margin-top: 0; }
 
     /* --- Ixcham qidiruv (≥40px teginish) --- */
     .watch-ep-find {
