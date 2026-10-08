@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-login.php
+Disallow: /tg-login.php
+Disallow: /tg-proof.php
+Disallow: /settings.php
+Disallow: /profile.php
+Disallow: /api/
+
+Sitemap: https://plc-charts-asthma-drop.trycloudflare.com/tele_uzdub/sitemap.xml
