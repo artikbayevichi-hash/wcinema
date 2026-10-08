@@ -1071,6 +1071,11 @@ body.share-lock { overflow: hidden; }
         display: flex;
         flex-direction: column;
         gap: 14px;
+        /* Desktopdan `align-items: start` qolgan edi — mobil flex
+           ustunda bloklar kontent kengligida "qotib" qolardi (qismlar
+           skrolleri sabab 397px va gorizontal overflow). `stretch`
+           - har bir blok konteyner kengligini oladi. */
+        align-items: stretch;
     }
     .watch-main,
     .watch-side { display: contents; }
@@ -1088,6 +1093,17 @@ body.share-lock { overflow: hidden; }
         border-radius: 16px;
         overflow: hidden;
     }
+    /* --- Bloklarni IKKI TOMONGA CHO'ZISH (foydalanuvchi talabi) ---
+       Telefonda izohlar va qismlar kartalari sahifa paddingi (10px)
+       ichida tor ko'rinardi. `margin-inline: -6px` bilan ular ekran
+       chetiga yaqinlashadi — qolgan 4px tasma saqlanadi, burchaklar
+       yumaloq qoladi, gorizontal overflow yo'q. Pleyer o'zgarmaydi. */
+    /* `min-width: 0` — aks holda ichidagi gorizontal skroller
+       (qismlar ro'yxati) min-content kenglikni majburlab, blokni
+       konteynerdan keng qilib qo'yadi va sahifa gorizontal silinadi. */
+    .watch-side-eps { margin-inline: -6px; min-width: 0; }
+    .watch-side-eps .watch-side-list { min-width: 0; }
+    .watch-main > .watch-block { margin-inline: -6px; min-width: 0; }
     /* Endi eps va rec qo'shni emas (oraliqda sarlavha/izohlar bor). */
     .watch-side-eps:not([hidden]) + .watch-side-rec { border-top: 0; }
 
