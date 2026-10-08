@@ -275,7 +275,7 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
                 menu.classList.add('udp-open');
             }
             if (!viaHover) menuBackdrop.style.display = 'block';
-            root.classList.add('udp-ui-visible');
+            showUi();
         }
         function closeMenu() {
             if (!menu.classList.contains('udp-visible')) return;
@@ -285,6 +285,7 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             menuCloseT = setTimeout(function () {
                 menu.classList.remove('udp-visible');
             }, 180);
+            showUi();               // menyu yopildi — auto-hide qayta boshlanadi
         }
 
         /* ===== Speed menu data & helpers ===== */
@@ -996,15 +997,20 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         });
 
         /* ================= UI auto-hide ================= */
+        /* Talab: hech qayerga tegmasa (sichqoncha/barmoq harakat qilmasa)
+           1 soniyadan keyin boshqaruvlar o'chadi — kompyuter rejimida ham
+           (oldingi `:hover` CSS qoidasi tufayli desktop'da hech qachon
+           yashirilmayotgan edi). Menyu (gear) ochiq turganda esa yashirmaymiz. */
         var hideTimer = null;
         function showUi() {
             root.classList.add('udp-ui-visible');
             clearTimeout(hideTimer);
-            if (!video.paused && !video.ended) {
-                hideTimer = setTimeout(function () {
-                    root.classList.remove('udp-ui-visible');
-                }, 1500);
-            }
+            if (video.paused || video.ended) return;
+            if (menu.classList.contains('udp-open')) return;
+            hideTimer = setTimeout(function () {
+                if (menu.classList.contains('udp-open')) return;
+                root.classList.remove('udp-ui-visible');
+            }, 1000);
         }
         root.addEventListener('mousemove', showUi);
         root.addEventListener('mouseenter', showUi);

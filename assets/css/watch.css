@@ -751,6 +751,54 @@ body.share-lock { overflow: hidden; }
     background: var(--bg-2);
 }
 
+/* --- TELEFON REJIMI: izohlar qisqartirilgan --------------------------
+   Foydalanuvchi talabi: telefonda chat (izohlar) blokida faqat
+   BOSHDAGI IKKITA XABAR ko'rinsin; blok ustidan bosilsa (yoki
+   "Barcha izohlarni ko'rish" tugmasi bosilsa) to'liq xabar yuboruvchi
+   oyna ochilsin — video TAGIDA (shu blok o'z joyida kengayadi).
+
+   Qurilish:
+     • `:has(...)` — faqat ro'yxatda 3+ xabar BORSA qisqartiramiz
+       (1-2 xabarli izohda hammasi allaqachon ko'rinadi va kompozitor
+       yashirilmaydi).
+     • `wc-full` klassini watch.js qo'shadi/olib tashlaydi.
+     • Tugma ikkala holatda ham ko'rinadi: yopiq — "Barcha izohlarni
+       ko'rish", ochiq — "Yopish".
+   Kompyuter rejimida (768px dan katta) hech narsa o'zgarmaydi. */
+.watch-c-more {
+    display: none;
+    width: 100%; align-items: center; justify-content: center;
+    padding: 11px 12px; margin-top: 6px;
+    border: 1px solid var(--line); border-top: 0;
+    border-radius: 0 0 13px 13px;
+    background: var(--bg-2); color: var(--accent);
+    font: inherit; font-size: 13.5px; font-weight: 700;
+    cursor: pointer;
+}
+.watch-c-more:hover { background: var(--card); }
+
+@media (max-width: 768px) {
+    /* Yopiq holat: boshidagi 2 ta xabardan keyingilari, yozish
+       maydoni, javob/stiker panellari — hammasi yashiriladi. */
+    .watch-comments-wrap:not(.wc-full):has(.watch-comments-list > .reels-c-thread:nth-child(3)) .watch-comments-list > .reels-c-thread:nth-child(n+3),
+    .watch-comments-wrap:not(.wc-full):has(.watch-comments-list > .reels-c-thread:nth-child(3)) .reels-comments-form,
+    .watch-comments-wrap:not(.wc-full):has(.watch-comments-list > .reels-c-thread:nth-child(3)) .reels-c-picker,
+    .watch-comments-wrap:not(.wc-full):has(.watch-comments-list > .reels-c-thread:nth-child(3)) .reels-c-replybar {
+        display: none;
+    }
+    .watch-comments-wrap:not(.wc-full):has(.watch-comments-list > .reels-c-thread:nth-child(3)) .watch-c-more {
+        display: flex;
+    }
+
+    /* To'liq oyna (wc-full): barcha izohlar + yozish maydoni ochiq.
+       Ro'yxat ichki skroll qiladi — kompozitor doim ko'rinib tursin
+       va blok videoning tagida "oyna" kabi joylasinsin. */
+    .watch-comments-wrap.wc-full .watch-comments-list {
+        max-height: min(64dvh, 540px);
+    }
+    .watch-comments-wrap.wc-full .watch-c-more { display: flex; }
+}
+
 /* DIQQAT: chat uslublari yo'q - bu sahifada chat blok ham yo'q.
    Chat alohida `chat.php` sahifasida (uslublari `chat.css` da). */
 

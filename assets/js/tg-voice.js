@@ -170,6 +170,10 @@
     function state(name) {
       box.setAttribute('data-play', name);
       if (load) load.hidden = (name !== 'load');
+      // Har doim enabled qaytaramiz - aks holda tugma birinchi yuklashda
+      // `disabled` bo'lib qolib, xabarni qayta eshitib bo'lmas edi
+      // (faqat sahifa yangilanganda qayta ishlardigan bo'lib qolardi).
+      if (btn) btn.disabled = (name === 'load');
     }
 
     function fail(msg) {

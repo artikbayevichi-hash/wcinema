@@ -1529,6 +1529,47 @@
       });
     }
 
+    // --- TELEFON REJIMI: qisqartirilgan izohlar (watch.css) ---
+    // Yopiq holatda ro'yxatda faqat boshidagi 2 TA XABAR ko'rinadi,
+    // yozish maydoni yashirin. Blok ustidan bosilsa (yoki tugma bilan)
+    // `wc-full` qo'shiladi — video TAGIDA to'liq oyna ochiladi: barcha
+    // izohlar (ichki skroll) + kompozitor. Kompyuterda hech narsa
+    // o'zgarmaydi (`mq` tekshiruvi + CSS 768px media query).
+    if (list && !list.__fullToggle && list.closest) {
+      list.__fullToggle = true;
+      var wcWrap = list.closest('.watch-comments-wrap');
+      var moreBtn = wcWrap && wcWrap.querySelector('.watch-c-more');
+      var mqPhone = global.matchMedia
+        ? global.matchMedia('(max-width: 768px)') : null;
+      // 3+ xabar borsa qisqartiriladi (CSS `:has` bilan bir xil shart).
+      var wcCollapsible = function () {
+        return list.querySelectorAll(':scope > .reels-c-thread').length > 2;
+      };
+      var wcSetFull = function (on) {
+        if (!wcWrap) return;
+        wcWrap.classList.toggle('wc-full', on);
+        if (moreBtn) {
+          moreBtn.textContent = on
+            ? 'Yopish' : 'Barcha izohlarni ko‘rish';
+        }
+      };
+      if (moreBtn) {
+        moreBtn.addEventListener('click', function () {
+          wcSetFull(!wcWrap.classList.contains('wc-full'));
+        });
+      }
+      list.addEventListener('click', function (e) {
+        if (!wcWrap) return;
+        if (wcWrap.classList.contains('wc-full')) return; // allaqachon ochiq
+        if (mqPhone && !mqPhone.matches) return;          // faqat telefon rejimi
+        if (!wcCollapsible()) return;                     // 1-2 xabar — o'zi to'liq
+        // O'z-o'zidan ishlaydigan elementlar — panel ochilmaydi:
+        // havola, ovozli xabar tugmasi, media (rasm/video/lightbox).
+        if (e.target.closest && e.target.closest('a, .tv-play, .reels-c-media')) return;
+        wcSetFull(true);
+      });
+    }
+
     // Kalit = episodes.id (reels moduli esa reels.id ishlatadi).
     openComments();
 

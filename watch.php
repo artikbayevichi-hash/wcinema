@@ -388,6 +388,13 @@ $NAV_ACTIVE = 'home';
                     </button>
                     <input type="file" id="cPhoto" accept="image/*" hidden>
                 </form>
+
+                <?php /* Telefon rejimi: izohlar qisqartirilgan holda faqat
+                         boshidagi 2 TA XABAR ko'rinadi (watch.css). Shu
+                         tugma (yoki blokning o'zi) ustidan bosilsa - to'liq
+                         oyna ochiladi: barcha izohlar + yozish maydoni
+                         (watch.js `wc-full`). Kompyuterda yashirin. */ ?>
+                <button type="button" class="watch-c-more" id="watchCMore">Barcha izohlarni ko‘rish</button>
                 </div>
             </section>
 
