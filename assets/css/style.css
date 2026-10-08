@@ -157,6 +157,23 @@ main { padding: 4px 0 20px; }
 .card:hover { transform: translateY(-3px); border-color: var(--accent); }
 .card:active { transform: scale(.98); }
 
+/* Bosh sahifa feed: kartochka "chiqib kelish" animatsiyasi.
+   `.feed-in` boshlang'ich (yashirin) holat; ko'rinib qolganda `.fi-on`
+   qo'shiladi va transition tugagach ikkala klass olib tashlanadi (JS)
+   — `.card:hover { transform }` bilan to'qnashmasligi uchun. */
+.feed-in {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity .5s ease, transform .5s ease;
+}
+.feed-in.fi-on { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .feed-in { transition: none; opacity: 1; transform: none; }
+}
+
+/* Infinite-scroll sentinel: ko'rinmas, faqat kuzatuv uchun */
+#feedSentinel { height: 1px; }
+
 .poster {
     position: relative;
     aspect-ratio: 2 / 3;

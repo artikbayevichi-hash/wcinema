@@ -1514,6 +1514,21 @@
     var list = el('commentsList');
     if (list) list.innerHTML = '<div class="reels-c-loading"><span class="spinner"></span></div>';
 
+    // YouTube uslubidagi qisqartirilgan izohlar: matn faqat bitta qator
+    // ko'rinadi (`watch.css` `.reels-c-body` -> `line-clamp: 1`), bosilganda
+    // to'liq ochiladi/yopiladi. Delegatsiya — satrlar har qachon
+    // qayta chizilganda ham ishlaydi (`.open` klassi o'sha elementda).
+    if (list && !list.__bodyToggle) {
+      list.__bodyToggle = true;
+      list.addEventListener('click', function (e) {
+        // Havola ichida bosilganda — faqat havola ochiladi (toggle emas).
+        if (e.target.closest && e.target.closest('a')) return;
+        var b = e.target.closest && e.target.closest('.reels-c-body');
+        if (!b) return;
+        b.classList.toggle('open');
+      });
+    }
+
     // Kalit = episodes.id (reels moduli esa reels.id ishlatadi).
     openComments();
 

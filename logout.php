@@ -6,5 +6,6 @@ require_once 'includes/Auth.php';
 $auth = new Auth();
 $auth->logout();
 
-header('Location: login.php');
+// Chiqishdan keyin avtomatik kirish sahifasiga qaytamiz (eski login.php emas).
+header('Location: tg-login.php');
 exit;

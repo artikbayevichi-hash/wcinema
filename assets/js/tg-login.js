@@ -225,11 +225,42 @@
       pagePwd.hidden = m !== 'pwd';
     }
 
+    // Davlatga mos raqam maskasi: dial raqamlari soniga qarab taxminiy
+    // milliy raqam uzunligini (jami 7…10 belgi oralig'ida) hisoblaymiz.
+    // Masalan +998 (3 belgi) -> 9 ta raqam: "00 000 00 00".
+    function numMask(dial) {
+      var d = String(dial || '').replace(/\D/g, '').length;
+      var n = Math.min(10, Math.max(7, 10 - Math.floor(d / 2)));
+      var groups = [], rest = n;
+      groups.push(Math.min(2, rest)); rest -= 2;
+      if (rest > 0) { groups.push(Math.min(3, rest)); rest -= 3; }
+      while (rest > 0) {
+        if (rest <= 3) { groups.push(rest); rest = 0; }
+        else { groups.push(2); rest -= 2; }
+      }
+      var out = [];
+      for (var i = 0; i < groups.length; i++) {
+        var g = groups[i], s = '';
+        for (var j = 0; j < g; j++) s += '0';
+        if (s) out.push(s);
+      }
+      return out.join(' ');
+    }
+
     function setCountry(iso, dial, name) {
       ccIso = iso; ccDial = dial;
       flagEl.textContent = flagOf(iso);
       dialEl.textContent = dial;
       if (name) cnameEl.textContent = name;
+      // Mamlakat o'zgarganda eski davlatning raqami qolmasligi uchun
+      // maydonni tozalaymiz va maskani (placeholder) yangi davlatga moslaymiz.
+      // (Avval faqat "+998" prefiksio'zgarti, raqam maydoni esa eskirib
+      //  qolgan 9 xonali o'zbek raqamini saqlab qolgan edi.)
+      if (numInput) {
+        numInput.value = '';
+        numInput.setAttribute('inputmode', 'numeric');
+        numInput.placeholder = numMask(dial);
+      }
     }
 
     // ---- `view` interfeysi (tg-stream.js shuni chaqiradi) ----------

@@ -301,6 +301,20 @@ define('CATALOG_PAGE_SIZE', 24);
 define('CATALOG_HOME_LIMIT', 12);
 
 // ---------------------------------------------------------------------------
+// Bosh sahifa feed (cheksiz aralash lentasi)
+// ---------------------------------------------------------------------------
+// Bir yuklashda nechta kartochka (IntersectionObserver bilan avtomatik davomi)
+define('HOME_PAGE_SIZE', 24);
+
+// Shu kundan ichida qo'shilgan kontent "yangi" deb, feedda birinchi chiqadi
+// (created_at DESC); qolgani seed bo'yicha sof aralashtiriladi.
+define('HOME_NEW_DAYS', 3);
+
+// Kino boshlangan bo'lsa va qolgan vaqt shundan kam — feedda ko'rinadi
+// (Davom etish blokida davom etish mumkin). Ko'proq qolgan bo'lsa yashiriladi.
+define('HOME_HIDE_REMAINING_SEC', 900);
+
+// ---------------------------------------------------------------------------
 // Ko'rish sahifasi (watch.php) yon panelidagi tavsiyalar
 // ---------------------------------------------------------------------------
 // YouTube uslubidagi lazy load: `watch.php` dastlab shuncha tavsiya yuboradi,

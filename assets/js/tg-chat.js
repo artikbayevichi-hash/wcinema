@@ -1313,7 +1313,10 @@
     var back = el('chatBack');
     if (back) back.addEventListener('click', goBack);
 
-    // Chatga ulashilgan video kartasi bosilganda o'ynatish.
+    // Chatga ulashilgan video kartasi bosilganda — O'SHA kino to'liq
+    // qismlari bilan ochiladi (`watch.php?c=ID&e=EPISODE`). Katalogdagi
+    // kontent uchun ref.id > 0 bo'ladi; eskirgan/oqimsiz kartalarda eski
+    // overlay oynasi (openSharePlayer) qoladi.
     if (feed) feed.addEventListener('click', function (e) {
       var card = e.target.closest && e.target.closest('.chat-share');
       if (!card) return;
@@ -1323,6 +1326,13 @@
       }
       var ref = null;
       try { ref = JSON.parse(card.getAttribute('data-ref') || 'null'); } catch (err) { ref = null; }
+      var cid = ref ? (Number(ref.id) || 0) : 0;
+      if (cid > 0) {
+        var u = BASE + '/watch.php?c=' + encodeURIComponent(cid);
+        if (Number(ref.episode) > 0) u += '&e=' + encodeURIComponent(ref.episode);
+        try { location.assign(u); } catch (err2) { try { window.open(u, '_blank'); } catch (err3) {} }
+        return;
+      }
       openSharePlayer(ref);
     });
 

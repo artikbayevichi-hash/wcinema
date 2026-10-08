@@ -722,11 +722,29 @@ body.share-lock { overflow: hidden; }
     border-radius: 13px 13px 0 0;
     background: var(--card);
     padding: 4px;
-    max-height: 620px;
+    /* `max-height` OLIB TASHLANDI — izohlar bloki videoning tagini
+       butun egallashi kerak (ichki skroll yo'q, sahifa bilan aylanadi). */
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
 .watch-comments-list:empty { display: none; }
+
+/* YouTube uslubidagi qisqartirilgan izoh: faqat BIR qator (bir-ikki
+   so'z) ko'rinadi, ustidan bosilganda to'liq matn ochiladi
+   (`.open` klassini watch.js qo'shadi/olib tashlaydi). */
+.watch-comments-list .reels-c-body {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+}
+.watch-comments-list .reels-c-body.open {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+}
+.watch-comments-list .reels-c-body a { pointer-events: auto; }
 .watch-comments-wrap .reels-comments-form {
     border: 1px solid var(--line); border-top: 0;
     border-radius: 0 0 13px 13px;
@@ -978,7 +996,7 @@ body.share-lock { overflow: hidden; }
     /* `.watch-player` burchagi `@media (max-width: 42rem)` qoidasida —
        mobil'da ham 14px yumaloq (foydalanuvchi talabi). */
     .watch-side-head { padding: 10px 12px; }
-    .watch-comments-list { max-height: 460px; }
+    /* Izohlarda ichki skroll/chegek yo'q (to'liq blok). */
     /* Tor ekranda kenglik kam bo'lgani uchun rasm ham kichrayadi. */
     .watch-rec-thumb { width: 132px; }
     .watch-rec-ttl { font-size: 13.5px; }
@@ -1035,35 +1053,18 @@ body.share-lock { overflow: hidden; }
         font-weight: 800;
     }
     .watch-side-count { display: none; }
-    .watch-ep-seasons {
-        display: flex;
-        gap: 6px;
-        margin-top: 12px;
-        overflow-x: auto;
-        padding-bottom: 2px;
-        scrollbar-width: none;
-        -webkit-overflow-scrolling: touch;
-    }
-    .watch-ep-seasons::-webkit-scrollbar { display: none; }
-    .watch-ep-season {
-        flex: 0 0 auto;
-        min-height: 40px;
-        padding: 0 16px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        background: var(--card);
-        color: var(--text);
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: background .14s ease, color .14s ease, border-color .14s ease;
-        -webkit-tap-highlight-color: transparent;
-    }
-    .watch-ep-season.on {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: #04202e;
-    }
+    /* Fasl chiplari ("Barcha" / "1-fasl") OLIB TASHLANDI (foydalanuvchi
+       talabi): qismlar ro'yxati filtrsiz to'liq ko'rinadi (`S.epSeason = 0`
+       — "Barcha" rejimi). Asosiy qoida `.watch-ep-seasons { display:none }`
+       shu yerda ham amal qiladi. */
+    .watch-ep-seasons { display: none; }
+
+    /* Sarlavha/meta qatori ("Sarlavha — N-qism", W CINEMA, ko'rishlar,
+       ★/yil, 👍👎📚🔗📋) va tavsif+janrlar ("Bu sinov anime",
+       "Komediya/Fantaziya") telefonda OLIB TASHLANDI. JS elementlarni
+       joyida saqlaydi — desktop YouTube uslubi o'zgarmaydi. */
+    .watch-head,
+    .watch-desc { display: none; }
 
     /* --- Ixcham qidiruv (≥40px teginish) --- */
     .watch-ep-find {
@@ -1074,16 +1075,27 @@ body.share-lock { overflow: hidden; }
     .watch-ep-find-in { font-size: 14px; }
     .watch-ep-find-go { width: 26px; height: 26px; border-radius: 8px; }
 
-    /* --- EPIZOD GRID: 2–3 ustun --- */
+    /* --- EPIZODLAR: BIR QATOR + GORIZONTAL SCROLL (foydalanuvchi talabi) ---
+       Eski holat: 2–3 ustunli grid. Endi bitta gorizontal qator —
+       qismlar chapdan o'ngga silinadi, o'ng tomondan davom etadi. */
     .watch-side-eps .watch-side-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
         gap: 8px;
         padding: 4px 14px 14px;
         max-height: none;
-        overflow-y: visible;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        scroll-snap-type: x proximity;
     }
+    .watch-side-eps .watch-side-list::-webkit-scrollbar { display: none; }
     .watch-ep {
+        flex: 0 0 auto;          /* qatorda cho'kmaydi — o'lchamini saqlaydi */
+        width: 150px;
+        scroll-snap-align: start;
         display: block;
         position: relative;
         aspect-ratio: 16 / 10;

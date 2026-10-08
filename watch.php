@@ -519,7 +519,15 @@ $NAV_ACTIVE = 'home';
         try { window.TgStream.init(); } catch (e) {}
         if (window.TgStream.warm) { try { window.TgStream.warm(); } catch (e) {} }
         if (window.TgStream.hasSession && window.TgStream.hasSession()) {
-            try { window.TgStream.verify().catch(function () {}); } catch (e) {}
+            // Kalit bekor qilingan bo'lsa — tizimdan chiqilganda avtomatik
+            // kirish sahifasiga qaytamiz (index.php bilan bir xil mantiq).
+            try {
+                window.TgStream.verify().catch(function () {
+                    if (!window.TgStream.hasSession()) {
+                        location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/tg-login.php');
+                    }
+                });
+            } catch (e) {}
         }
     }
 </script>

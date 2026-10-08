@@ -28,6 +28,9 @@
     // davomida sahifalash bir xil tartibda ketadi, lekin har refreshda boshqacha.
     const FEED_SEED = Math.floor(Math.random() * 900000000) + 1;
 
+    // Bosh sahifa feed (cheksiz yuklash) holati
+    const homeFeed = { offset: 0, total: 0, loading: true, done: false };
+
     // Massivni yangi (ya'ni sahifa ochilgan vaqt) tartibga tashlaydi.
     function shuffle(arr) {
         const a = (arr || []).slice();
@@ -291,21 +294,38 @@
     }
 
     // ---------------------------------------------------------------- bosh sahifa
+    // Feed so'rovi manzili. `tg_me` brauzerdagi MTProto akkauntni serverga
+    // uzatadi — PHP sessiyasi bo'lmasa ham yashirish ishlashi uchun
+    // (reels.js'dagi `withMe` uslubida).
+    function feedUrl(offset) {
+        let url = 'home.php?seed=' + FEED_SEED + '&offset=' + offset + '&limit=24';
+        try {
+            const me = localStorage.getItem('wc_tg_me_v1');
+            if (me) url += '&tg_me=' + encodeURIComponent(me);
+        } catch (e) {}
+        return url;
+    }
+
     async function loadHome() {
         setLoading(true);
+        // Qayta ochilganda (wc:showHome) offset va bayroqlar tozalanadi.
+        homeFeed.offset = 0;
+        homeFeed.total = 0;
+        homeFeed.done = false;
         try {
-            const d = await api('home.php');
+            const d = await api(feedUrl(homeFeed.offset));
             renderCategories(d.categories);
 
-            // Ko'rilgan (tarixga tushgan) kontentni aniqlaymiz. Bosh sahifada
-            // ular QAYTA chiqmasligi kerak — o'rniga faqat ko'rilmaganlari
-            // ko'rsatiladi, ko'rilganlari esa "Davom etish" blokiga o'tadi.
+            homeFeed.total = d.total || 0;
+            homeFeed.done = !d.has_more;
+            homeFeed.loading = false;
+
+            // "Davom etish": avval server (PHP hisob), bo'lmasa mahalliy tarix.
             let watched = [];
             if (window.WCLib) { try { watched = window.WCLib.list('history') || []; } catch (e) {} }
             const watchedIds = new Set(watched.map((x) => String(x.id)));
             const notSeen = (arr) => (arr || []).filter((c) => !watchedIds.has(String(c.id)));
 
-            // "Davom etish": avval server (PHP hisob), bo'lmasa mahalliy tarix.
             let cont = d.continue || [];
             if (!cont.length && watched.length) {
                 cont = watched.slice(0, 12).map((x) => ({
@@ -315,32 +335,27 @@
             renderRow('#continueGrid', cont, true);
             if ($('#continueRow')) $('#continueRow').hidden = !(cont && cont.length);
 
-            // "Yangi qo'shilganlar" / "Trending" / "Barchasi" qatorlarida itemlar
-            // seti (eng yangi N yoki eng mashhur N) o'zgarmaydi, lekin ORDER
-            // har yangilanishda yangilanadi — YouTube feed kabi.
-            renderRow('#trendingGrid', shuffle(notSeen(d.trending)));
-            renderRow('#newGrid', shuffle(notSeen(d.new)));
+            // Bitta aralash feed: yangi (3 kun) birinchi, qolgani RAND(seed).
+            // Server allaqachon ko'rilgan (tarixga tushgan) va "Davom etish"da
+            // turgan kontentni yashirgan; bu yerda faqat qo'shimcha mahalliy
+            // filtr bor (reels'da ko'rilgan narsalar serverga o'tmagan bo'lishi
+            // mumkin).
+            const grid = $('#homeFeed');
+            grid.innerHTML = '';
+            const fresh = notSeen(d.feed || []);
+            grid.innerHTML = fresh.map(c => cardHTML(c, { series: true })).join('');
+            bindFeedCards(grid);
+            homeFeed.offset += (d.feed || []).length;
 
-            // Bosh sahifada kino / anime / multfilm ARALASH ko'rsatiladi
-            // (kategoriya bo'yicha alohida qatorlarga bo'linmaydi).
-            const catRows = $('#catRows');
-            catRows.innerHTML = '';
-            const mixed = [];
-            (d.by_category || []).forEach((g) => {
-                (g.items || []).forEach((c) => {
-                    if (!watchedIds.has(String(c.id))) mixed.push(c);
-                });
-            });
-            if (mixed.length) {
-                const sec = document.createElement('div');
-                sec.className = 'row';
-                sec.innerHTML = `
-                    <h2 class="row-title">Barchasi</h2>
-                    <div class="grid">${shuffle(mixed).map(c => cardHTML(c, { series: true })).join('')}</div>`;
-                catRows.appendChild(sec);
-            }
+            const empty = $('#feedEmpty');
+            if (empty) empty.hidden = fresh.length > 0;
+
+            // Feed tugagan bo'lsa sentinel yashirinadi.
+            const sentinel = $('#feedSentinel');
+            if (sentinel) sentinel.hidden = homeFeed.done;
 
             renderContinueFloat(watched, d.continue);
+            maybeLoadMore();
 
             // URL filtri (index.php?cat=kino) bo'lsa - katalogni ko'rsatamiz
             if (state.category || state.search) applyUrlFilter();
@@ -348,6 +363,89 @@
             toast('Yuklab bo\'lmadi: ' + esc(e.message), 'err');
         } finally {
             setLoading(false);
+        }
+    }
+
+    // Feed kartochkalariga "chiqib kelish" animatsiyasini ulaydi va ularni
+    // kuzatuvchiga beradi (skrol pastga tushganda ko'rinib qoladi).
+    // `.feed-in` boshlang'ich holat, ko'rinib qolganda `.fi-on` qo'shiladi;
+    // transition tugagach ikkala klass olib tashlanadi — aks holda
+    // `.card:hover { transform }` bilan to'qnashib qolardi.
+    function bindFeedCards(root) {
+        if (!root) return;
+        if (!('IntersectionObserver' in window)) {
+            root.querySelectorAll('.card').forEach((c) => c.classList.add('fi-on'));
+            return;
+        }
+        root.querySelectorAll('.card').forEach((card) => {
+            if (card.dataset.fi === '1') return;
+            card.dataset.fi = '1';
+            card.classList.add('feed-in');
+            getFeedObserver().observe(card);
+        });
+    }
+
+    // Feed kartochkalari IntersectionObserver'i (bir marta, kerak bo'lganda).
+    let feedObserver = null;
+    function getFeedObserver() {
+        if (feedObserver) return feedObserver;
+        feedObserver = new IntersectionObserver((entries) => {
+            entries.forEach((en) => {
+                if (!en.isIntersecting) return;
+                const el = en.target;
+                el.classList.add('fi-on');
+                feedObserver.unobserve(el);
+                setTimeout(() => el.classList.remove('feed-in', 'fi-on'), 600);
+            });
+        }, { rootMargin: '80px 0px' });
+        return feedObserver;
+    }
+
+    // "Yana ko'rsatish" (sentinel ko'ringanda yoki tugma bosilganda).
+    async function loadMoreFeed() {
+        if (homeFeed.loading || homeFeed.done) return;
+        homeFeed.loading = true;
+        let ok = false;
+        try {
+            const d = await api(feedUrl(homeFeed.offset));
+            const items = d.feed || [];
+            homeFeed.total = d.total || homeFeed.total;
+            homeFeed.offset += items.length;
+            homeFeed.done = !d.has_more || items.length === 0;
+
+            const grid = $('#homeFeed');
+            let watched = [];
+            if (window.WCLib) { try { watched = window.WCLib.list('history') || []; } catch (e) {} }
+            const watchedIds = new Set(watched.map((x) => String(x.id)));
+            const fresh = items.filter((c) => !watchedIds.has(String(c.id)));
+            grid.insertAdjacentHTML('beforeend',
+                fresh.map(c => cardHTML(c, { series: true })).join(''));
+            bindFeedCards(grid);
+
+            const sentinel = $('#feedSentinel');
+            if (sentinel) sentinel.hidden = homeFeed.done;
+            const empty = $('#feedEmpty');
+            if (empty && homeFeed.done) empty.hidden = grid.querySelectorAll('.card').length > 0;
+            ok = true;
+        } catch (e) {
+            toast('Yuklab bo\'lmadi: ' + esc(e.message), 'err');
+        } finally {
+            homeFeed.loading = false;
+            // Muvaffaqiyatli yuklashdan keyin sentinel hali ekranda bo'lsa —
+            // qisqa sahifada to'ldirib yuboramiz (xatoda takrorlanmaydi).
+            if (ok) maybeLoadMore();
+        }
+    }
+
+    // Sentinel (feed oxiri) ekranning pastki qismida ko'rinib tursa — keyingi
+    // sahifani yuklaydi. `IntersectionObserver` bo'lmasa skrol fallback.
+    function maybeLoadMore() {
+        if (homeFeed.loading || homeFeed.done) return;
+        const sentinel = $('#feedSentinel');
+        if (!sentinel || sentinel.hidden) return;
+        const r = sentinel.getBoundingClientRect();
+        if (r.top < (window.innerHeight || document.documentElement.clientHeight) + 400) {
+            loadMoreFeed();
         }
     }
 
@@ -1511,6 +1609,20 @@
                 closeModal();
             }
         });
+
+        // Bosh sahifa feed: sentinel ko'rinsa keyingi sahifani yuklaydi.
+        const sentinel = $('#feedSentinel');
+        if (sentinel) {
+            if ('IntersectionObserver' in window) {
+                new IntersectionObserver((entries) => {
+                    if (entries.some((e) => e.isIntersecting)) loadMoreFeed();
+                }, { rootMargin: '600px 0px' }).observe(sentinel);
+            } else {
+                // ESki brauzerlar: scroll'da sentinel ekranga yaqinlashsa.
+                window.addEventListener('scroll', () => maybeLoadMore(), { passive: true });
+                maybeLoadMore();
+            }
+        }
 
         // Hover-preview (karta ustida video boshlanadi).
         document.addEventListener('mouseover', previewHoverStart);

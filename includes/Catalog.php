@@ -196,6 +196,212 @@ class Catalog {
         return $out;
     }
 
+    // =========================================================================
+    // Bosh sahifa feed (cheksiz aralash lenta)
+    // =========================================================================
+
+    /**
+     * Bosh sahifa feedidan yashiriladigan kontent sharti (EXISTS ... ).
+     *
+     * Qoidalar:
+     *   · Seriya/anime (`is_series=1` yoki anime/serial kategoriyasi):
+     *     HAR QANDAY progress (biror qism boshlangan yoki tugatilgan)
+     *     → yashiriladi (u "Davom etish" blokida turibdi).
+     *   · Kino/multfilm:
+     *       - tugatilgan (`is_completed=1`) → yashiriladi;
+     *       - boshlangan va qolgan vaqt HOME_HIDE_REMAINING_SEC dan
+     *         ko'p bo'lsa → yashiriladi (hali ko'p qolgan);
+     *       - boshlanmagan yoki qolgan vaqt kichik (≤ chegaraga)
+     *         → feedda QOLADI.
+     *     Davomiylik noma'lum (`duration_seconds<=0`) bo'lsa, boshlangan
+     *     (position>0) → yashiriladi.
+     *
+     * @return array [sql-fragment, params]
+     */
+    private function homeHiddenClause($userId) {
+        $sql = "EXISTS (
+            SELECT 1 FROM watch_progress wp
+            WHERE wp.user_id = ? AND wp.content_id = c.id
+              AND (
+                (c.is_series = 1 OR cat.slug IN ('anime','serial'))
+                  AND (wp.position_seconds > 0 OR wp.is_completed = 1)
+                OR
+                wp.is_completed = 1
+                OR (wp.position_seconds > 0 AND (
+                      wp.duration_seconds <= 0
+                      OR (wp.duration_seconds - wp.position_seconds) > ?
+                ))
+              )
+        )";
+        return [$sql, [(int) $userId, HOME_HIDE_REMAINING_SEC]];
+    }
+
+    /**
+     * Foydalanuvchi uchun feeddan yashiriladigan kontent ID larini qaytaradi.
+     */
+    public function homeHiddenIds($userId) {
+        if (!$userId) {
+            return [];
+        }
+        [$hidden, $params] = $this->homeHiddenClause($userId);
+        $rows = $this->db()->fetchAll(
+            "SELECT c.id FROM content c
+             JOIN categories cat ON cat.id = c.category_id
+             WHERE $hidden",
+            $params
+        );
+        return array_map(static fn($r) => (int) $r['id'], $rows);
+    }
+
+    /**
+     * Bosh sahifa feedi: yangi (HOME_NEW_DAYS ichida, created_at DESC)
+     * birinchi, qolgani `RAND(seed)` bo'yicha aralash.
+     *
+     * Sahifalash ikki segment ustida ishlaydi: avval yangi blok, so'ng
+     * aralash blok (offset yangilar sonidan oshganda eski blokka o'tadi).
+     */
+    public function getHomeFeed($userId = 0, $limit = 0, $offset = 0, $seed = 0) {
+        $limit  = $limit > 0 ? (int) $limit : HOME_PAGE_SIZE;
+        $offset = max(0, (int) $offset);
+        $seed   = (int) $seed;
+        if ($seed <= 0) {
+            $seed = 1;
+        }
+
+        [$hidden, $params] = $this->homeHiddenClause($userId);
+
+        $select = "SELECT c.*, cat.name AS category_name, cat.slug AS category_slug,
+                          (SELECT COUNT(*) FROM episodes e WHERE e.content_id = c.id) AS episode_count,
+                          (SELECT e.duration FROM episodes e
+                            WHERE e.content_id = c.id AND e.duration > 0
+                            ORDER BY e.episode_number ASC, e.id ASC LIMIT 1) AS episode_duration
+                   FROM content c
+                   JOIN categories cat ON cat.id = c.category_id
+                   WHERE NOT ($hidden)";
+
+        $newCond = 'c.created_at >= (NOW() - INTERVAL ' . (int) HOME_NEW_DAYS . ' DAY)';
+
+        // Yangi segmentdagi ko'rinadigan kontent soni (offset hisobi uchun)
+        $row = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS n FROM content c
+             JOIN categories cat ON cat.id = c.category_id
+             WHERE NOT ($hidden) AND $newCond",
+            $params
+        );
+        $newCount = (int) ($row['n'] ?? 0);
+
+        $rows = [];
+
+        // 1) Yangi blok: created_at DESC
+        $newSkip = max(0, $offset);
+        $newTake = min($limit, max(0, $newCount - $newSkip));
+        if ($newTake > 0) {
+            $rows = $this->db()->fetchAll(
+                "$select AND $newCond
+                 ORDER BY c.created_at DESC, c.id DESC
+                 LIMIT $newTake OFFSET $newSkip",
+                $params
+            );
+        }
+
+        // 2) Qolgan aralash blok: RAND(seed)
+        $oldTake = $limit - count($rows);
+        if ($oldTake > 0) {
+            $oldSkip = max(0, $offset - $newCount);
+            $rest = $this->db()->fetchAll(
+                "$select AND NOT ($newCond)
+                 ORDER BY RAND($seed)
+                 LIMIT $oldTake OFFSET $oldSkip",
+                $params
+            );
+            $rows = array_merge($rows, $rest);
+        }
+
+        return $rows;
+    }
+
+    /** Bosh sahifa feedida jami ko'rinadigan kontent soni. */
+    public function countHomeFeed($userId = 0) {
+        [$hidden, $params] = $this->homeHiddenClause($userId);
+        $row = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS n FROM content c
+             JOIN categories cat ON cat.id = c.category_id
+             WHERE NOT ($hidden)",
+            $params
+        );
+        return (int) ($row['n'] ?? 0);
+    }
+
+    /**
+     * Poster bo'sh yoki `placeholder:` prefiksli bo'lsa — sarlavha hashidan
+     * gradient + matn + kategoriya emoji bilan SVG data-URI generatsiya qiladi.
+     */
+    public static function autoPoster($poster, $title = '', $categorySlug = '', $categoryName = '') {
+        $p = trim((string) ($poster ?? ''));
+        if ($p !== '' && strpos($p, 'placeholder:') !== 0) {
+            return self::posterSrc($poster);
+        }
+        $title = trim((string) $title);
+        if ($title === '') {
+            $title = $categoryName !== '' ? $categoryName : 'W CINEMA';
+        }
+        $hash = md5($title . '|' . $categorySlug);
+        $hue1 = hexdec(substr($hash, 0, 2)) % 360;
+        $hue2 = hexdec(substr($hash, 2, 2)) % 360;
+
+        $emoji = self::catEmoji($categorySlug, $categoryName);
+
+        // Matnni ikki qatorga bo'lib chiqamiz (agar uzun bo'lsa)
+        $safe = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+        $short = (function_exists('mb_substr')
+            ? (mb_strlen($title, 'UTF-8') > 40 ? mb_substr($title, 0, 40, 'UTF-8') . '…' : $title)
+            : (strlen($title) > 40 ? substr($title, 0, 40) . '…' : $title));
+        $words = preg_split('/\s+/u', $short ?? '');
+        $line1 = '';
+        $line2 = '';
+        $mid = (int) ceil(count($words) / 2);
+        if (\count($words) > 2) {
+            $line1 = implode(' ', \array_slice($words, 0, $mid));
+            $line2 = implode(' ', \array_slice($words, $mid));
+        } else {
+            $line1 = $short;
+        }
+
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img">'
+            . '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+            . '<stop offset="0" stop-color="hsl(' . $hue1 . ',60%,34%)"/>'
+            . '<stop offset="1" stop-color="hsl(' . $hue2 . ',70%,17%)"/>'
+            . '</linearGradient></defs>'
+            . '<rect width="640" height="360" fill="url(#g)"/>'
+            . '<text x="320" y="172" font-size="96" text-anchor="middle" font-family="sans-serif">' . $emoji . '</text>'
+            . '<text x="320" y="272" font-size="34" font-weight="700" fill="rgba(255,255,255,.95)" text-anchor="middle" font-family="sans-serif">' . $safe($line1) . '</text>';
+        if ($line2 !== '') {
+            $svg .= '<text x="320" y="318" font-size="34" font-weight="700" fill="rgba(255,255,255,.95)" text-anchor="middle" font-family="sans-serif">' . $safe($line2) . '</text>';
+        }
+        $svg .= '</svg>';
+
+        return 'data:image/svg+xml;charset=utf-8,' . rawurlencode($svg);
+    }
+
+    private static function catEmoji($slug, $name = '') {
+        $map = [
+            'kino' => '🎬', 'anime' => '🌸', 'multfilm' => '🧸', 'multflim' => '🧸',
+            'serial' => '📺', 'film' => '🎥', 'kinoqizi' => '🎬', 'bolalar' => '🧸',
+            'dokumental' => '📚', 'dok' => '📚',
+        ];
+        $s = strtolower(trim((string) $slug));
+        if (isset($map[$s])) {
+            return $map[$s];
+        }
+        $n = strtolower(trim((string) $name));
+        foreach ($map as $key => $e) {
+            if ($n !== '' && (strpos($s, $key) !== false || strpos($n, $key) !== false)) {
+                return $e;
+            }
+        }
+        return '🎥';
+    }
+
     /**
      * "Boshqa kinolar, animelar va multfilmlar" - ARALASH tavsiyalar.
      *
@@ -1148,7 +1354,12 @@ class Catalog {
             'id'          => (int) $c['id'],
             'title'       => $c['title'],
             'description' => $c['description'] ?? '',
-            'poster'      => self::posterSrc($c['poster'] ?? null),
+            'poster'      => self::autoPoster(
+                $c['poster'] ?? null,
+                $c['title'] ?? '',
+                $c['category_slug'] ?? $c['slug'] ?? '',
+                $c['category_name'] ?? ''
+            ),
             'banner'      => $c['banner_url'] ?? null,
             'category'    => $c['category_name'] ?? null,
             'category_slug' => $c['category_slug'] ?? null,

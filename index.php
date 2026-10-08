@@ -113,22 +113,20 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <main>
     <!-- ================================================= Bosh sahifa -->
     <section id="homeView">
-        <div class="row">
-            <h2 class="row-title">Yangi qo‘shilganlar</h2>
-            <div class="grid" id="newGrid"></div>
-        </div>
-
-        <div class="row">
-            <h2 class="row-title">Trending</h2>
-            <div class="grid" id="trendingGrid"></div>
-        </div>
-
         <div class="row" id="continueRow" hidden>
             <h2 class="row-title">Davom etish</h2>
             <div class="grid" id="continueGrid"></div>
         </div>
 
-        <div id="catRows"></div>
+        <!-- Bitta aralash feed: yangi qo'shilganlar birinchi, qolgani
+             seed bo'yicha aralashtiriladi. Scroll bilan cheksiz yuklanadi. -->
+        <div class="row">
+            <div class="grid" id="homeFeed"></div>
+            <div class="empty" id="feedEmpty" hidden>Natija topilmadi</div>
+        </div>
+
+        <!-- Infinite scroll sentinel: oldiga tushilganda keyingi sahifa yuklanadi -->
+        <div id="feedSentinel" aria-hidden="true"></div>
 
         <div class="more-wrap">
             <button class="btn-more" id="goCatalog">Butun katalogni ko‘rish</button>
