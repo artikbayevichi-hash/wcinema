@@ -531,7 +531,7 @@ $NAV_ACTIVE = 'home';
             try {
                 window.TgStream.verify().catch(function () {
                     if (!window.TgStream.hasSession()) {
-                        location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/tg-login.php');
+                        location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');
                     }
                 });
             } catch (e) {}

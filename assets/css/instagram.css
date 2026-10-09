@@ -265,6 +265,38 @@ body.ig-shell { transition: padding-left .2s ease; }
 }
 .ig-mobar-btn .ig-svg { width: 23px; height: 23px; }
 
+/* Mobil header: "Kataloglar" tugmasi + ochiladigan menyu (Kino/Animelar/Multfilmlar) */
+.ig-mobar-cats { position: relative; display: flex; }
+.ig-mobar-btn.open { background: var(--card); }
+.ig-mobar-cats-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 200px;
+    padding: 6px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+    z-index: 90;
+    animation: igCatPop .14s ease;
+}
+.ig-mobar-cats-menu[hidden] { display: none; }
+@keyframes igCatPop {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.ig-mobar-cat {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 10px;
+    color: var(--text); text-decoration: none;
+    font-size: 15px; font-weight: 600;
+}
+.ig-mobar-cat:hover { background: var(--card-2); }
+.ig-mobar-cat.active { color: var(--accent); }
+.ig-mobar-cat-ico { display: flex; flex: 0 0 auto; }
+.ig-mobar-cat-ico .ig-svg { width: 21px; height: 21px; }
+
 /* ==========================================================================
    TELEFON: pastki panel (Bosh sahifa | Reels | Chat | Qidiruv | Profil)
    ========================================================================== */

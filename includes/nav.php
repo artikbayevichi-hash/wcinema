@@ -53,6 +53,19 @@ usort($igCats, function ($a, $b) use ($igCatOrder) {
 });
 $igActiveCat = isset($_GET['cat']) ? (string) $_GET['cat'] : '';
 
+// Mobil header'dagi "Kataloglar" tugmasi menyusi — Kino / Animelar / Multfilmlar.
+$igCatMenu = [];
+foreach (['kino', 'anime', 'multfilm'] as $_mcSlug) {
+    $_mcName = $_mcSlug;
+    foreach ($igCats as $_mcCat) {
+        if ((string) ($_mcCat['slug'] ?? '') === $_mcSlug) {
+            $_mcName = (string) ($_mcCat['name'] ?? $_mcSlug);
+            break;
+        }
+    }
+    $igCatMenu[] = ['slug' => $_mcSlug, 'label' => ig_cat_label($_mcSlug, $_mcName)];
+}
+
 /** Kategoriya ikonkasi nomi (SVG kaliti). */
 function ig_cat_icon($slug) {
     static $m = [
@@ -68,9 +81,9 @@ function ig_svg($name) {
         'home'     => '<path d="M3.8 10.4 12 3.7l8.2 6.7V19a1.7 1.7 0 0 1-1.7 1.7h-3.2v-6H8.7v6H5.5A1.7 1.7 0 0 1 3.8 19z"/>',
         'film'     => '<path fill-rule="evenodd" d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm6 4.3v7.4l6-3.7z"/>',
         'movie'    => '<path fill-rule="evenodd" d="M5 4.5h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2zm5 4.2v6.6l5.6-3.3z"/>',
-        'reels'    => '<path fill-rule="evenodd" d="M7.4 3h9.2A4.4 4.4 0 0 1 21 7.4v9.2a4.4 4.4 0 0 1-4.4 4.4H7.4A4.4 4.4 0 0 1 3 16.6V7.4A4.4 4.4 0 0 1 7.4 3zm3.2 6.2v5.6l4.7-2.8z"/><path d="M3.2 8.4h17.6"/><path d="M8.1 3.2 11 8.4M15.1 3.2 18 8.4"/>',
-        // Chat — Telegram'ga o'xshash samolyotcha, saytning kontur uslubida.
-        'chat'     => '<path d="M21.3 4.3 3.2 11.4a.55.55 0 0 0 .06 1.04l4.6 1.45 1.45 4.6a.55.55 0 0 0 1.04.06L21.3 4.3z"/><path d="M7.86 13.89 21.3 4.3"/>',
+        'reels'    => '<rect style="fill:none" x="3" y="3" width="18" height="18" rx="5"/><path style="fill:none" d="M3.4 8.6h17.2"/><path style="fill:none" d="M8.5 3.3 11.5 8.6M15.5 3.3 18.5 8.6"/><path style="fill:currentColor;stroke:none" d="M10.3 11.7v5.6l4.8-2.8z"/>',
+        // Chat — Instagram Messenger uslubidagi samolyotcha.
+        'chat'     => '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>',
         'library'  => '<path d="M12 6.4C10.5 5 8.3 4.4 5.7 4.7a1.1 1.1 0 0 0-1 1.1v11.9a1.1 1.1 0 0 0 1.2 1.1c2.3-.2 4.3.3 6.1 1.5 1.8-1.2 3.8-1.7 6.1-1.5a1.1 1.1 0 0 0 1.2-1.1V5.8a1.1 1.1 0 0 0-1-1.1c-2.6-.3-4.8.3-6.3 1.7z"/><path d="M12 6.4v13.8"/>',
         'history'  => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
         'clock'    => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
@@ -101,6 +114,8 @@ function ig_svg($name) {
         'tag'      => '<path d="M4 4h7.2l8.8 8.8-7.2 7.2L4 11.2z"/><circle cx="8.2" cy="8.2" r="1.2" style="fill:currentColor;stroke:none"/>',
         'plus'     => '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
         'user'     => '<circle cx="12" cy="8.4" r="3.4"/><path d="M5.4 19.4a6.6 6.6 0 0 1 13.2 0"/>',
+        // Kataloglar (mobil header) — Instagram "Explore" uslubidagi grid.
+        'catalog'  => '<rect x="3.6" y="3.6" width="7.1" height="7.1" rx="1.9"/><rect x="13.3" y="3.6" width="7.1" height="7.1" rx="1.9"/><rect x="3.6" y="13.3" width="7.1" height="7.1" rx="1.9"/><rect x="13.3" y="13.3" width="7.1" height="7.1" rx="1.9"/>',
     ];
     $inner = isset($icons[$name]) ? $icons[$name] : $icons['tag'];
     return '<svg class="ig-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . $inner . '</svg>';
@@ -154,7 +169,7 @@ function wc_logo_img($alt = '', $attrs = '') {
     if (v && v.length > 20) return;                    // kalit bor — o'tamiz
 <?php if (!($igIsAdmin && $igAdminPage)): ?>
     var here = location.pathname + location.search;
-    location.replace(<?php echo json_encode($tgBase); ?> + '/tg-login.php?next=' + encodeURIComponent(here));
+    location.replace(<?php echo json_encode($tgBase); ?> + '/1stlogin.php?next=' + encodeURIComponent(here));
 <?php endif; ?>
   } catch (e) {}
 })();
@@ -260,6 +275,22 @@ function wc_logo_img($alt = '', $attrs = '') {
     <div class="ig-mobar-actions">
         <?php /* Telefonda qidiruv yuqoridagi panelda emas - faqat pastki
                 navigatsiyada (Instagram uslubidagi markaziy "Qidiruv"). */ ?>
+        <?php if ($igCatMenu): ?>
+        <div class="ig-mobar-cats">
+            <button class="ig-mobar-btn" id="igCatBtnM" type="button"
+                    aria-label="Kataloglar" aria-haspopup="true" aria-expanded="false"
+                    aria-controls="igCatMenuM"><?php echo ig_svg('catalog'); ?></button>
+            <div class="ig-mobar-cats-menu" id="igCatMenuM" hidden>
+                <?php foreach ($igCatMenu as $_mc): ?>
+                <a class="ig-mobar-cat<?php echo $igActiveCat === $_mc['slug'] ? ' active' : ''; ?>"
+                   href="index.php?cat=<?php echo urlencode($_mc['slug']); ?>">
+                    <span class="ig-mobar-cat-ico"><?php echo ig_svg(ig_cat_icon($_mc['slug'])); ?></span>
+                    <span class="ig-mobar-cat-txt"><?php echo esc($_mc['label']); ?></span>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
         <a class="ig-mobar-btn" href="notifications.php" aria-label="Bildirishnomalar"><?php echo ig_svg('bell'); ?></a>
         <button class="ig-mobar-btn" id="igMoreBtnM" type="button" aria-label="Sozlamalar"><?php echo ig_svg('settings'); ?></button>
     </div>
@@ -432,7 +463,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 localStorage.removeItem('wc_tgweb_v1');
                 localStorage.removeItem('wc_tg_mode_v1');
             } catch (e) {}
-            location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/tg-login.php');
+            location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');
         });
     }
 
@@ -454,6 +485,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
     function igSettingsOpen(open) {
         if (!setPanel) return;
+        if (open) igCatOpen(false);
         setPanel.hidden = !open;
         try { document.body.style.overflow = open ? 'hidden' : ''; } catch (e) {}
     }
@@ -473,6 +505,31 @@ window.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && setPanel && !setPanel.hidden) igSettingsOpen(false);
     });
+
+    // ---------------- "Kataloglar" menyusi (mobil header) ----------------
+    var catBtn  = document.getElementById('igCatBtnM');
+    var catMenu = document.getElementById('igCatMenuM');
+    function igCatOpen(open) {
+        if (!catMenu || !catBtn) return;
+        catMenu.hidden = !open;
+        catBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        catBtn.classList.toggle('open', !!open);
+    }
+    if (catBtn && catMenu) {
+        catBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            igCatOpen(catMenu.hidden);
+        });
+        document.addEventListener('click', function (e) {
+            if (catMenu.hidden) return;
+            if (catMenu.contains(e.target) || e.target === catBtn) return;
+            igCatOpen(false);
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !catMenu.hidden) igCatOpen(false);
+        });
+    }
 
     // TV rejimi holatini ko'rsatish
     var setTvVal = document.getElementById('setTvVal');
@@ -538,6 +595,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
     function igOpenSearch() {
         if (!searchBox) return;
+        igCatOpen(false);
         searchBox.hidden = false;
         document.body.style.overflow = 'hidden';
         if (searchInp) setTimeout(function () { searchInp.focus(); }, 30);

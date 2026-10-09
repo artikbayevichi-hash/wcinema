@@ -96,10 +96,12 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <!-- =====================================================================
      TELEGRAM KIRISH HIMOYASI
      ---------------------------------------------------------------------
-     Kirish endi alohida sahifada (`tg-login.php`) va `nav.php` dagi
-     guard orqali boshqariladi: kalit (auth_key) localStorage'da bo'lmasa,
-     foydalanuvchi login sahifasiga yo'naltiriladi. Video baytlari esa
-     Telegram CDN dan to'g'ridan-to'g'ri oqadi — serverga umuman tegmaydi.
+     Kirish endi alohida sahifalarda: avval `1stlogin.php` (splash →
+     "Kirish"), so'ng `tg-login.php` (QR/ro'yxatdan o'tish) — va `nav.php`
+     dagi guard orqali boshqariladi: kalit (auth_key) localStorage'da
+     bo'lmasa, foydalanuvchi splash sahifasiga yo'naltiriladi. Video
+     baytlari esa Telegram CDN dan to'g'ridan-to'g'ri oqadi — serverga
+     umuman tegmaydi.
      ================================================================== -->
 
 <!-- Instagram uslubidagi navigatsiya (desktop yon panel / mobil pastki panel) -->
@@ -248,9 +250,9 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
                 document.documentElement.setAttribute('data-tg-ready', '1');
                 window.dispatchEvent(new Event('wc:tgReady'));
             }).catch(function () {
-                // Kalit bekor qilingan — login sahifasi qayta ochiladi.
+                // Kalit bekor qilingan — kirish sahifasi qayta ochiladi.
                 if (!window.TgStream.hasSession()) {
-                    location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/tg-login.php');
+                    location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');
                 }
             });
         }
