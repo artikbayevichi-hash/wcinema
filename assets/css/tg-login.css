@@ -268,7 +268,7 @@ html.tgl-day .tgl-card { box-shadow: 0 18px 50px rgba(30, 50, 80, .16); }
   height: 3rem;
   padding: 0 1rem;
   border: 0;
-  border-radius: 16px;
+  border-radius: 999px;
   font: inherit;
   font-size: 1rem;
   font-weight: 700;

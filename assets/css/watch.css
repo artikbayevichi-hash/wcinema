@@ -35,7 +35,7 @@
 .watch-404 h1 { font-size: 22px; margin: 0 0 8px; }
 .watch-404 p  { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
 .watch-404-btn {
-    display: inline-block; padding: 11px 20px; border-radius: 12px;
+    display: inline-block; padding: 11px 20px; border-radius: 999px;
     background: var(--accent); color: #fff; font-weight: 700;
     font-size: 14px; text-decoration: none;
 }

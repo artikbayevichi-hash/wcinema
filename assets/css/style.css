@@ -349,11 +349,13 @@ main { padding: 4px 0 20px; }
    ========================================================================== */
 .more-wrap { padding: 16px 14px; text-align: center; }
 .btn-more {
-    padding: 11px 26px; border-radius: 10px;
+    padding: 11px 26px; border-radius: 999px;
     background: var(--card); border: 1px solid var(--line);
     font-size: 14px; font-weight: 600;
+    transition: background .15s ease, transform .12s ease;
 }
 .btn-more:hover { background: var(--card-2); }
+.btn-more:active { transform: scale(.97); }
 
 .empty { color: var(--muted); font-size: 14px; padding: 12px; }
 
@@ -522,7 +524,7 @@ main { padding: 4px 0 20px; }
 }
 .nv-msg { font-size: 13px; line-height: 1.55; color: var(--muted); max-width: 470px; }
 .nv-btn {
-    display: inline-block; padding: 8px 16px; border-radius: 8px;
+    display: inline-block; padding: 8px 16px; border-radius: 999px;
     background: var(--accent, #0095f6); color: #fff;
     font-size: 13px; font-weight: 600; text-decoration: none;
 }
@@ -539,7 +541,7 @@ main { padding: 4px 0 20px; }
 .tg-cta-sub { font-size: 13px; line-height: 1.55; color: var(--muted); }
 .tg-cta-btn {
     display: inline-block; margin-top: 4px; padding: 11px 26px;
-    border-radius: 10px; font-size: 15px; font-weight: 700;
+    border-radius: 999px; font-size: 15px; font-weight: 700;
     background: var(--accent, #0095f6); color: #fff; text-decoration: none;
 }
 .tg-cta-btn:hover { opacity: .9; }
@@ -589,12 +591,13 @@ main { padding: 4px 0 20px; }
 .action {
     flex: 0 0 auto;
     display: flex; align-items: center; gap: 6px;
-    padding: 9px 14px; border-radius: 10px;
+    padding: 9px 14px; border-radius: 999px;
     background: var(--card); border: 1px solid var(--line);
     font-size: 13px; font-weight: 600; color: var(--text);
     transition: all .15s;
 }
 .action:hover { background: var(--card-2); }
+.action:active { transform: scale(.97); }
 .action.on { color: var(--accent); border-color: var(--accent); }
 .action.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .action.primary:hover { filter: brightness(1.1); }
@@ -612,7 +615,7 @@ main { padding: 4px 0 20px; }
     gap: 8px; padding: 0 14px;
 }
 .ep {
-    padding: 11px 8px; border-radius: 10px;
+    padding: 11px 8px; border-radius: 12px;
     background: var(--card); border: 1px solid var(--line);
     text-align: center; transition: all .15s;
 }
