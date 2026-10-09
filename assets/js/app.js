@@ -11,6 +11,22 @@
     const $  = (s, r) => (r || document).querySelector(s);
     const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
 
+    // Instagram uslubidagi chiziqli ikonkalar (emoji o'rniga).
+    const svg = (inner, full) => '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" '
+        + 'stroke-linecap="round" stroke-linejoin="round" '
+        + (full ? 'fill="currentColor"' : 'fill="none"') + '>' + inner + '</svg>';
+    const ICON = {
+        heart:        svg('<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>', true),
+        heartOutline: svg('<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>'),
+        bookmark:     svg('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>'),
+        bookmarkOn:   svg('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>', true),
+        send:         svg('<path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>'),
+        share:        svg('<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>'),
+        scissors:     svg('<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>'),
+        clock:        svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+        check:        svg('<path d="M20 6 9 17l-5-5"/>')
+    };
+
     const state = {
         category: '',
         genre: 0,
@@ -1003,13 +1019,13 @@
             </div>
 
             <div class="actions">
-                <button class="action" id="actLike">${c.has_liked ? '❤️' : '🤍'} <span>${
+                <button class="action${c.has_liked ? ' on' : ''}" id="actLike">${c.has_liked ? ICON.heart : ICON.heartOutline} <span>${
                     c.likes ? fmtViews(c.likes) : ''}</span></button>
                 <button class="action${c.in_watchlist ? ' on' : ''}" id="actWatch">${
-                    c.in_watchlist ? '✓' : '＋'} Kutubxona</button>
-                <button class="action primary" id="actSend">📤 Saqlash</button>
-                <button class="action" id="actShare">🔗 Ulashish</button>
-                <button class="action" id="actClip">✂️ Reels</button>
+                    c.in_watchlist ? ICON.bookmarkOn : ICON.bookmark} Kutubxona</button>
+                <button class="action primary" id="actSend">${ICON.send} Saqlash</button>
+                <button class="action" id="actShare">${ICON.share} Ulashish</button>
+                <button class="action" id="actClip">${ICON.scissors} Reels</button>
             </div>
 
             ${c.description ? `<div class="modal-desc">${esc(c.description)}</div>` : ''}
@@ -1135,7 +1151,7 @@
                 // mumkin (va CSRF hujjumga ochiq bo'lardi).
                 const r = await api('like.php?id=' + c.id, { method: 'POST' });
                 likeBtn.classList.toggle('on', r.liked);
-                likeBtn.innerHTML = (r.liked ? '❤️' : '🤍') + ' <span>' +
+                likeBtn.innerHTML = (r.liked ? ICON.heart : ICON.heartOutline) + ' <span>' +
                     (r.likes ? fmtViews(r.likes) : '') + '</span>';
             } catch (e) {
                 toast(esc(e.message), 'err');
@@ -1152,7 +1168,7 @@
                 if (!window.WCLib) return;
                 const onLocal = window.WCLib.toggle('saved', libItem(c));
                 wBtn.classList.toggle('on', onLocal);
-                wBtn.textContent = onLocal ? '✓ Kutubxona' : '＋ Kutubxona';
+                wBtn.innerHTML = (onLocal ? ICON.bookmarkOn : ICON.bookmark) + ' Kutubxona';
                 toast(onLocal ? 'Kutubxonaga qo\'shildi' : 'Kutubxonadan olib tashlandi', 'ok');
                 return;
             }
@@ -1162,7 +1178,7 @@
                 // Xudusi shu sababdan POST (holatni o'zgartiradi)
                 const r = await api('watchlist.php?id=' + c.id, { method: 'POST' });
                 wBtn.classList.toggle('on', r.in_watchlist);
-                wBtn.textContent = r.in_watchlist ? '✓ Kutubxona' : '＋ Kutubxona';
+                wBtn.innerHTML = (r.in_watchlist ? ICON.bookmarkOn : ICON.bookmark) + ' Kutubxona';
                 toast(r.in_watchlist ? 'Kutubxonaga qo\'shildi' : 'Kutubxonadan olib tashlandi', 'ok');
             } catch (e) {
                 toast(esc(e.message), 'err');
@@ -1176,7 +1192,7 @@
         if (sendBtn) sendBtn.onclick = async () => {
             if (!requireLogin()) return;
             sendBtn.classList.add('busy');
-            sendBtn.textContent = '⏳ Yuborilmoqda…';
+            sendBtn.innerHTML = ICON.clock + ' Yuborilmoqda…';
             try {
                 const q = 'id=' + c.id + (sel ? '&episode=' + sel.id : '');
                 const r = await api('telegram-save.php?' + q, { method: 'POST' });
@@ -1185,11 +1201,11 @@
                     toast('Avval <a href="' + esc(APP.botUrl) + '" target="_blank">@' +
                         esc(APP.botUsername) + '</a> botiga <code>/start</code> yuboring', 'err');
                 } else if (r.success) {
-                    sendBtn.textContent = '✓ Yuborildi';
+                    sendBtn.innerHTML = ICON.check + ' Yuborildi';
                     toast(esc(r.message || 'Yuborildi'), 'ok');
                 } else {
                     toast(esc(r.message || 'Yuborilmadi'), 'err');
-                    sendBtn.textContent = '📤 Saqlash';
+                    sendBtn.innerHTML = ICON.send + ' Saqlash';
                 }
             } catch (e) {
                 // 428 = /start kerak
@@ -1199,7 +1215,7 @@
                 } else {
                     toast(esc(e.message), 'err');
                 }
-                sendBtn.textContent = '📤 Telegram\'ga';
+                sendBtn.innerHTML = ICON.send + ' Telegram\'ga';
             } finally {
                 sendBtn.classList.remove('busy');
             }

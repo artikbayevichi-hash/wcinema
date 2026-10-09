@@ -52,12 +52,12 @@ $meId       = $user ? (int) $user['id'] : null;
 
 <!-- ================================================= Yuqori panel -->
 <header class="pf-top">
-    <a class="pf-back" href="index.php" aria-label="Orqaga">&larr;</a>
+    <a class="pf-back" href="index.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
     <div class="pf-title" id="pfTitle">Profil</div>
     <div class="pf-top-actions">
-        <a class="pf-top-btn" href="settings.php" title="Sozlamalar" id="pfSettingsBtn" hidden>&#9881;</a>
-        <a class="pf-top-btn" href="reels-upload.php" title="Joylash" id="pfUploadBtn" hidden>&#10133;</a>
-        <a class="pf-top-btn" href="logout.php" title="Chiqish" id="pfLogoutBtn" hidden>&#9211;</a>
+        <a class="pf-top-btn" href="settings.php" title="Sozlamalar" id="pfSettingsBtn" hidden><?php echo ig_svg('settings'); ?></a>
+        <a class="pf-top-btn" href="reels-upload.php" title="Joylash" id="pfUploadBtn" hidden><?php echo ig_svg('plus'); ?></a>
+        <a class="pf-top-btn" href="logout.php" title="Chiqish" id="pfLogoutBtn" hidden><?php echo ig_svg('logout'); ?></a>
     </div>
 </header>
 
@@ -118,16 +118,16 @@ $meId       = $user ? (int) $user['id'] : null;
 <!-- Tahrirlash modali -->
 <div class="pf-modal" id="pfModal" hidden>
     <div class="pf-modal-box">
-        <h3 id="pfModalTitle">&#9998; Profilni tahrirlash</h3>
+        <h3 id="pfModalTitle"><?php echo ig_svg('edit'); ?> Profilni tahrirlash</h3>
         <form id="pfEditForm" autocomplete="off">
             <div class="pf-field pf-field-av">
                 <label>Profil rasmi</label>
                 <div class="pf-av-edit">
                     <span class="pf-av-preview" id="pfAvPreview">?</span>
                     <div class="pf-av-btns">
-                        <label class="pf-btn ghost pf-av-pick" for="pfInAvatarFile">&#128247; Rasm tanlash</label>
+                        <label class="pf-btn ghost pf-av-pick" for="pfInAvatarFile"><?php echo ig_svg('camera'); ?> Rasm tanlash</label>
                         <input type="file" id="pfInAvatarFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
-                        <button type="button" class="pf-btn ghost" id="pfAvRemove">&#128465; O&#8217;chirish</button>
+                        <button type="button" class="pf-btn ghost" id="pfAvRemove"><?php echo ig_svg('trash'); ?> O&#8217;chirish</button>
                     </div>
                 </div>
             </div>
@@ -155,7 +155,7 @@ $meId       = $user ? (int) $user['id'] : null;
             <div class="pf-modal-err" id="pfEditErr"></div>
             <div class="pf-modal-btns">
                 <button type="button" class="pf-btn ghost" id="pfModalCancel">Bekor qilish</button>
-                <button type="submit" class="pf-btn prim" id="pfModalSave">&#128190; Saqlash</button>
+                <button type="submit" class="pf-btn prim" id="pfModalSave"><?php echo ig_svg('check'); ?> Saqlash</button>
             </div>
         </form>
     </div>

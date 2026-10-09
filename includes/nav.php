@@ -74,7 +74,22 @@ function ig_svg($name) {
         'library'  => '<rect x="4" y="4.5" width="4.6" height="15" rx="1"/><rect x="10" y="4.5" width="4.6" height="15" rx="1"/><path d="M15.6 5.6l3.1 13.6a1 1 0 0 0 1.2.8l1.1-.3"/>',
         'history'  => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
         'clock'    => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
-        'like'     => '<path d="M7.3 10.3v9.5H5a1.2 1.2 0 0 1-1.2-1.2v-7.1A1.2 1.2 0 0 1 5 10.3z"/><path d="M7.3 10.3 11 3.8a1.9 1.9 0 0 1 1.9 2.3l-.8 3.4h4.7a1.9 1.9 0 0 1 1.9 2.3l-1.3 5.9a1.9 1.9 0 0 1-1.9 1.5H7.3"/>',
+        'like'     => '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
+        'heart'    => '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
+        'thumbUp'  => '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>',
+        'thumbDown'=> '<path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>',
+        'send'     => '<path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
+        'list'     => '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
+        'camera'   => '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+        'trash'    => '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+        'check'    => '<path d="M20 6 9 17l-5-5"/>',
+        'close'    => '<path d="M18 6 6 18M6 6l12 12"/>',
+        'back'     => '<path d="M15 5l-7 7 7 7"/>',
+        'edit'     => '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+        'logout'   => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+        'download' => '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
+        'image'    => '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+        'play'     => '<polygon points="6 3 20 12 6 21 6 3"/>',
         'bookmark' => '<path d="M6.6 4.5h10.8a.8.8 0 0 1 .8.8V20l-6.2-4.1L5.8 20V5.3a.8.8 0 0 1 .8-.8z"/>',
         'bell'     => '<path d="M6.6 16.6V11a5.4 5.4 0 0 1 10.8 0v5.6l1.7 2.1H4.9z"/><path d="M9.9 20.3a2.1 2.1 0 0 0 4.2 0"/>',
         'folder'   => '<path d="M3.6 6.6a1.6 1.6 0 0 1 1.6-1.6h4l2 2.2h7.6a1.6 1.6 0 0 1 1.6 1.6v9.6a1.6 1.6 0 0 1-1.6 1.6H5.2a1.6 1.6 0 0 1-1.6-1.6z"/>',
@@ -265,7 +280,7 @@ function wc_logo_img($alt = '', $attrs = '') {
     <div class="ig-search-bar">
         <span class="ig-search-ico"><?php echo ig_svg('search'); ?></span>
         <input id="igSearchInput" type="search" placeholder="Qidirish" autocomplete="off">
-        <button class="ig-search-close" id="igSearchClose" type="button" aria-label="Yopish">&larr;</button>
+        <button class="ig-search-close" id="igSearchClose" type="button" aria-label="Yopish"><?php echo ig_svg('back'); ?></button>
     </div>
     <div class="ig-search-body">
         <div class="ig-search-hint" id="igSearchHint">Qidirish uchun nom yozing</div>

@@ -116,7 +116,7 @@ if (!$auth->isAdmin()) {
 <?php $NAV_ACTIVE = ''; require __DIR__ . '/includes/nav.php'; ?>
 
 <header class="up-top">
-    <a class="reels-back" href="index.php" aria-label="Orqaga">←</a>
+    <a class="reels-back" href="index.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
     <div class="up-title">Kontent boshqaruvi</div>
     <span style="width:34px"></span>
 </header>
@@ -129,7 +129,7 @@ if (!$auth->isAdmin()) {
            placeholder="🔍 Qidirish — nomi, katalog yoki ID (#12)…" autocomplete="off"
            style="margin-bottom:10px">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-        <button class="up-btn" onclick="openCreate()">＋ Yangi qo'shish</button>
+        <button class="up-btn" onclick="openCreate()"><?php echo ig_svg('plus'); ?> Yangi qo'shish</button>
         <span style="font-size:12.5px;color:var(--muted);margin-left:auto" id="listCount"></span>
     </div>
     <div class="c-list" id="listBox"></div>
@@ -137,7 +137,7 @@ if (!$auth->isAdmin()) {
 
 <!-- ============================== TAHRIR / YANGI ============================== -->
 <div id="view-edit" hidden>
-    <button class="adm-btn ok mini" onclick="showList()" style="margin-bottom:10px">← Ro'yxatga</button>
+    <button class="adm-btn ok mini" onclick="showList()" style="margin-bottom:10px"><?php echo ig_svg('back'); ?> Ro'yxatga</button>
 
     <!-- Katalog tanlash (faqat yangi qo'shganda) -->
     <div class="adm-card" style="padding:14px" id="catPick" hidden>
@@ -199,7 +199,7 @@ if (!$auth->isAdmin()) {
                 <textarea id="f_description" maxlength="5000" placeholder="Qisqacha tavsif..."></textarea></div>
         </div>
         <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-            <button class="up-btn" onclick="saveContent()" id="saveContentBtn">💾 Saqlash</button>
+            <button class="up-btn" onclick="saveContent()" id="saveContentBtn"><?php echo ig_svg('check'); ?> Saqlash</button>
         </div>
     </div>
 
@@ -322,7 +322,7 @@ function applySearch() {
                 '</span>' +
             '</div>' +
             '<button class="adm-btn del mini" data-del="' + c.id + '" ' +
-                'onclick="event.stopPropagation();delContent(' + c.id + ')">🗑</button>';
+                'onclick="event.stopPropagation();delContent(' + c.id + ')"><?php echo ig_svg('trash'); ?></button>';
         box.appendChild(el);
         shown++;
     }
@@ -499,8 +499,8 @@ function renderEpisodes() {
             '<input class="ep-url" type="text" value="' + esc(url) + '" placeholder="https://t.me/kanal/post yoki video URL">' +
             '<input class="ep-min" type="number" min="0" value="' + esc(toMin(e.duration)) + '" placeholder="daqiqa" title="Davomiyligi (daqiqa)">' +
             '<span class="ep-actions">' +
-                '<button class="adm-btn ok mini" onclick="saveEpRow(' + e.id + ')">💾 Saqlash</button>' +
-                '<button class="adm-btn del mini" onclick="deleteEp(' + e.id + ')">🗑 O\'chirish</button>' +
+                '<button class="adm-btn ok mini" onclick="saveEpRow(' + e.id + ')"><?php echo ig_svg('check'); ?> Saqlash</button>' +
+                '<button class="adm-btn del mini" onclick="deleteEp(' + e.id + ')"><?php echo ig_svg('trash'); ?> O\'chirish</button>' +
             '</span>';
         box.appendChild(row);
     }
@@ -512,7 +512,7 @@ function renderEpisodes() {
         '<input id="addNum" class="ep-num" type="number" min="1" value="' + nextNum + '" title="Qism raqami">' +
         '<input id="addUrl" class="ep-url" type="text" placeholder="https://t.me/kanal/post yoki video URL">' +
         '<input id="addMin" class="ep-min" type="number" min="0" placeholder="daqiqa" title="Davomiyligi (daqiqa)">' +
-        '<span class="ep-actions"><button class="adm-btn ok mini" onclick="addEpisode()">＋ Qo\'shish</button></span>';
+        '<span class="ep-actions"><button class="adm-btn ok mini" onclick="addEpisode()"><?php echo ig_svg('plus'); ?> Qo\'shish</button></span>';
     box.appendChild(add);
 }
 

@@ -30,7 +30,7 @@ $userId = $user ? (int) $user['id'] : null;
 <?php $NAV_ACTIVE = 'profile'; require __DIR__ . '/includes/nav.php'; ?>
 
 <header class="st-top">
-    <a class="st-back" href="profile.php" aria-label="Orqaga">&larr;</a>
+    <a class="st-back" href="profile.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
     <div class="st-title">Sozlamalar</div>
 </header>
 

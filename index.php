@@ -163,7 +163,7 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <div class="modal" id="modal" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-box">
-        <button class="modal-close" data-close aria-label="Yopish">✕</button>
+        <button class="modal-close" data-close aria-label="Yopish"><?php echo ig_svg('close'); ?></button>
         <div id="modalBody"></div>
     </div>
 </div>
@@ -172,7 +172,7 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <div class="modal" id="trimModal" hidden>
     <div class="modal-backdrop" data-trim-close></div>
     <div class="modal-box">
-        <button class="modal-close" data-trim-close aria-label="Yopish">✕</button>
+        <button class="modal-close" data-trim-close aria-label="Yopish"><?php echo ig_svg('close'); ?></button>
         <div id="trimBody"></div>
     </div>
 </div>

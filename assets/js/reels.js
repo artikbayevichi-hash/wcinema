@@ -78,7 +78,8 @@
         flag:    svg('<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>'),
         trash:   svg('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
         close:   svg('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
-        pin:     svg('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>')
+        pin:     svg('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'),
+        warn:    svg('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>')
     };
 
     // ---------------------------------------------------------------- state
@@ -168,7 +169,7 @@
                          data-poster="${esc(pb.poster || '')}"></div>`;
         } else {
             media = `<div class="reels-warn">
-                        <div style="font-size:40px">🚫</div>
+                        <div class="reels-warn-ico">${ICON.warn}</div>
                         <div>${esc(pb.warning || 'Video mavjud emas')}</div>
                     </div>`;
         }
@@ -885,7 +886,7 @@
             ? `<img class="reels-c-av" src="${esc(c.author.avatar)}" alt="" referrerpolicy="no-referrer">`
             : `<div class="reels-c-av">${esc((c.author.name || '?').charAt(0))}</div>`;
         const del = ((mine && c.author.id === mine) || CFG.isAdmin)
-            ? `<button class="reels-c-del" data-del-comment="${c.id}" title="O‘chirish">✕</button>` : '';
+            ? `<button class="reels-c-del" data-del-comment="${c.id}" title="O‘chirish">${ICON.close}</button>` : '';
         return `<div class="reels-c-row" data-cid="${c.id}">
             <a class="reels-c-author" href="profile.php?user_id=${c.author.id}" onclick="event.stopPropagation()">${av}</a>
             <div class="reels-c-main">

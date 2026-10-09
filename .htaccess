@@ -106,12 +106,33 @@ AddType text/css .css
   # CPU sarflaydi. Rasm/ovoz/video bularga kiradi.
   SetEnvIf Request_URI "\.(?i:gz|zip|br|jpg|jpeg|gif|png|webp|avif|ico|svgz|mp4|m4v|webm|mkv|avi|mov|mp3|woff2?)$" no-gzip dont-vary
 
+  # ------------------------------------------------------------ VIDEO OQIMI
+  #
+  # Quyida `.php` ham siqiladigan qilingan (HTML sahifalar va JSON API uchun).
+  # Lekin UCHTA endpoint BINARY video chiqaradi — ularni siqish mumkin EMAS:
+  #
+  #   api/stream.php  - Range/206 bilan fayl beradi. Siqilsa Content-Length
+  #                     yo'qoladi va `bytes=` oralig'i buziladi (seek ishlamaydi).
+  #   api/live.php    - o'sib borayotgan faylni `flush()` bilan REAL VAQTDA
+  #                     beradi. Siqish uni buferlab, o'ynashni kechiktiradi.
+  #   api/hls.php     - `video/mp2t` segmentlarni `readfile` bilan beradi.
+  #
+  # `no-gzip` — mod_deflate'ning O'Z bayrog'i (yuqoridagi video formatlari
+  # ham shu usulda istisno qilingan). U filtrni umuman ishlamaydi, shuning
+  # uchun bu endpointlarga Range/206 va flush() hech qanday zarar ko'rmaydi.
+  SetEnvIf Request_URI "/api/(?i:stream|live|hls)\.php" no-gzip dont-vary
+
   # Eski brauzerlar gzip so'rasa ham noto'g'ri javob qaytaradi (bo'sh fayl).
   BrowserMatch ^Mozilla/4\.[678] no-gzip
   BrowserMatch \bMSIE\s(7|8) no-gzip
 
   # Faqat MATN fayllarini siqamiz — rasmlar, shriftlar va videolar tegilmaydi.
-  <FilesMatch "\.(?i:html?|css|js|mjs|json|svg|txt|xml|map)$">
+  #
+  # `php` NIMA UCHUN QO'SHILDI: sahifalar (reels.php ~44 KB HTML) va JSON API
+  # javoblari avval siqilmaydi. Tunnel orqali (trycloudflare) bu har so'rovda
+  # ortiqcha o'nlab KB degani. Yuqoridagi `no-gzip` qoidasi video oqimini
+  # himoya qiladi, shuning uchun `.php` ni qo'shish xavfsiz.
+  <FilesMatch "\.(?i:html?|css|js|mjs|json|svg|txt|xml|map|php)$">
     SetOutputFilter DEFLATE
   </FilesMatch>
 </IfModule>

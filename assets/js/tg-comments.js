@@ -1137,7 +1137,7 @@
     lb.id = 'reelsLightbox';
     lb.className = 'reels-lb';
     lb.hidden = true;
-    lb.innerHTML = '<button type="button" class="reels-lb-x" aria-label="Yopish">✕</button>'
+    lb.innerHTML = '<button type="button" class="reels-lb-x" aria-label="Yopish"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
       + '<div class="reels-lb-stage"></div>';
     document.body.appendChild(lb);
     lb.addEventListener('click', function () { closeLightbox(); });

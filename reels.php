@@ -55,9 +55,9 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
 <?php $NAV_ACTIVE = 'reels'; require __DIR__ . '/includes/nav.php'; ?>
 
 <header class="reels-top">
-    <a class="reels-back" href="index.php" aria-label="Orqaga">←</a>
+    <a class="reels-back" href="index.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
     <span class="reels-headtitle">Reels</span>
-    <a class="reels-back" href="reels-upload.php" aria-label="Yuklash">＋</a>
+    <a class="reels-back" href="reels-upload.php" aria-label="Yuklash"><?php echo ig_svg('plus'); ?></a>
 </header>
 
 <!-- ============================== Oqim (vertikal) ============================== -->
@@ -76,7 +76,7 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
 </button>
 
 <!-- ============================== Yuklash tugmasi ============================== -->
-<a class="reels-fab" id="reelsFab" href="reels-upload.php" title="Reels yuklash">＋</a>
+<a class="reels-fab" id="reelsFab" href="reels-upload.php" title="Reels yuklash"><?php echo ig_svg('plus'); ?></a>
 
 <!-- ============================== "More" (⋯) amallar menyusi ============================== -->
 <div class="reels-menu" id="reelMenu" hidden>
@@ -91,7 +91,7 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
 <div class="reels-modal" id="authorsModal" hidden>
     <div class="reels-modal-backdrop" data-close-authors></div>
     <div class="reels-modal-box">
-        <button class="reels-modal-x" data-close-authors aria-label="Yopish">✕</button>
+        <button class="reels-modal-x" data-close-authors aria-label="Yopish"><?php echo ig_svg('close'); ?></button>
         <h2 class="reels-modal-title">🏆 Top Authors</h2>
         <div id="authorsList" class="authors-list"></div>
     </div>
@@ -103,7 +103,7 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
     <div class="reels-comments-box" role="dialog" aria-label="Izohlar">
         <div class="reels-comments-head">
             <h2 class="reels-comments-title">Izohlar <span id="commentsCount"></span></h2>
-            <button class="reels-modal-x" data-close-comments aria-label="Yopish">✕</button>
+            <button class="reels-modal-x" data-close-comments aria-label="Yopish"><?php echo ig_svg('close'); ?></button>
         </div>
         <div class="reels-comments-list" id="commentsList"></div>
 
@@ -118,7 +118,7 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
                 <button type="button" class="reels-c-picker-tab" data-mode="gif" title="GIF">GIF</button>
                 <button type="button" class="reels-c-picker-tab" data-mode="photo" title="Rasm">Rasm</button>
                 <button type="button" class="reels-c-picker-tab" data-mode="mention" title="Belgilash">@</button>
-                <button type="button" class="reels-c-picker-x" id="cPickerX" aria-label="Yopish">&times;</button>
+                <button type="button" class="reels-c-picker-x" id="cPickerX" aria-label="Yopish"><?php echo ig_svg('close'); ?></button>
             </div>
             <div class="reels-c-picker-panel" id="cPickerPanel"></div>
         </div>
@@ -126,7 +126,7 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
         <div class="reels-c-replybar" id="cReplyBar" hidden>
             <span class="reels-c-replybar-av" id="cReplyAv"></span>
             <span class="reels-c-replybar-txt" id="cReplyTxt"></span>
-            <button type="button" class="reels-c-replybar-x" id="cReplyCancel" aria-label="Bekor qilish">✕</button>
+            <button type="button" class="reels-c-replybar-x" id="cReplyCancel" aria-label="Bekor qilish"><?php echo ig_svg('close'); ?></button>
         </div>
 
         <?php /* Izoh kompozitori — chat kompozitori bilan BIR XIL ko'rinadi:
@@ -228,8 +228,18 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
      ular boshqalar bilan tartibga bog'liq (`window.TgStream` `reels.js` dan
      oldin tayyor bo'lishi kerak).
      ========================================================================= -->
-<script src="assets/js/tv-mode.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tv-mode.js') ?: 1; ?>" defer></script>
-<script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/notifications.js') ?: 1; ?>" defer></script>
+<?php /* OLIB TASHLANGAN: tv-mode.js va notifications.js (defer)
+
+   Ikkalasi allaqachon `includes/nav.php` da yuklanadi (bu sahifa uni
+   55-qatorda majburiy `require` qiladi). Ikki marta yuklash ~30 KB va
+   parse vaqtini yo'qotishdan tashqari haqiqiy xato ham keltirar edi:
+   ikkala modul himoyasiz IIFE, shuning uchun `boot()` / `init()` ikki
+   marta ishlaydi va D-Pad tugmalari ikki marta ulanadi.
+
+   Tartib buzilmaydi: nav.php nusxalari `defer` siz, `<body>` ichida
+   yuklanadi — ya'ni bu yerdagi `defer` skriptlardan (shu jumladan
+   `reels.js` dan) OLDIN bajariladi. `window.TvMode` va `window.WCNtf`
+   avvalgidek tayyor bo'ladi, hatto biroz oldinroq. */ ?>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>" defer></script>
 <script src="assets/js/tg-voice.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-voice.js') ?: 1; ?>" defer></script>
 <script src="assets/js/tg-format.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-format.js') ?: 1; ?>" defer></script>

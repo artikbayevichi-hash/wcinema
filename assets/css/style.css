@@ -603,6 +603,7 @@ main { padding: 4px 0 20px; }
 .action.primary:hover { filter: brightness(1.1); }
 .action:disabled { opacity: .55; cursor: not-allowed; }
 .action.busy { opacity: .6; pointer-events: none; }
+.action svg { width: 16px; height: 16px; flex: 0 0 auto; }
 
 /* Qismlar */
 .eps-head {

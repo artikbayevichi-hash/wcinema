@@ -727,6 +727,21 @@
     global.addEventListener('scroll', closeSaveMenu, true);
   };
 
+  /* Instagram uslubidagi chiziqli ikonkalar (emoji o'rniga) - tugmalar
+     bir xil uslubda, monoxrom ko'rinishga ega bo'ladi. */
+  function actSvg(inner) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+      + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>';
+  }
+  var ACT_ICON = {
+    thumbUp:   actSvg('<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>'),
+    thumbDown: actSvg('<path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>'),
+    bookmark:  actSvg('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>'),
+    send:      actSvg('<path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>'),
+    list:      actSvg('<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>'),
+    clock:     actSvg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')
+  };
+
   function renderActions() {
     var box = el('watchActions');
     if (!box) return;
@@ -750,22 +765,22 @@
     var vote = '<div class="watch-vote">'
       + '<button type="button" class="watch-act watch-act-vote' + (D.has_liked ? ' on' : '') + '"'
       +     ' id="actLike" title="Yoqdi" aria-label="Yoqdi">'
-      +     '👍 <span class="watch-act-vote-n" id="actLikeN">' + esc(voteTxt(likes, 'Yoqdi')) + '</span></button>'
+      +     ACT_ICON.thumbUp + ' <span class="watch-act-vote-n" id="actLikeN">' + esc(voteTxt(likes, 'Yoqdi')) + '</span></button>'
       + '<button type="button" class="watch-act watch-act-vote watch-act-vote-d' + (D.has_disliked ? ' on' : '') + '"'
       +     ' id="actDislike" title="Yoqmadi" aria-label="Yoqmadi">'
-      +     '👎 <span class="watch-act-vote-n" id="actDislikeN">' + esc(voteTxt(dislikes, 'Yoqmadi')) + '</span></button>'
+      +     ACT_ICON.thumbDown + ' <span class="watch-act-vote-n" id="actDislikeN">' + esc(voteTxt(dislikes, 'Yoqmadi')) + '</span></button>'
       + '</div>';
 
     // 📚 - ustida MENYU turadi (`data-go` = chap navigatsiyadagi bo'limga).
     var save = '<span class="watch-act-wrap">'
       + '<button type="button" class="watch-act" id="actWatchlist" title="Kutubxonaga qo\'shish" aria-label="Kutubxona">'
-      +   '📚 <span class="watch-act-t">Kutubxona</span></button>'
+      +   ACT_ICON.bookmark + ' <span class="watch-act-t">Kutubxona</span></button>'
       + '<div class="watch-menu" id="actSaveMenu" hidden>'
       +   '<button type="button" class="watch-menu-item" data-go="later">'
-      +     '<span class="watch-menu-ico">&#128339;</span>'
+      +     '<span class="watch-menu-ico">' + ACT_ICON.clock + '</span>'
       +     '<span class="watch-menu-lab">Keyinroq ko‘rish</span></button>'
       +   '<button type="button" class="watch-menu-item" data-go="save">'
-      +     '<span class="watch-menu-ico">&#128278;</span>'
+      +     '<span class="watch-menu-ico">' + ACT_ICON.bookmark + '</span>'
       +     '<span class="watch-menu-lab">Saqlash</span></button>'
       + '</div></span>';
 
@@ -774,10 +789,10 @@
     box.innerHTML = vote
       + save
       + '<button type="button" class="watch-act" id="actShare" title="Ulashish" aria-label="Ulashish">'
-      +   '🔗 <span class="watch-act-t">Ulashish</span></button>'
+      +   ACT_ICON.send + ' <span class="watch-act-t">Ulashish</span></button>'
       + (S.sideEpisodes && S.episodes.length > 1
         ? '<button type="button" class="watch-act" id="actAllEps" title="Qismlar ro\'yxati" aria-label="Qismlar">'
-          + '📋 <span class="watch-act-t">Qismlar</span></button>'
+          + ACT_ICON.list + ' <span class="watch-act-t">Qismlar</span></button>'
         : '');
 
     // --- Yoqish / Yoqmaslik ------------------------------------------

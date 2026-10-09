@@ -87,7 +87,7 @@ $limits = [
 <?php $NAV_ACTIVE = 'upload'; require __DIR__ . '/includes/nav.php'; ?>
 
 <header class="up-top">
-    <a class="reels-back" href="reels.php" aria-label="Orqaga">&larr;</a>
+    <a class="reels-back" href="reels.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
     <div class="up-title">Joylash</div>
     <span style="width:34px"></span>
 </header>

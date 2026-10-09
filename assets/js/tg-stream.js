@@ -965,6 +965,201 @@
     return (c && c.bytes && c.bytes.length) ? c : null;
   }
 
+  // --------------------------------------------- TO'LIQ FAYL KESHI (disk)
+  //
+  //  Yuqoridagi `headCache` faylning faqat BOSHINI (512 KB) RAM da saqlaydi.
+  //  Bu kesh esa butun faylni brauzerning CacheStorage'ida (diskda) saqlaydi:
+  //  bir marta ko'rilgan reel IKKINCHI marta Telegram'ga umuman murojaat
+  //  qilmasdan ochiladi.
+  //
+  //  NIMA UCHUN FAQAT KICHIK FAYLLAR: kinolar 300 MB – 2 GB; ular uchun
+  //  server tomonda `api/live.php` ning `storage/live_cache` LRU keshi bor.
+  //  Brauzer kvotasi bunday hajmda beqaror, shuning uchun `docMax()`
+  //  dan katta fayl shunchaki keshlanmaydi — oqim odatdagidek davom etadi.
+  //
+  //  MUHIM: bu kesh QO'SHIMCHA Telegram so'rovi YUBORMAYDI. U faqat oqim
+  //  davomida ZATAN olingan baytlarni yon tomonga yozib boradi. Shu sababli
+  //  olib tashlangan `warmHead` dagi muammo (fon prefetch aktiv oqim bilan
+  //  raqobatlashib global `tgCap` ni pasaytirishi) bu yerda yo'q.
+  //
+  //  Sozlash: `window.TG_CACHE = { on: false }` — o'chirish,
+  //             `window.TG_CACHE = { maxMb: 48 }` — chegarani oshirish.
+  var DOC_CACHE_NAME = 'wc-media-v1';
+  var DOC_CACHE_KEEP = 24;                 // diskda nechta fayl saqlanadi (LRU)
+  var DOC_CACHE_BUDGET = 512 * 1024 * 1024; // jami hajm chegarasi (512 MB)
+  var DOC_ACC_KEEP   = 1;                  // RAM da bir vaqtda nechta fayl yig'iladi
+
+  function docMax() {
+    var mb = Number((global.TG_CACHE || {}).maxMb);
+    // 32 MB: ko'pchilik reels sig'adi, RAM uchun xavfsiz. REEL_MAX_UPLOAD_MB
+    // (50) dan past — telefonda WebView xotirasi cheklangan.
+    return (mb > 0 ? mb : 32) * 1024 * 1024;
+  }
+
+  // `caches` faqat xavfsiz kontekstda bor (https yoki localhost). LAN IP
+  // orqali http'da ochilsa — kesh jimgina o'chadi, oqim buzilmaydi.
+  function docOk() {
+    try {
+      return (global.TG_CACHE || {}).on !== false
+        && !!(global.caches && global.caches.open && global.Blob);
+    } catch (e) { return false; }
+  }
+
+  function docUrl(id) {
+    // Bu manzil HECH QACHON fetch qilinmaydi — faqat CacheStorage kaliti.
+    // Kalit Telegram hujjat id'si (butun tizimda yagona), URL emas: `tgfile/`
+    // manzilida hujjat identifikatori yo'q, faqat `size` bor.
+    return global.location.origin + '/__wc_media__/' + encodeURIComponent(id);
+  }
+
+  // --- yig'ish: oqim davomida kelgan bo'laklarni tutib turamiz -------------
+  //
+  // SW `readRangeParallel` bilan bo'laklarni TARTIBSIZ yuboradi, shuning uchun
+  // shunchaki ketma-ket qo'shib borish yetmaydi — uzluksiz qismni har safar
+  // qayta hisoblaymiz. Ustma-ust tushadigan bo'laklar ham hisobga olinadi
+  // (`readOnce` offset'ni 4096 ga tekislaydi, shuning uchun takrorlanish mumkin).
+  // `Map` — oddiy obyekt emas. Kalit Telegram hujjat id'si, ya'ni raqamli
+  // matn; oddiy obyektda butun songa o'xshash kalitlar QO'SHILISH TARTIBIDA
+  // emas, o'sib boruvchi tartibda saqlanadi. LRU "eng eskisini tashla"
+  // mantiqi shuning uchun buzilardi. `Map` tartibni kafolatlaydi.
+  var docAcc = new Map();
+
+  function docContig(a) {
+    var pos = 0;
+    for (var i = 0; i < a.offs.length; i++) {
+      var o = a.offs[i];
+      if (o > pos) break;                       // bo'shliq — bu yergacha
+      var end = o + a.parts[o].length;
+      if (end > pos) pos = end;
+    }
+    return pos;
+  }
+
+  // LRU: ham SONI, ham JAMI HAJMI chegarada bo'lishi kerak. Faqat soni
+  // bilan cheklash yetmaydi — 24 x 32 MB = 768 MB brauzer kvotasini
+  // oshirib, `caches.put` ni abadiy rad qilishiga olib keladi.
+  function docTrim() {
+    return global.caches.open(DOC_CACHE_NAME).then(function (c) {
+      return c.keys().then(function (ks) {
+        return Promise.all(ks.map(function (k) {
+          return c.match(k).then(function (r) {
+            return {
+              k: k,
+              t: Number(r && r.headers.get('X-Wc-T')) || 0,
+              n: Number(r && r.headers.get('X-Wc-Size')) || 0
+            };
+          });
+        })).then(function (list) {
+          list.sort(function (x, y) { return x.t - y.t; });   // eng eskisi boshida
+          var total = 0;
+          for (var i = 0; i < list.length; i++) total += list[i].n;
+
+          var drop = [];
+          // Avval sondan oshganini, keyin hajmdan oshganini tashlaymiz.
+          var keep = list.length;
+          while (keep > DOC_CACHE_KEEP) {
+            keep--;
+            drop.push(list[keep]);
+            total -= list[keep].n;               // ular endi hisoblanmaydi
+          }
+          var j = 0;
+          while (total > DOC_CACHE_BUDGET && j < keep) {
+            drop.push(list[j]); total -= list[j].n; j++;
+          }
+          if (!drop.length) return;
+          return Promise.all(drop.map(function (d) { return c.delete(d.k); }));
+        });
+      });
+    });
+  }
+
+  function docStore(id, blob, size) {
+    if (!docOk()) return;
+    // Fayl endi to'liq bor — eski "yo'q" xotirasini tozalaymiz, aks holda
+    // shu sessiyada kesh topilmaydi.
+    docBlob.delete(id);
+    global.caches.open(DOC_CACHE_NAME).then(function (c) {
+      var res = new Response(blob, {
+        headers: { 'X-Wc-T': String(Date.now()), 'X-Wc-Size': String(size) }
+      });
+      return c.put(new Request(docUrl(id)), res).then(null, function (err) {
+        // Kvota to'lgan bo'lishi mumkin. Keshni butunlay bo'shatib, shu
+        // faylni bir marta qayta yozamiz — aks holda kesh ABADIY o'chib
+        // qoladi (har keyingi put ham rad etiladi).
+        var m = (err && (err.name || err.message)) || String(err);
+        if (!/Quota|QUOTA|space/i.test(m)) throw err;
+        return c.keys().then(function (ks) {
+          return Promise.all(ks.map(function (k) { return c.delete(k); }));
+        }).then(function () {
+          return c.put(new Request(docUrl(id)), new Response(blob, {
+            headers: { 'X-Wc-T': String(Date.now()), 'X-Wc-Size': String(size) }
+          }));
+        });
+      });
+    }).then(docTrim).catch(function () { /* kesh ixtiyoriy — oqim davom etadi */ });
+  }
+
+  // `readOnce` dan chaqiriladi: Telegram'dan kelgan har bir bo'lak.
+  function docAccPut(id, off, u8) {
+    if (!id || !u8 || !u8.length || !docOk()) return;
+    var size = headSize(id, 0);
+    // Hajmi noma'lum yoki juda katta (kino) — keshlamaymiz.
+    if (!size || size > docMax()) return;
+
+    var a = docAcc.get(id);
+    if (!a) {
+      while (docAcc.size >= DOC_ACC_KEEP) {
+        var oldest = docAcc.keys().next().value;
+        if (oldest === undefined) break;
+        docAcc.delete(oldest);                  // RAM ni bo'shatamiz
+      }
+      a = { parts: {}, offs: [], got: 0, size: size };
+      docAcc.set(id, a);
+    }
+    if (a.parts[off] !== undefined) return;
+    // Himoya nusxasi: `u8` GramJS buferining o'zi bo'lishi mumkin. Nusxa
+    // olish xotirani oshirmaydi — asl bufer har `readOnce` dan keyin bo'shaydi,
+    // shuning uchun jami sarf baribir `size` atrofida qoladi.
+    a.parts[off] = new Uint8Array(u8);
+    var i = 0;
+    while (i < a.offs.length && a.offs[i] < off) i++;
+    a.offs.splice(i, 0, off);
+    a.got = docContig(a);
+
+    if (a.got < a.size) return;
+
+    // Fayl to'liq yig'ildi. Oraliq `Uint8Array` YASAMAYMIZ — `subarray`
+    // ko'rinishlari (nusxa emas) to'g'ridan-to'g'ri `Blob` ga beriladi.
+    // Aks holda 32 MB fayl uchun bir lahza 64 MB RAM band bo'lardi; telefonda
+    // bu WebView'ni o'ldirishi mumkin.
+    var pieces = [], pos = 0;
+    for (var k = 0; k < a.offs.length; k++) {
+      var o = a.offs[k], b = a.parts[o];
+      var s = pos > o ? pos - o : 0;            // ustma-ust qismni kesamiz
+      if (s < b.length) pieces.push(b.subarray(s));
+      if (o + b.length > pos) pos = o + b.length;
+    }
+    docAcc.delete(id);                          // RAM ni darhol bo'shatish
+    docStore(id, new Blob(pieces, { type: 'video/mp4' }), size);
+  }
+
+  // --- o'qish: keshdan berish ----------------------------------------------
+  // `caches.match` ni har so'rovda chaqirmaslik uchun natijani xotirada
+  // saqlaymiz (bitta hujjat uchun bitta lookup).
+  var docBlob = new Map();
+
+  function docBlobGet(id) {
+    if (!id || !docOk()) return null;
+    if (!docBlob.has(id)) {
+      docBlob.set(id, global.caches.open(DOC_CACHE_NAME)
+        .then(function (c) { return c.match(new Request(docUrl(id))); })
+        .then(function (r) { return r ? r.blob() : null; })
+        .catch(function () { return null; }));
+      while (docBlob.size > 3) docBlob.delete(docBlob.keys().next().value);
+    }
+    return docBlob.get(id);
+  }
+
   // BITTA `upload.getFile` so'rovi. Qaytgan bayt soni `length` dan kam
   // bo'lishi mumkin (blok chegarasi tufayli) — buni `readBytes` hal
   // qiladi. Fayl tugagan bo'lsa — bo'sh massiv (xato EMAS).
@@ -999,6 +1194,9 @@
       var b = res.bytes || res;
       var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
       headPut(hid, aligned, u8);
+      // ZATAN olingan baytlarni disk keshiga ham yozib boramiz (qo'shimcha
+      // Telegram so'rovi yo'q). Kichik fayl to'liq yig'ilsa — saqlanadi.
+      docAccPut(hid, aligned, u8);
       // Telegram kamroq qaytarsa — ortiqcha joyni nol bilan
       // to'ldirmaymiz, faqat haqiqiy baytlarni qaytaramiz.
       if (u8.length <= skip) return new Uint8Array(0);
@@ -1006,14 +1204,37 @@
     });
   }
 
-  // To'liq oraliqni o'qish. Har bir Telegram so'rovi 1 MB blok ichida
-  // qoladi; katta oraliq bo'laklab yig'iladi.
+  // To'liq oraliqni o'qish. Avval disk keshi tekshiriladi, topilmasa
+  // `readBytesRemote` orqali Telegram'dan o'qiladi.
+  function readBytes(offset, length, ctx) {
+    if (!(length > 0)) return Promise.resolve(new Uint8Array(0));
+    if (ctx && ctx.abort && ctx.abort()) return Promise.resolve(new Uint8Array(0));
+
+    // 00) Disk keshi. Fayl avval to'liq ko'rilgan bo'lsa, Telegram'ga
+    //     UMUMAN murojaat qilmaymiz — javob mahalliy diskdan keladi.
+    var p = docBlobGet(headId(ctx));
+    if (!p) return readBytesRemote(offset, length, ctx);
+
+    return p.then(function (blob) {
+      if (!blob || offset >= blob.size) return null;
+      var end = Math.min(offset + length, blob.size);
+      // `blob.slice` nusxa olmaydi — faqat `arrayBuffer()` da o'qiladi,
+      // shuning uchun 32 MB fayldan 1 MB tortish arzon.
+      return blob.slice(offset, end).arrayBuffer()
+        .then(function (ab) { return new Uint8Array(ab); });
+    }).then(function (hit) {
+      return hit ? hit : readBytesRemote(offset, length, ctx);
+    });
+  }
+
+  // Har bir Telegram so'rovi 1 MB blok ichida qoladi; katta oraliq bo'laklab
+  // yig'iladi.
   //
   // `ctx` — ixtiyoriy hujjat konteksti ({loc, dcId, abort}). Prefetch shu
   // orqali aktiv oqimga tegmasdan boshqa hujjatni o'qiy oladi; `abort()`
   // true qaytarsa o'qish darhol to'xtaydi (foydalanuvchi slaydni tashlab
   // ketgan bo'lsa — ortiqcha trafik ketmaydi).
-  function readBytes(offset, length, ctx) {
+  function readBytesRemote(offset, length, ctx) {
     if (!(length > 0)) return Promise.resolve(new Uint8Array(0));
     if (ctx && ctx.abort && ctx.abort()) return Promise.resolve(new Uint8Array(0));
 
@@ -1037,7 +1258,9 @@
       // Qisman keshlangan: keshdagi qism + qolgani Telegram'dan.
       var headPart = hc.bytes.slice(offset);
       var tailFrom = hc.bytes.length;
-      return readBytes(tailFrom, end - tailFrom, ctx).then(function (tail) {
+      // Ichki chaqiruv to'g'ridan-to'g'ri Telegram yo'liga boradi: disk
+      // keshi bu fayl uchun allaqachon tekshirilgan (aks holda bo'lmasdi).
+      return readBytesRemote(tailFrom, end - tailFrom, ctx).then(function (tail) {
         if (!tail || !tail.length) return headPart;
         var out = new Uint8Array(headPart.length + tail.length);
         out.set(headPart, 0);

@@ -463,6 +463,7 @@
 .watch-act.on     { background: var(--accent); border-color: var(--accent); color: #fff; }
 .watch-act.busy   { opacity: .6; pointer-events: none; }
 .watch-act svg    { width: 17px; height: 17px; flex: 0 0 auto; }
+.watch-act.on svg { fill: currentColor; }
 
 /* Yoqdi | Yoqmadi — chap navigatsiya tugmasi (`.ig-item`) uslubida.
    Foyalanuvchi so'rovi: "ko'rinishini chapki navigatsiya tugmasiga
@@ -531,6 +532,7 @@ body.share-lock { overflow: hidden; }
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 19px; line-height: 1;
 }
+.watch-menu-ico svg { width: 19px; height: 19px; }
 .watch-menu-lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @keyframes watchMenuIn { from { opacity: 0; transform: translateY(-6px); } }
 

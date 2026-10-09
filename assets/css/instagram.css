@@ -95,6 +95,29 @@ img.ig-logo {
     transition: fill .12s ease;
 }
 .ig-item.active .ig-svg { fill: currentColor; }
+
+/* ------------------------------------------------------------------ */
+/* Tugma ichidagi ig-svg ikonkalari (nav tashqarisi) shrift o'lchamiga */
+/* moslashadi — Instagram uslubidagi bir xil, toza monoxrom ko'rinish. */
+/* ------------------------------------------------------------------ */
+.chip .ig-svg,
+.adm-btn .ig-svg,
+.up-btn .ig-svg,
+.pf-btn .ig-svg,
+.watch-404-btn .ig-svg {
+    width: 1.15em; height: 1.15em;
+    display: inline-block;
+    vertical-align: -0.16em;
+}
+.pf-top-btn .ig-svg { width: 19px; height: 19px; }
+.pf-back .ig-svg,
+.st-back .ig-svg,
+.ig-search-close .ig-svg,
+.modal-close .ig-svg { width: 21px; height: 21px; }
+.reels-back .ig-svg { width: 21px; height: 21px; }
+.reels-fab .ig-svg { width: 25px; height: 25px; }
+.reels-modal-x .ig-svg,
+.reels-c-picker-x .ig-svg { width: 19px; height: 19px; }
 .ig-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Kutubxona (ochiladigan bo'lim) */
@@ -474,6 +497,7 @@ html.tv .ig-ico { width: 30px; height: 30px; }
     width: 42px; height: 42px; flex: 0 0 auto;
     border-radius: 50%; border: none; background: none;
     color: var(--text); font-size: 22px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
 }
 .ig-search-close:hover { background: var(--card); }
 .ig-search-body { flex: 1; overflow: auto; padding: 18px 18px 50px; }

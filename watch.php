@@ -266,7 +266,7 @@ $NAV_ACTIVE = 'home';
         <div class="watch-404">
             <h1>😕 Video topilmadi</h1>
             <p>Bu havola noto‘g‘ri yoki kontent o‘chirilgan bo‘lishi mumkin.</p>
-            <a class="watch-404-btn" href="index.php">🏠 Bosh sahifaga</a>
+            <a class="watch-404-btn" href="index.php"><?php echo ig_svg('home'); ?> Bosh sahifaga</a>
         </div>
     </main>
 <?php else: ?>
@@ -363,7 +363,7 @@ $NAV_ACTIVE = 'home';
                 <div class="reels-c-replybar" id="cReplyBar" hidden>
                     <span class="reels-c-replybar-av" id="cReplyAv"></span>
                     <span class="reels-c-replybar-txt" id="cReplyTxt"></span>
-                    <button type="button" class="reels-c-replybar-x" id="cReplyCancel" aria-label="Bekor qilish">✕</button>
+                    <button type="button" class="reels-c-replybar-x" id="cReplyCancel" aria-label="Bekor qilish"><?php echo ig_svg('close'); ?></button>
                 </div>
 
                 <form class="reels-comments-form" id="commentForm" autocomplete="off">

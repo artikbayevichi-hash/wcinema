@@ -59,28 +59,28 @@ $counts  = [
 <?php else: ?>
 
 <header class="up-top">
-    <a class="reels-back" href="index.php" aria-label="Orqaga">←</a>
+    <a class="reels-back" href="index.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
     <div class="up-title">Moderatsiya</div>
     <span style="width:34px"></span>
 </header>
 
 <nav class="adm-tabs">
-    <button class="chip adm-tab active" onclick="location.href='admin-reels.php'">🎞 Reels</button>
-    <button class="chip adm-tab" onclick="location.href='admin-content.php'">🎬 Kontent</button>
+    <button class="chip adm-tab active" onclick="location.href='admin-reels.php'"><?php echo ig_svg('film'); ?> Reels</button>
+    <button class="chip adm-tab" onclick="location.href='admin-content.php'"><?php echo ig_svg('movie'); ?> Kontent</button>
 </nav>
 
 <nav class="adm-tabs">
     <button class="chip adm-tab<?php echo $status === 0 ? ' active' : ''; ?>"
             onclick="location.href='?status=0'">
-        ⏳ Kutilmoqda <span class="adm-n"><?php echo (int) $counts['pending']; ?></span>
+        <?php echo ig_svg('clock'); ?> Kutilmoqda <span class="adm-n"><?php echo (int) $counts['pending']; ?></span>
     </button>
     <button class="chip adm-tab<?php echo $status === 1 ? ' active' : ''; ?>"
             onclick="location.href='?status=1'">
-        ✅ Tasdiqlangan <span class="adm-n"><?php echo (int) $counts['approved']; ?></span>
+        <?php echo ig_svg('check'); ?> Tasdiqlangan <span class="adm-n"><?php echo (int) $counts['approved']; ?></span>
     </button>
     <button class="chip adm-tab<?php echo $status === 2 ? ' active' : ''; ?>"
             onclick="location.href='?status=2'">
-        ❌ Rad etilgan <span class="adm-n"><?php echo (int) $counts['rejected']; ?></span>
+        <?php echo ig_svg('close'); ?> Rad etilgan <span class="adm-n"><?php echo (int) $counts['rejected']; ?></span>
     </button>
 </nav>
 
@@ -157,12 +157,12 @@ $counts  = [
 
     <div class="adm-actions">
         <?php if ((int) $r['status'] !== 1): ?>
-        <button class="adm-btn ok" data-act="1" data-id="<?php echo (int) $r['id']; ?>">✅ Tasdiqlash</button>
+        <button class="adm-btn ok" data-act="1" data-id="<?php echo (int) $r['id']; ?>"><?php echo ig_svg('check'); ?> Tasdiqlash</button>
         <?php endif; ?>
         <?php if ((int) $r['status'] !== 2): ?>
-        <button class="adm-btn no" data-act="2" data-id="<?php echo (int) $r['id']; ?>">❌ Rad etish</button>
+        <button class="adm-btn no" data-act="2" data-id="<?php echo (int) $r['id']; ?>"><?php echo ig_svg('close'); ?> Rad etish</button>
         <?php endif; ?>
-        <button class="adm-btn del" data-act="del" data-id="<?php echo (int) $r['id']; ?>">🗑 O'chirish</button>
+        <button class="adm-btn del" data-act="del" data-id="<?php echo (int) $r['id']; ?>"><?php echo ig_svg('trash'); ?> O'chirish</button>
     </div>
 </div>
 <?php endforeach; ?>

@@ -123,6 +123,7 @@
     background: rgba(0,0,0,.85);
     color: #c3cad8; font-size: 13.5px; text-align: center; padding: 20px;
 }
+.reels-warn-ico svg { width: 44px; height: 44px; display: block; margin: 0 auto; }
 
 /* ---------------------------------------------------------------- Amallar paneli
    Instagram Reels'dagi kabi har bir reel ichida. Telefonda video o'ng
@@ -470,6 +471,7 @@
     position: absolute; top: 10px; right: 12px;
     width: 32px; height: 32px; border-radius: 50%;
     background: var(--card); color: var(--muted); font-size: 20px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
 }
 .reels-modal-title { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
 
@@ -580,6 +582,8 @@
     color: var(--muted); font-size: 14px; padding: 2px 4px; line-height: 1;
 }
 .reels-c-del:hover { color: #ff5c5c; }
+.reels-c-del { display: inline-flex; align-items: center; justify-content: center; }
+.reels-c-del svg { width: 14px; height: 14px; }
 .reels-c-empty, .reels-c-loading {
     color: var(--muted); font-size: 13px; text-align: center;
     padding: 28px 0;
@@ -667,6 +671,7 @@
     width: 28px; height: 28px; border: 0; border-radius: 50%;
     background: transparent; color: var(--muted);
     font-size: 20px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
 }
 .reels-c-picker-x:hover { color: var(--text); background: var(--card); }
 .reels-c-picker-panel {
@@ -964,6 +969,7 @@
     background: rgba(255, 255, 255, .16); font-size: 18px; line-height: 1;
 }
 .reels-lb-x:hover { background: rgba(255, 255, 255, .28); }
+.reels-lb-x svg { width: 20px; height: 20px; }
 @keyframes reels-lb-in {
     from { transform: scale(.92); opacity: .3; }
     to   { transform: scale(1);   opacity: 1; }
@@ -980,7 +986,8 @@
     flex: 1; min-width: 0; color: var(--text); font-weight: 600;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.reels-c-replybar-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 4px; }
+.reels-c-replybar-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 4px; display: inline-flex; align-items: center; justify-content: center; }
+.reels-c-replybar-x svg { width: 15px; height: 15px; }
 .reels-c-replybar-av { flex: 0 0 auto; display: inline-flex; }
 .reels-c-replybar-av:empty { display: none; }
 .reels-c-replybar-av .reels-c-av { width: 22px; height: 22px; font-size: 11px; }

@@ -76,6 +76,7 @@
     background: rgba(255, 255, 255, 0.06);
 }
 .pf-top-btn:active { background: rgba(255, 255, 255, 0.14); }
+.pf-modal-box h3 .ig-svg { width: 20px; height: 20px; display: inline-block; vertical-align: -3px; }
 
 /* ------------------------------------------------------------- Profil karta */
 .pf-main { max-width: 720px; margin: 0 auto; padding: 0 4px; }

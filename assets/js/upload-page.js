@@ -231,7 +231,7 @@
                 '<img src="' + esc(url) + '" alt="">' +
                 (i === 0 ? '<span class="up-strip-badge">ASOSIY</span>' : '') +
                 (state.files.length > 1
-                    ? '<button type="button" class="up-strip-x" title="Olib tashlash">✕</button>'
+                    ? '<button type="button" class="up-strip-x" title="Olib tashlash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
                     : '');
             strip.appendChild(item);
             // Rasmni vaqtincha ko'rsatish uchun URL ni qaytarib qo'yamiz
@@ -448,7 +448,7 @@
             chip.hidden = false;
             chip.innerHTML = '\u{1F3AC} ' + esc(item.title)
                 + (item.category ? ' · ' + esc(item.category) : '')
-                + ' <button type="button" title="Olib tashlash">✕</button>';
+                + ' <button type="button" title="Olib tashlash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
             var b = chip.querySelector('button');
             if (b) b.addEventListener('click', function () {
                 clearPick();
