@@ -157,6 +157,8 @@
                              playsinline loop preload="metadata"
                              ${pb.seek ? 'controls' : ''}
                              ontouchstart="tapPlay(this, event)"></video>`;
+        } else if (pb.type === 'image') {
+            media = imageHTML(r, pb);
         } else if (pb.type === 'embed') {
             media = `<iframe src="${esc(pb.url)}" allow="autoplay; fullscreen; encrypted-media"
                              allowfullscreen referrerpolicy="origin" title="reel"></iframe>`;
@@ -193,6 +195,29 @@
                 ${metaHTML(r)}
                 ${railHTML(r)}
             </div>`;
+    }
+
+    // Rasm post: bitta rasm yoki galereya (carousel).
+    // Carousel mediasi `api/upload.php?id=N` orqali, faqat slayd faol
+    // bo'lganda yuklanadi (pastdagi `mountCarousel`).
+    function imageHTML(r, pb) {
+        const url = esc(pb.url || pb.poster || r.poster || '');
+        if (!url) {
+            return `<div class="reels-warn">
+                        <div class="reels-warn-ico">${ICON.warn}</div>
+                        <div>${esc(pb.warning || 'Rasm mavjud emas')}</div>
+                    </div>`;
+        }
+        if (r.is_carousel && Number(r.media_count) > 1) {
+            const total = Number(r.media_count) || 1;
+            return `<div class="reels-carousel" data-car="${r.id}">
+                        <div class="reels-car-track">
+                            <div class="reels-car-slide"><img src="${url}" alt="" draggable="false"></div>
+                        </div>
+                        <div class="reels-car-count">1/${total}</div>
+                    </div>`;
+        }
+        return `<img class="reels-img" src="${url}" alt="" draggable="false">`;
     }
 
     function audioLabel(r) {
@@ -370,6 +395,83 @@
         });
     }
 
+    // Galereya (carousel) rasmlarini slayd faol bo'lganda yuklaymiz.
+    async function mountCarousel(i) {
+        const el = state.slideEls[i];
+        if (!el) return;
+        const box = el.querySelector('.reels-carousel');
+        if (!box || box.dataset.loaded === '1' || box.dataset.loading === '1') return;
+        const r = state.items[i];
+        if (!r || !r.is_carousel) return;
+
+        box.dataset.loading = '1';
+        try {
+            const d = await api('api/upload.php?id=' + r.id);
+            const media = (d && d.media) || [];
+            if (media.length > 1) buildCarousel(box, media);
+            box.dataset.loaded = '1';
+        } catch (e) {
+            // Birinchi rasm allaqachon ko'rinib turibdi — shu qoladi.
+            box.dataset.loaded = '1';
+        }
+        box.dataset.loading = '';
+    }
+
+    // Carousel karkasini quradi: gorizontal scroll-snap + nuqtalar.
+    function buildCarousel(box, media) {
+        const total = media.length;
+
+        const track = document.createElement('div');
+        track.className = 'reels-car-track';
+        media.forEach(function (m, k) {
+            const slide = document.createElement('div');
+            slide.className = 'reels-car-slide';
+            const img = document.createElement('img');
+            img.src = m.poster || m.url || '';
+            img.alt = '';
+            img.draggable = false;
+            if (k > 0) img.loading = 'lazy';
+            slide.appendChild(img);
+            track.appendChild(slide);
+        });
+
+        const dots = document.createElement('div');
+        dots.className = 'reels-car-dots';
+        for (let k = 0; k < total; k++) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'reels-car-dot' + (k === 0 ? ' on' : '');
+            b.setAttribute('aria-label', (k + 1) + ' / ' + total);
+            b.onclick = function () {
+                track.scrollTo({ left: track.clientWidth * k, behavior: 'smooth' });
+            };
+            dots.appendChild(b);
+        }
+
+        const count = document.createElement('div');
+        count.className = 'reels-car-count';
+        count.textContent = '1/' + total;
+
+        box.innerHTML = '';
+        box.appendChild(track);
+        if (total > 1) box.appendChild(dots);
+        box.appendChild(count);
+
+        function update() {
+            const w = track.clientWidth || 1;
+            const k = Math.max(0, Math.min(total - 1, Math.round(track.scrollLeft / w)));
+            count.textContent = (k + 1) + '/' + total;
+            const dts = dots.children;
+            for (let j = 0; j < dts.length; j++) {
+                dts[j].classList.toggle('on', j === k);
+            }
+        }
+        // Scroll hodisalari brauzer tomonidan kadr tezligida chaqiriladi,
+        // shuning uchun to'g'ridan-to'g'ri yangilaymiz (fon tabida rAF
+        // to'xtatilishi mumkin — bu holda nuqtalar qotib qolmasin).
+        track.addEventListener('scroll', update, { passive: true });
+    }
+
     // Keyingi slaydning METAMA'LUMATINI (doc/size/probe) tayyorlab qo'yamiz:
     // 1 ta xabar + 64 KB format tekshiruvi - bular barchasi <video>
     // ochilganda ham kerak bo'ladigan narsa. Shuning uchun keyingi reelga
@@ -444,6 +546,7 @@
 
         pauseAll(i);
         playAt(i);
+        mountCarousel(i);
 
         // DIQQAT: bu yerda `schedulePrefetch` atlaydi. Sababi — `prefetch`
         // ichida `cancelPrefetch()` bor, u esa kelayotgan prefetch'ni

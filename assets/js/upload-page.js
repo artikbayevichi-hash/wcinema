@@ -134,28 +134,24 @@
         paintDrop();
     }
 
-    function setFiles(list) {
+    // Yangi tanlangan fayllarni qabul qiladi.
+    //   · Ko'p rasmli rejimda (`append`) avvalgi tanlovga QO'SHILADI —
+    //     foydalanuvchi rasmlarni birma-bir tanlasa ham hammasi saqlanadi.
+    //   · Boshqa hollarda oldingi tanlov almashtiriladi.
+    // MUHIM: ilgari har chaqiriqda eski tanlov tozalanardi, shu sababli
+    // ikkinchi rasm tanlanganda birinchisi "o'rniga" paydo bo'lardi.
+    function setFiles(list, append) {
         var f = FORMAT[state.format];
         var arr = Array.prototype.slice.call(list || []);
 
         if (!arr.length) return;
 
         if (!f.multiple) arr = arr.slice(0, 1);
-        if (arr.length > f.maxItems) {
-            showMsg('✕ Ko‘pi bilan ' + f.maxItems + ' ta fayl mumkin', 'err');
-            arr = arr.slice(0, f.maxItems);
-        }
 
-        // Eski tanlovni to'liq tozalaymiz — aks holda fayllar qo'shilib
-        // ketardi (bir necha marta tanlanganda ro'yxat o'sib borardi).
-        if (state.videoUrl) { URL.revokeObjectURL(state.videoUrl); state.videoUrl = null; }
-        if (state.posterUrl) { URL.revokeObjectURL(state.posterUrl); state.posterUrl = null; }
-        state.poster = null;
-        state.files = [];
-        if (info) info.hidden = true;
-        if (strip) strip.innerHTML = '';
-        if (drop) drop.classList.remove('has');
+        // Almashtirish rejimida eski tanlov va resurslar tozalanadi.
+        if (!f.multiple || !append) resetMedia();
 
+        var added = 0;
         for (var i = 0; i < arr.length; i++) {
             var file = arr[i];
             var isImg = /^image\//.test(file.type)
@@ -179,9 +175,25 @@
                 showMsg('✕ «' + file.name + '» bo‘sh fayl', 'err');
                 continue;
             }
+
+            // Takroriy faylni qo'shmaymiz (nom + hajm + o'zgargan vaqt).
+            var dup = state.files.some(function (x) {
+                return x.name === file.name && x.size === file.size
+                    && x.lastModified === file.lastModified;
+            });
+            if (dup) continue;
+
+            if (state.files.length >= f.maxItems) {
+                showMsg('✕ Ko‘pi bilan ' + f.maxItems + ' ta fayl mumkin', 'err');
+                break;
+            }
             state.files.push(file);
+            added++;
         }
-        if (!state.files.length) return;
+
+        // Hech narsa qo'shilmadi (hammasi xato yoki takror) — mavjud
+        // tanlovni (agar bo'lsa) saqlab qolamiz.
+        if (!state.files.length || !added) return;
 
         clearMsg();
         paintFiles();
@@ -222,6 +234,10 @@
     // --------------------------------------------- galereya (carousel) ko'rinishi
     function buildStrip() {
         if (!strip) return;
+        // Eski preview URL'larini bo'shatamiz (har qo'shishda qayta quriladi).
+        strip.querySelectorAll('.up-strip-item').forEach(function (it) {
+            if (it.dataset.url) URL.revokeObjectURL(it.dataset.url);
+        });
         strip.innerHTML = '';
         state.files.forEach(function (file, i) {
             var url = URL.createObjectURL(file);
@@ -410,7 +426,12 @@
 
     // ------------------------------------------------------- fayl tanlash
     if (drop) drop.addEventListener('click', function () { fileEl.click(); });
-    if (fileEl) fileEl.addEventListener('change', function () { setFiles(this.files); });
+    if (fileEl) fileEl.addEventListener('change', function () {
+        setFiles(this.files, true);
+        // Input'ni bo'shatamiz — keyingi safar AYNI faylni qayta tanlash
+        // ham `change` hodisasini ishga tushirsin (galereyaga qo'shish).
+        this.value = '';
+    });
     ['dragenter', 'dragover'].forEach(function (ev) {
         if (drop) drop.addEventListener(ev, function (e) {
             e.preventDefault(); drop.classList.add('over');
@@ -424,7 +445,7 @@
     if (drop) {
         drop.addEventListener('drop', function (e) {
             var dt = e.dataTransfer;
-            if (dt && dt.files) setFiles(dt.files);
+            if (dt && dt.files) setFiles(dt.files, true);
         });
     }
 
