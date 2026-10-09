@@ -66,6 +66,9 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
     window.TG_LOGIN_NEXT = <?php echo json_encode($next); ?>;
 </script>
 <script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/tg-countries.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-countries.js') ?: 1; ?>"></script>
+<!-- Telefon maskasi: libphonenumber-js (lokal vendor) + yupqa qatlam -->
+<script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/vendor/libphonenumber-js.min.js?v=<?php echo @filemtime(__DIR__ . '/assets/vendor/libphonenumber-js.min.js') ?: 1; ?>"></script>
+<script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/tg-phone-mask.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-phone-mask.js') ?: 1; ?>"></script>
 <script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/tg-login.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-login.js') ?: 1; ?>"></script>
 <script>

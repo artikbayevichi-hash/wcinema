@@ -209,6 +209,13 @@
     var phoneResolve = null;
     var codeResolve = null;
 
+    // Telefon maskasi + validatsiya (`assets/js/tg-phone-mask.js`).
+    // Kutubxona bo'lmasa `phoneCtrl` null bo'ladi — sahifa baribir ishlaydi.
+    var phoneCtrl = (global.TgPhone && global.TgPhone.attach)
+      ? global.TgPhone.attach(numInput, { getIso: function () { return ccIso; } })
+      : null;
+    if (phoneCtrl) phoneCtrl.setCountry(ccIso);
+
     function each(nl, fn) { for (var i = 0; i < nl.length; i++) fn(nl[i]); }
     function esc(s) {
       return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -252,11 +259,12 @@
       flagEl.textContent = flagOf(iso);
       dialEl.textContent = dial;
       if (name) cnameEl.textContent = name;
-      // Mamlakat o'zgarganda eski davlatning raqami qolmasligi uchun
-      // maydonni tozalaymiz va maskani (placeholder) yangi davlatga moslaymiz.
-      // (Avval faqat "+998" prefiksio'zgarti, raqam maydoni esa eskirib
-      //  qolgan 9 xonali o'zbek raqamini saqlab qolgan edi.)
-      if (numInput) {
+      // Mamlakat o'zgarganda eski davlatning raqami qolmasligi uchun maydonni
+      // tozalaymiz va maskani (placeholder) yangi davlatga moslaymiz.
+      // TgPhone bo'lsa — rasmiy format/uzunlik; bo'lmasa zaxira hisob.
+      if (phoneCtrl) {
+        phoneCtrl.setCountry(iso);
+      } else if (numInput) {
         numInput.value = '';
         numInput.setAttribute('inputmode', 'numeric');
         numInput.placeholder = numMask(dial);
@@ -299,8 +307,27 @@
       e.preventDefault();
       clearErr();
       var digits = String(numInput.value || '').replace(/\D/g, '');
-      if (digits.length < 5) { showErr('Raqam juda qisqa \u2014 davlat kodi bilan kiriting.'); return; }
-      var phone = ccDial + digits;
+
+      // Validatsiya: mos davlat formati bo'yicha to'liq va to'g'ri ekanini
+      // tekshiramiz (`tg-phone-mask.js` -> libphonenumber-js).
+      var res = (global.TgPhone && global.TgPhone.validate)
+        ? global.TgPhone.validate(ccIso, digits)
+        : { ok: digits.length >= 5, e164: ccDial + digits,
+            reason: digits.length >= 5 ? '' : 'short' };
+
+      if (!res.ok) {
+        if (res.reason === 'long') {
+          var mx = global.TgPhone ? global.TgPhone.maxLen(ccIso) : '';
+          showErr('Raqam juda uzun' + (mx ? ' \u2014 bu davlat uchun ' + mx + ' ta raqam kerak' : '') + '.');
+        } else if (res.reason === 'short') {
+          showErr('Raqam to\u2018liq emas \u2014 davlat kodi va raqamni to\u2018liq kiriting.');
+        } else {
+          showErr('Noto\u2018g\u2018ri telefon raqami. Davlatni to\u2018g\u2018ri tanlaganingizni tekshiring.');
+        }
+        return;
+      }
+
+      var phone = res.e164 || (ccDial + digits);
       setStatus('Kod yuborilmoqda\u2026');
       if (phoneResolve) { var r = phoneResolve; phoneResolve = null; r(phone); }
     });
