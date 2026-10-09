@@ -195,8 +195,8 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
             <p>Telegram'da <b>@BotFather</b> botini oching va unga yuboring:</p>
             <div class="code">/newapp</div>
             <ul>
-                <li>Bot nomi: <b>W CINEMA</b></li>
-                <li>Short name: <b>w_cinema</b></li>
+                <li>Bot nomi: <b>W CINEMA SUPPORT</b></li>
+                <li>Short name: <b>w_cinema_support</b></li>
                 <li>Photo: ixtiyoriy</li>
             </ul>
         </div>
@@ -222,11 +222,11 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
         <div class="step-number">3</div>
         <div class="step-title">Bot command'lari (ixtiyoriy)</div>
         <div class="step-content">
-            <p>@BotFather ga <b>/setcommands</b> yuboring:</p>
-            <div class="code">start - Botni ishga tushirish
-help - Yordam
-videos - Videolarni ko'rish
-upload - Video yuklash</div>
+            <p>@BotFather ga <b>/setcommands</b> yuboring (bot ishga tushganda
+               command'lar avtomatik ham o'rnatiladi):</p>
+            <div class="code">start - Botni boshlash / menyu
+help - Yordam va savollar
+support - Savol berish</div>
         </div>
     </div>
 

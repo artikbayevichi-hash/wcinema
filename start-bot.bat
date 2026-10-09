@@ -2,8 +2,11 @@
 REM ==============================================================
 REM  tele_uzdub - Telegram bot (long-poll) ishga tushirish
 REM
-REM  bot.php doimiy ishlaydigan polling-sikli: foydalanuvchilarni
-REM  ro'yxatdan o'tkazadi va sayt-login tasdiqlaydi (/start auth_*).
+REM  bot.php doimiy ishlaydigan polling-sikli: W CINEMA SUPPORT
+REM  qo'llab-quvvatlash boti. Foydalanuvchi savollariga FAQ bilan
+REM  javob beradi, savollarni adminlarga uzatadi, sayt-login
+REM  tasdiqlaydi (/start auth_*) va reels videolarini qabul qiladi
+REM  (/start reel_*).
 REM  Bu skript bot'ni ishga tushiradi va shu oynada ushlab turadi.
 REM  To'xtatish uchun Ctrl+C; qayta boshlash uchun yana ishga
 REM  tushiring.

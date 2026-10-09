@@ -78,6 +78,8 @@
         flag:    svg('<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>'),
         trash:   svg('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
         close:   svg('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+        chevl:   svg('<polyline points="15 18 9 12 15 6"/>'),
+        chevr:   svg('<polyline points="9 18 15 12 9 6"/>'),
         pin:     svg('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'),
         warn:    svg('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>')
     };
@@ -107,6 +109,26 @@
             if (state.items[i].id === id) return state.items[i];
         }
         return null;
+    }
+
+    // Faol slayd ichidagi gorizontal galereya (rasm carousel) treki.
+    // Faqat haqiqatan gorizontal skroll kerak bo'lsa (2+ rasm) qaytariladi.
+    function activeCarTrack() {
+        const el = state.slideEls[state.active];
+        const t = el ? el.querySelector('.reels-car-track') : null;
+        return (t && t.scrollWidth > t.clientWidth + 4) ? t : null;
+    }
+
+    // Galereyada bitta rasm oldinga (+1) yoki orqaga (-1).
+    // Muvaffaqiyatli bo'lsa true qaytaradi.
+    function carouselStep(dir) {
+        const t = activeCarTrack();
+        if (!t) return false;
+        const w = t.clientWidth || 1;
+        const total = Math.max(1, Math.round(t.scrollWidth / w));
+        const k = Math.round(t.scrollLeft / w) + dir;
+        t.scrollTo({ left: w * Math.max(0, Math.min(total - 1, k)), behavior: 'smooth' });
+        return true;
     }
 
     // ---------------------------------------------------------------- api
@@ -417,7 +439,7 @@
         box.dataset.loading = '';
     }
 
-    // Carousel karkasini quradi: gorizontal scroll-snap + nuqtalar.
+    // Carousel karkasini quradi: gorizontal scroll-snap + nuqtalar + strelkalar.
     function buildCarousel(box, media) {
         const total = media.length;
 
@@ -452,10 +474,42 @@
         count.className = 'reels-car-count';
         count.textContent = '1/' + total;
 
+        // Oldingi/keyingi strelkalar — kompyuterda sichqoncha bilan ham
+        // rasmlar orasida o'tish uchun (mobilda barmoq bilan surish yetarli,
+        // lekin sichqoncha g'ildiragi vertikal oqimni aylantirardi va
+        // galereyaga tegmasdi — natijada 2-rasmga o'tib bo'lmasdi).
+        const prev = document.createElement('button');
+        prev.type = 'button';
+        prev.className = 'reels-car-nav reels-car-prev';
+        prev.setAttribute('aria-label', 'Oldingi rasm');
+        prev.innerHTML = ICON.chevl;
+        const next = document.createElement('button');
+        next.type = 'button';
+        next.className = 'reels-car-nav reels-car-next';
+        next.setAttribute('aria-label', 'Keyingi rasm');
+        next.innerHTML = ICON.chevr;
+
         box.innerHTML = '';
         box.appendChild(track);
-        if (total > 1) box.appendChild(dots);
+        if (total > 1) {
+            box.appendChild(prev);
+            box.appendChild(next);
+            box.appendChild(dots);
+        }
         box.appendChild(count);
+
+        function go(k) {
+            k = Math.max(0, Math.min(total - 1, k));
+            track.scrollTo({ left: track.clientWidth * k, behavior: 'smooth' });
+        }
+        prev.onclick = function (e) {
+            e.stopPropagation();
+            go(Math.round(track.scrollLeft / (track.clientWidth || 1)) - 1);
+        };
+        next.onclick = function (e) {
+            e.stopPropagation();
+            go(Math.round(track.scrollLeft / (track.clientWidth || 1)) + 1);
+        };
 
         function update() {
             const w = track.clientWidth || 1;
@@ -465,11 +519,14 @@
             for (let j = 0; j < dts.length; j++) {
                 dts[j].classList.toggle('on', j === k);
             }
+            prev.disabled = (k <= 0);
+            next.disabled = (k >= total - 1);
         }
         // Scroll hodisalari brauzer tomonidan kadr tezligida chaqiriladi,
         // shuning uchun to'g'ridan-to'g'ri yangilaymiz (fon tabida rAF
         // to'xtatilishi mumkin — bu holda nuqtalar qotib qolmasin).
         track.addEventListener('scroll', update, { passive: true });
+        update();
     }
 
     // Keyingi slaydning METAMA'LUMATINI (doc/size/probe) tayyorlab qo'yamiz:
@@ -833,7 +890,27 @@
             });
         }, { passive: true });
 
+        let carWheelAt = 0;   // galereyada g'ildirak bilan qadam tashlash uchun lock
         track.addEventListener('wheel', (e) => {
+            // Rasm galereyasi (carousel) ustida g'ildirak aylantirilsa —
+            // rasmlar orasida o'tamiz; aks holda vertikal oqimni aylantiramiz.
+            // DIQQAT: aks holda sichqoncha g'ildiragi reelni almashtirib,
+            // karuselning 2-rasmiga o'tib bo'lmasdi.
+            const car = (e.target && e.target.closest)
+                ? e.target.closest('.reels-car-track') : null;
+            if (car && car.scrollWidth > car.clientWidth + 4) {
+                const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+                if (Math.abs(d) < 3) return;
+                e.preventDefault();
+                const now = Date.now();
+                if (now - carWheelAt < 240) return;   // bitta g'ildirak = bitta qadam
+                carWheelAt = now;
+                const w = car.clientWidth || 1;
+                const total = Math.max(1, Math.round(car.scrollWidth / w));
+                const k = Math.round(car.scrollLeft / w) + (d > 0 ? 1 : -1);
+                car.scrollTo({ left: w * Math.max(0, Math.min(total - 1, k)), behavior: 'smooth' });
+                return;
+            }
             if (Math.abs(e.deltaY) < 12) return;
             e.preventDefault();
             goTo(state.active + (e.deltaY > 0 ? 1 : -1));
@@ -854,6 +931,15 @@
             if (cm && !cm.hidden) return;
             const mm = document.getElementById('reelMenu');
             if (mm && !mm.hidden) return;
+
+            // Galereya (bir nechta rasm) ochiq bo'lsa — chap/o'ng bilan
+            // rasmlar orasida, past/tepada esa reelllar orasida o'tamiz.
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                if (carouselStep(e.key === 'ArrowRight' ? 1 : -1)) {
+                    e.preventDefault();
+                    return;
+                }
+            }
 
             if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
                 e.preventDefault(); goTo(state.active + 1);

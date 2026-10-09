@@ -471,6 +471,22 @@ define('ADMIN_TELEGRAM_IDS', array_values(array_filter(array_map(
 define('ADMIN_PANEL_KEY', trim((string) env_value('ADMIN_PANEL_KEY', '')));
 
 // ---------------------------------------------------------------------------
+// Support bot - foydalanuvchi savollari uchun manzil
+// ---------------------------------------------------------------------------
+// "W CINEMA SUPPORT" boti foydalanuvchi yuborgan savollarni shu yerga
+// uzatadi, admin esa o'sha xabarga "reply" qilib javob yozadi — bot javobni
+// foydalanuvchiga qaytaradi.
+//
+// Qiymat: forum/topic bo'lmagan oddiy guruh @username'i (masalan
+// @wcinema_support) yoki -100... ko'rinishidagi chat id. Bot guruhda
+// A'ZO bo'lishi shart (xabar yuborishi uchun; admin reply qilishi uchun
+// foydalanuvchi emas, ADMIN bo'lgan yaxshi).
+//
+// BO'SH bo'lsa: savollar to'g'ridan-to'g'ri ADMIN_TELEGRAM_IDS ro'yxatidagi
+// adminlarning shaxsiy chatiga yuboriladi.
+define('TG_SUPPORT_CHAT', trim((string) env_value('TG_SUPPORT_CHAT', '')));
+
+// ---------------------------------------------------------------------------
 // 5-QADAM: Videoni saytda oynatish
 // ---------------------------------------------------------------------------
 // Bazadagi videolar TASHQI manbalarda saqlanadi va turli xil:

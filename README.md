@@ -163,7 +163,8 @@ tele_uzdub/
 ├── start-tunnel.bat         # HTTPS tunnel (Cloudflare quick tunnel)
 ├── index.php                # Bosh sahifa + player
 ├── login.php / logout.php
-├── bot.php                  # Bot webhook (menyu, havola)
+├── bot.php                  # W CINEMA SUPPORT bot (FAQ + savollarni
+│                           #   adminga uzatish, sayt-login, reels)
 ├── mini-app-setup.php       # BotFather sozlash qo'llanmasi
 ├── reels.php                # Reels vertikal oqim
 ├── reels-upload.php         # Reels fayl yuklash
@@ -206,6 +207,7 @@ tele_uzdub/
 | `SITE_URL` | Sayt manzili | so'rovdan avtomatik / `SITE_URL` env |
 | `ALLOWED_HOSTS` | Ruxsat etilgan domenslar | localhost + tunnel |
 | `ADMIN_TELEGRAM_IDS` | Admin Telegram ID ro'yxati | `.env` |
+| `TG_SUPPORT_CHAT` | Support savollari uchun guruh (bo'sh bo'lsa adminlar DM) | `.env` (bo'sh) |
 | `ALLOW_DEMO_LOGIN` | Demo login (faqat localhost) | `1` |
 | `APP_DEBUG` | Xato ko'rsatish | `1` |
 | `TELEGRAM_DELIVERY_ENABLED` | 4-qadam | `1` |

@@ -307,6 +307,11 @@ class Auth {
             'telegram_user_id' => $telegramId,
             'last_login_at'    => date('Y-m-d H:i:s'),
             'last_activity'    => date('Y-m-d H:i:s'),
+            // Telegram orqali kirgan = ro'yxatdan o'tgan. Ilgari bu bayroqni
+            // bot'dagi ro'yxatdan o'tish dialogi qo'yardi; u olib tashlangach,
+            // kirishning o'zi "ro'yxatdan o'tish" hisoblanadi (aks holda
+            // "obunachilar soni" statistikasi 0 bo'lib qolardi).
+            'is_registered'    => 1,
         ];
 
         if (!empty($tg['is_premium'])) {

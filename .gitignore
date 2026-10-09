@@ -35,6 +35,7 @@ Thumbs.db
 /tg-url.txt
 /bot_states.json
 /bot_offset.txt
+/bot_tickets.json
 
 # Agent/IDE lokal papkalari
 /.kilo/
