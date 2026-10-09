@@ -195,10 +195,6 @@ $siteName  = SITE_NAME;
                 <span class="fst-dot"><svg viewBox="0 0 24 24"><path d="M12 3.5 19 6v5c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
                 Telegram orqali xavfsiz va tezkor kirish
             </li>
-            <li>
-                <span class="fst-dot"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></span>
-                Ko‘rganlar tarixi, yoqqanlar va saqlanganlar
-            </li>
         </ul>
 
         <a class="fst-enter" href="<?php echo htmlspecialchars($loginHref, ENT_QUOTES); ?>">
