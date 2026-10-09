@@ -366,10 +366,9 @@ body.ig-shell { transition: padding-left .2s ease; }
         padding-bottom: 0;
     }
     body.reels-body.ig-shell .ig-mobar { display: none; }
-    /* Yuklash tugmasi pastki panel yuqorisiga ko'chiriladi */
-    body.reels-body.ig-shell .reels-fab {
-        bottom: calc(78px + env(safe-area-inset-bottom, 0px));
-    }
+    /* Yuklash tugmasi mobil reels'da kerak emas: yuqoridagi "＋" tugmasi
+       bor, pastdagi amallar paneli esa eng pastga tushiriladi. */
+    body.reels-body.ig-shell .reels-fab { display: none; }
 }
 
 /* ==========================================================================
