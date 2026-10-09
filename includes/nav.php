@@ -64,14 +64,14 @@ function ig_cat_icon($slug) {
 /** YouTube uslubidagi kontur ikonka (SVG). Default: oq kontur, ichi bo'sh. */
 function ig_svg($name) {
     static $icons = [
-        'search'   => '<circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/>',
-        'home'     => '<path d="M4 10.7 12 4l8 6.7V19a1.3 1.3 0 0 1-1.3 1.3h-3.6v-5.4H8.9v5.4H5.3A1.3 1.3 0 0 1 4 19z"/>',
+        'search'   => '<circle cx="10.8" cy="10.8" r="6.6"/><line x1="15.6" y1="15.6" x2="21" y2="21"/>',
+        'home'     => '<path d="M3.8 10.4 12 3.7l8.2 6.7V19a1.7 1.7 0 0 1-1.7 1.7h-3.2v-6H8.7v6H5.5A1.7 1.7 0 0 1 3.8 19z"/>',
         'film'     => '<path fill-rule="evenodd" d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm6 4.3v7.4l6-3.7z"/>',
         'movie'    => '<path fill-rule="evenodd" d="M5 4.5h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2zm5 4.2v6.6l5.6-3.3z"/>',
-        'reels'    => '<path fill-rule="evenodd" d="M5.2 9.4h13.6a2 2 0 0 1 2 2v6.4a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2v-6.4a2 2 0 0 1 2-2zm5.1 2.6v5.4l5-2.7z"/><path d="M4.4 4h13.2l-1.8 3.6H2.6z"/>',
+        'reels'    => '<path fill-rule="evenodd" d="M7.4 3h9.2A4.4 4.4 0 0 1 21 7.4v9.2a4.4 4.4 0 0 1-4.4 4.4H7.4A4.4 4.4 0 0 1 3 16.6V7.4A4.4 4.4 0 0 1 7.4 3zm3.2 6.2v5.6l4.7-2.8z"/><path d="M3.2 8.4h17.6"/><path d="M8.1 3.2 11 8.4M15.1 3.2 18 8.4"/>',
         // Chat — Telegram'ga o'xshash samolyotcha, saytning kontur uslubida.
         'chat'     => '<path d="M21.3 4.3 3.2 11.4a.55.55 0 0 0 .06 1.04l4.6 1.45 1.45 4.6a.55.55 0 0 0 1.04.06L21.3 4.3z"/><path d="M7.86 13.89 21.3 4.3"/>',
-        'library'  => '<rect x="4" y="4.5" width="4.6" height="15" rx="1"/><rect x="10" y="4.5" width="4.6" height="15" rx="1"/><path d="M15.6 5.6l3.1 13.6a1 1 0 0 0 1.2.8l1.1-.3"/>',
+        'library'  => '<path d="M12 6.4C10.5 5 8.3 4.4 5.7 4.7a1.1 1.1 0 0 0-1 1.1v11.9a1.1 1.1 0 0 0 1.2 1.1c2.3-.2 4.3.3 6.1 1.5 1.8-1.2 3.8-1.7 6.1-1.5a1.1 1.1 0 0 0 1.2-1.1V5.8a1.1 1.1 0 0 0-1-1.1c-2.6-.3-4.8.3-6.3 1.7z"/><path d="M12 6.4v13.8"/>',
         'history'  => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
         'clock'    => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
         'like'     => '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
@@ -91,11 +91,11 @@ function ig_svg($name) {
         'image'    => '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
         'play'     => '<polygon points="6 3 20 12 6 21 6 3"/>',
         'bookmark' => '<path d="M6.6 4.5h10.8a.8.8 0 0 1 .8.8V20l-6.2-4.1L5.8 20V5.3a.8.8 0 0 1 .8-.8z"/>',
-        'bell'     => '<path d="M6.6 16.6V11a5.4 5.4 0 0 1 10.8 0v5.6l1.7 2.1H4.9z"/><path d="M9.9 20.3a2.1 2.1 0 0 0 4.2 0"/>',
+        'bell'     => '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
         'folder'   => '<path d="M3.6 6.6a1.6 1.6 0 0 1 1.6-1.6h4l2 2.2h7.6a1.6 1.6 0 0 1 1.6 1.6v9.6a1.6 1.6 0 0 1-1.6 1.6H5.2a1.6 1.6 0 0 1-1.6-1.6z"/>',
-        'settings' => '<line x1="4" y1="7" x2="20" y2="7"/><circle cx="9.5" cy="7" r="2.2"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="14.5" cy="17" r="2.2"/><line x1="4" y1="12" x2="20" y2="12"/>',
+        'settings' => '<path style="fill:none" d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle style="fill:none" cx="12" cy="12" r="3"/>',
         'anime'    => '<path d="M12 3.5l2 5.2 5.2 2-5.2 2-2 5.2-2-5.2L4.8 10.7l5.2-2z"/><path d="M18.7 15.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
-        'smile'    => '<circle cx="12" cy="12" r="8.2"/><path d="M8.6 14.2a4 4 0 0 0 6.8 0"/><circle cx="9.3" cy="10" r="1.1" style="fill:currentColor;stroke:none"/><circle cx="14.7" cy="10" r="1.1" style="fill:currentColor;stroke:none"/>',
+        'smile'    => '<circle style="fill:none" cx="12" cy="12" r="8.2"/><path style="fill:none" d="M8.3 14a4.4 4.4 0 0 0 7.4 0"/><circle cx="9.2" cy="9.9" r="1.15" style="fill:currentColor;stroke:none"/><circle cx="14.8" cy="9.9" r="1.15" style="fill:currentColor;stroke:none"/>',
         'tv'       => '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8.2 3.6 12 6.8l3.8-3.2"/>',
         'globe'    => '<circle cx="12" cy="12" r="8.2"/><path d="M3.8 12h16.4"/><path d="M12 3.8c2.5 2.4 2.5 13.9 0 16.4M12 3.8c-2.5 2.4-2.5 13.9 0 16.4"/>',
         'tag'      => '<path d="M4 4h7.2l8.8 8.8-7.2 7.2L4 11.2z"/><circle cx="8.2" cy="8.2" r="1.2" style="fill:currentColor;stroke:none"/>',
