@@ -68,7 +68,6 @@
   function isDay() { return document.documentElement.classList.contains('tgl-day'); }
   function applyTheme(day, btn) {
     document.documentElement.classList.toggle('tgl-day', !!day);
-    if (btn) btn.textContent = day ? '\u2600\uFE0F' : '\uD83C\uDF19';
     try { localStorage.setItem(THEME_KEY, day ? 'day' : 'night'); } catch (e) {}
     // QR qayta chizilsin (ranglar o'zgargan bo'lishi mumkin) — TgStream'ga xabar.
     try { if (global.TgStream && global.TgStream.redrawQr) global.TgStream.redrawQr(); } catch (e) {}
@@ -84,7 +83,11 @@
       '<div class="tgl-bg" aria-hidden="true">'
       + '<span class="tgl-blob b1"></span><span class="tgl-blob b2"></span><span class="tgl-blob b3"></span>'
       + '</div>'
-      + '<button type="button" class="tgl-theme" data-tgl-theme aria-label="Mavzuni almashtirish">\uD83C\uDF19</button>'
+      + '<button type="button" class="tgl-theme" data-tgl-theme aria-label="Mavzuni almashtirish">\n'
+      + '    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">\n'
+      + '      <path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6.3 6.3 4.9 4.9M19.1 19.1l-1.4-1.4M17.7 6.3l1.4-1.4M4.9 19.1l1.4-1.4"/><circle cx="12" cy="12" r="4"/>\n'
+      + '    </svg>\n'
+      + '  </button>'
 
       + '<div class="tgl-scroll"><div class="tgl-cards">'
 
