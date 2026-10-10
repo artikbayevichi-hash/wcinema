@@ -164,9 +164,7 @@ $siteName  = SITE_NAME;
 
 <div class="tgl-bg"><span class="tgl-blob b1"></span><span class="tgl-blob b2"></span><span class="tgl-blob b3"></span></div>
 
-<button class="tgl-theme" id="fstTheme" type="button" aria-label="Mavzuni almashtirish">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="fstThemeIcon" d="M12 3v2M12 19v2M5 12H3M21 12h-2M6.3 6.3 4.9 4.9M19.1 19.1l-1.4-1.4M17.7 6.3l1.4-1.4M4.9 19.1l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
-</button>
+<button class="tgl-theme" id="fstTheme" type="button" aria-label="Mavzuni almashtirish">&#127769;</button>
 
 <main class="fst-wrap">
     <div class="fst-card">
@@ -210,9 +208,16 @@ $siteName  = SITE_NAME;
     (function () {
         var btn = document.getElementById('fstTheme');
         if (!btn) return;
-        btn.addEventListener('click', function () {
-            var day = document.documentElement.classList.toggle('tgl-day');
+        // QR/kirish oynasidagi (tg-login.js) tugma bilan AYNAN bir xil:
+        // kun = ☀️, tun = 🌙; holat `wc_tgl_theme` da saqlanadi.
+        function applyTheme(day) {
+            document.documentElement.classList.toggle('tgl-day', !!day);
+            btn.textContent = day ? '\u2600\uFE0F' : '\uD83C\uDF19';
             try { localStorage.setItem('wc_tgl_theme', day ? 'day' : 'night'); } catch (e) {}
+        }
+        applyTheme(document.documentElement.classList.contains('tgl-day'));
+        btn.addEventListener('click', function () {
+            applyTheme(!document.documentElement.classList.contains('tgl-day'));
         });
     })();
 </script>

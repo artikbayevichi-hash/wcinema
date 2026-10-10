@@ -90,26 +90,67 @@
 
   // ------------------------------------------------------- @username (nom)
   var UNAME_KEY = 'wc_tg_username_v1';
+  // Nom QAYSI Telegram akkauntga tegishli ekanini ham yozib qo'yamiz. Shunda
+  // bitta brauzerda boshqa akkaunt kirsa, avvalgi nom unga "yopishib"
+  // qolmaydi - yangi akkauntdan qaytadan so'raladi (yoki serverdan olinadi).
+  var UNAME_OWNER_KEY = 'wc_tg_username_owner_v1';
+
+  function meId() {
+    var me = T() && T().me ? T().me() : null;
+    return me && me.id ? String(me.id) : '';
+  }
+  function unameOwner() {
+    try { return String(localStorage.getItem(UNAME_OWNER_KEY) || ''); } catch (e) { return ''; }
+  }
   function username() {
-    try { return String(localStorage.getItem(UNAME_KEY) || '').replace(/^@/, ''); } catch (e) { return ''; }
+    try {
+      // Nom boshqa akkauntga yozilgan bo'lsa - ko'rsatmaymiz (qayta so'raladi).
+      var owner = unameOwner();
+      var mid = meId();
+      if (mid && owner && owner !== mid) return '';
+      return String(localStorage.getItem(UNAME_KEY) || '').replace(/^@/, '');
+    } catch (e) { return ''; }
   }
   function validUsername(u) {
     return /^[a-z][a-z0-9_]{3,31}$/.test(String(u || '').toLowerCase());
   }
+  function setLocalUsername(u, mid) {
+    u = String(u || '').replace(/^@/, '').trim().toLowerCase();
+    if (!validUsername(u)) return false;
+    try {
+      localStorage.setItem(UNAME_KEY, u);
+      localStorage.setItem(UNAME_OWNER_KEY, String(mid || meId() || ''));
+    } catch (e) {}
+    return true;
+  }
+  function clearLocalUsername() {
+    try { localStorage.removeItem(UNAME_KEY); localStorage.removeItem(UNAME_OWNER_KEY); } catch (e) {}
+  }
   function saveUsername(u) {
     u = String(u || '').replace(/^@/, '').trim().toLowerCase();
     if (!validUsername(u)) return false;
-    try { localStorage.setItem(UNAME_KEY, u); } catch (e) {}
-    var me = T() && T().me ? T().me() : null;
-    if (me && me.id) {
+    var mid = meId();
+    if (!setLocalUsername(u, mid)) return false;
+    if (mid) {
+      var me = T() && T().me ? T().me() : null;
       fetchJson(baseUrl('api/tg-name.php'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'tg_me=' + encodeURIComponent(JSON.stringify({ id: me.id, username: me.username || '' }))
+        body: 'tg_me=' + encodeURIComponent(JSON.stringify({ id: mid, username: (me && me.username) || '' }))
           + '&username=' + encodeURIComponent(u)
       }).catch(function () {});
     }
     return true;
+  }
+  // Joriy akkauntning nomini serverdan tiklaymiz: foydalanuvchi uni boshqa
+  // qurilmada (yoki localStorage tozalanganda) kiritgan bo'lishi mumkin.
+  function restoreUsername(mid) {
+    if (!mid) return Promise.resolve('');
+    return loadNames([mid]).then(function () {
+      var srv = S.names[mid] || '';
+      if (srv) setLocalUsername(srv, mid);
+      return srv;
+    }).catch(function () { return ''; });
   }
   function loadNames(ids) {
     var uniq = [];
@@ -1954,8 +1995,21 @@
     // `||spoiler||` izohlari bosilish bilan ochiladi.
     try { if (global.TgFormat) global.TgFormat.bindSpoilers(); } catch (e) {}
     initUI();
-    var me = T() && T().me ? T().me() : null;
-    if (me && me.id && !username()) askUsername();
+    var mid = meId();
+    // Akkaunt aniqlanmadi - nomni ham ko'rsatmaymiz (keyingi kirishda
+    // boshqa akkauntga tegishli bo'lib qolmasin).
+    if (!mid) { clearLocalUsername(); return; }
+    // Boshqa akkauntga o'tilgan bo'lsa - avvalgi nomni tozalaymiz.
+    if (unameOwner() && unameOwner() !== mid) clearLocalUsername();
+    if (username()) {
+      // Eski (owner'siz) yozuvni joriy akkauntga bog'lab qo'yamiz.
+      if (!unameOwner()) setLocalUsername(username(), mid);
+      return;                               // nom allaqachon saqlangan
+    }
+    // localStorage'da yo'q, lekin serverda bo'lmasin - bo'lsa qayta so'ramaymiz.
+    restoreUsername(mid).then(function (srv) {
+      if (!srv && !username()) askUsername();
+    });
   }
 
   // ============================================================ TOOLS / PICKER
