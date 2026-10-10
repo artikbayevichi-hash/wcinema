@@ -339,11 +339,51 @@
 }
 
 .reels-source {
-    display: inline-block; margin-top: 2px; align-self: flex-start;
-    font-size: 11.5px; color: rgba(255,255,255,.78);
-    background: rgba(0,0,0,.45); border-radius: 999px;
-    padding: 3px 9px; text-decoration: none;
-    text-shadow: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 2px;
+    align-self: flex-start;
+    font-size: 12px;
+    color: rgba(255,255,255,.95);
+    background: rgba(0,0,0,.5);
+    backdrop-filter: blur(10px) saturate(130%);
+    -webkit-backdrop-filter: blur(10px) saturate(130%);
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+    padding: 6px 12px;
+    text-decoration: none;
+    text-shadow: 0 1px 2px rgba(0,0,0,.6);
+    transition: all 0.3s ease;
+    max-width: 100%;
+    box-shadow: 0 4px 16px -10px rgba(0,0,0,.9);
+}
+
+.reels-source:hover {
+    background: rgba(0,0,0,.7);
+    transform: translateY(-1px) scale(1.04);
+    box-shadow: 0 6px 18px -10px rgba(0,0,0,.95);
+}
+
+.reels-source:active {
+    transform: translateY(0) scale(.98);
+}
+
+.reels-source-icon {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    opacity: .95;
+}
+
+.reels-source-text {
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: min(260px, 62vw);
 }
 
 /* Rad etish sababi (muallif ko'radi) */
