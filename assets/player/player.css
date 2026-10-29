@@ -1,0 +1,837 @@
+/* ==========================================================================
+   UzDub player (uzp-*) - dark / orange, self-contained
+   ==========================================================================
+   Faqat `.uzp` konteyneriga bog'lanadi, shuning uchun saytdagi boshqa
+   player'lar (index.php / reels.php) bu fayldan ta'sirlanmaydi.
+   ========================================================================== */
+
+.uzp {
+    --uzp-bg: #000000;
+    --uzp-card: #191b1f;
+    --uzp-line: rgba(255, 255, 255, .08);
+    --uzp-text: #f7f8fa;
+    --uzp-muted: #cfd4da;
+    --uzp-accent: #ffffff;
+    --uzp-accent-2: #ffffff;
+    --uzp-radius: 14px;
+    --uzp-bar-bg: rgba(18, 19, 21, .58);
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--uzp-bg);
+    color: var(--uzp-text);
+    overflow: hidden;
+    border-radius: var(--uzp-radius);
+    isolation: isolate;
+    outline: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: inherit;
+}
+
+.uzp *,
+.uzp *::before,
+.uzp *::after { box-sizing: border-box; }
+
+.uzp:focus-visible { box-shadow: 0 0 0 3px rgba(245, 158, 11, .55); }
+
+/* ------------------------------------------------------------------ video */
+.uzp-video,
+.uzp > video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #000;
+    object-fit: contain;
+    border: 0;
+}
+
+/* ---------------------------------------------------------------- overlays */
+.uzp-top {
+    position: absolute;
+    inset: 0 0 auto 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 40px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, .62), rgba(0, 0, 0, 0));
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .22s ease;
+    z-index: 4;
+}
+
+.uzp.is-active .uzp-top,
+.uzp.is-paused .uzp-top { opacity: 1; }
+
+.uzp-top-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .01em;
+    color: rgba(255, 255, 255, .92);
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 72%;
+}
+
+.uzp-top-tag {
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    color: #121315;
+    background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
+    border-radius: 999px;
+    padding: 5px 9px;
+}
+
+/* -------------------------------------------------------------- loading */
+.uzp-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: rgba(10, 11, 13, .35);
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+    transition: opacity .2s ease, visibility .2s ease;
+}
+
+.uzp-loading.is-off { opacity: 0; visibility: hidden; }
+
+.uzp-spinner {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, .18);
+    border-top-color: var(--uzp-accent);
+    animation: uzp-spin .8s linear infinite;
+}
+
+@keyframes uzp-spin { to { transform: rotate(360deg); } }
+
+.uzp-load-t {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, .8);
+    letter-spacing: .01em;
+}
+
+/* ------------------------------------------------------------- big play */
+.uzp-bigplay {
+    position: absolute;
+    z-index: 5;
+    left: 50%;
+    top: 50%;
+    width: 76px;
+    height: 76px;
+    margin: -38px 0 0 -38px;
+    border: 0;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #121315;
+    background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
+    box-shadow: 0 12px 34px rgba(0, 0, 0, .45), 0 0 0 8px rgba(245, 158, 11, .12);
+    transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.uzp-bigplay svg { width: 30px; height: 30px; margin-left: 4px; }
+.uzp-bigplay:hover { transform: scale(1.06); box-shadow: 0 14px 38px rgba(0, 0, 0, .5), 0 0 0 12px rgba(245, 158, 11, .16); }
+.uzp-bigplay:active { transform: scale(.96); }
+.uzp.is-paused .uzp-bigplay,
+.uzp.is-blocked .uzp-bigplay { display: flex; }
+.uzp.is-loading .uzp-bigplay { display: none; }
+
+/* ------------------------------------------------------------- error */
+.uzp-error {
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 26px;
+    text-align: center;
+    background: rgba(10, 11, 13, .88);
+    backdrop-filter: blur(6px);
+}
+
+.uzp-error[hidden] { display: none; }
+.uzp-error-ico { color: var(--uzp-accent); }
+.uzp-error-ico svg { width: 38px; height: 38px; }
+.uzp-error-t { font-size: 14.5px; font-weight: 600; max-width: 440px; line-height: 1.45; color: #f2f3f5; }
+
+.uzp-retry {
+    margin-top: 4px;
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 20px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    color: #121315;
+    background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
+    cursor: pointer;
+    transition: transform .15s ease, filter .15s ease;
+}
+.uzp-retry:hover { filter: brightness(1.06); }
+.uzp-retry:active { transform: scale(.97); }
+
+/* ------------------------------------------------------- double-tap ripple */
+.uzp-ripple {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 34%;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    color: #fff;
+    background: radial-gradient(circle at center, rgba(245, 158, 11, .36), rgba(245, 158, 11, 0) 68%);
+}
+
+.uzp-ripple.left { left: 0; }
+.uzp-ripple.right { right: 0; }
+.uzp-ripple span {
+    font-size: 14px;
+    font-weight: 800;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .48);
+    border: 1px solid rgba(255, 255, 255, .14);
+    transform: translateY(8px);
+}
+.uzp-ripple.show { animation: uzp-ripple .62s ease; }
+.uzp-ripple.show span { animation: uzp-ripple-t .62s ease; }
+
+@keyframes uzp-ripple {
+    0% { opacity: 0; }
+    16% { opacity: 1; }
+    100% { opacity: 0; }
+}
+@keyframes uzp-ripple-t {
+    0% { transform: translateY(8px) scale(.86); }
+    30% { transform: translateY(0) scale(1); }
+    100% { transform: translateY(0) scale(1); }
+}
+
+/* --------------------------------------------------------------- control bar */
+.uzp-bar {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    z-index: 7;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 14px 5px;
+    border-radius: 22px;
+    background: radial-gradient(120% 140% at 50% 0%, rgba(255,255,255,.05) 0%, transparent 60%), rgba(18, 19, 21, .58);
+    border: 1px solid rgba(255, 255, 255, .08);
+    box-shadow: 0 40px 70px -50px rgba(0, 0, 0, .9);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    opacity: 0;
+    transform: translateY(12px);
+    pointer-events: none;
+    transition: opacity .28s ease, transform .28s ease;
+}
+
+.uzp.is-active .uzp-bar,
+.uzp.is-paused .uzp-bar,
+.uzp.is-menu .uzp-bar {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.uzp.is-idle { cursor: none; }
+
+/* fullscreen: keng ekranda panel 1100px dan oshmaydi */
+.uzp:fullscreen,
+.uzp:-webkit-full-screen {
+    border-radius: 0;
+    background: #000;
+}
+.uzp:fullscreen .uzp-bar,
+.uzp:-webkit-full-screen .uzp-bar {
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, 0);
+    width: calc(100% - 40px);
+    border-radius: 22px;
+}
+.uzp:fullscreen.is-active .uzp-bar,
+.uzp:fullscreen.is-paused .uzp-bar,
+.uzp:-webkit-full-screen.is-active .uzp-bar,
+.uzp:-webkit-full-screen.is-paused .uzp-bar { transform: translate(-50%, 0); }
+
+/* ------------------------------------------------------------------ seek */
+.uzp-seek {
+    position: relative;
+    height: 20px;
+    margin: 0 2px 2px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    touch-action: none;
+    outline: none;
+}
+
+.uzp-seek:focus-visible .uzp-seek-track { box-shadow: 0 0 0 2px rgba(245, 158, 11, .6); }
+
+.uzp-seek-track {
+    position: relative;
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .25);
+    transition: height .16s ease;
+    overflow: visible;
+}
+
+.uzp-seek:hover .uzp-seek-track,
+.uzp-seek.is-drag .uzp-seek-track { height: 4px; }
+
+.uzp-seek-buf,
+.uzp-seek-play {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.uzp-seek-buf { width: 0; background: rgba(255, 255, 255, .38); }
+
+.uzp-seek-play {
+    width: 0;
+    background: #ffffff;
+}
+
+.uzp-seek-thumb {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    border: none;
+    box-shadow: none;
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform .14s ease;
+    pointer-events: none;
+}
+
+.uzp-seek:hover .uzp-seek-thumb,
+.uzp-seek.is-drag .uzp-seek-thumb,
+.uzp-seek:focus-visible .uzp-seek-thumb { transform: translate(-50%, -50%) scale(1); }
+
+.uzp-seek-tip {
+    position: absolute;
+    bottom: 22px;
+    left: 0;
+    transform: translateX(-50%);
+    padding: 5px 9px;
+    border-radius: 8px;
+    background: #0b0c0e;
+    border: 1px solid rgba(255, 255, 255, .12);
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .12s ease;
+    z-index: 3;
+}
+
+.uzp-seek.is-hover .uzp-seek-tip,
+.uzp-seek.is-drag .uzp-seek-tip { opacity: 1; }
+
+/* ------------------------------------------------------------------ row */
+.uzp-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 36px;
+}
+
+.uzp-row-l,
+.uzp-row-r {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.uzp-row-r { gap: 4px; }
+
+.uzp-btn {
+    position: relative;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 9px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: #f3f4f6;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, transform .12s ease;
+    font: inherit;
+}
+
+.uzp-btn svg { width: 21px; height: 21px; pointer-events: none; }
+.uzp-btn:hover { background: rgba(255, 255, 255, .12); }
+.uzp-btn:active { transform: scale(.92); }
+.uzp-btn:focus-visible { outline: 2px solid var(--uzp-accent); outline-offset: 1px; }
+
+.uzp-btn.uzp-play { color: #fff; }
+.uzp-btn.uzp-play:hover { color: var(--uzp-accent); }
+
+.uzp-btn.uzp-pill,
+.uzp-btn.uzp-txt {
+    width: auto;
+    min-width: 42px;
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    color: #ffffff;
+}
+
+.uzp-btn.uzp-pill:hover,
+.uzp-btn.uzp-txt:hover { color: #fff; }
+
+.uzp-time {
+    margin-left: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: #ffffff;
+    white-space: nowrap;
+    letter-spacing: .01em;
+}
+
+.uzp-time-sep { display: none; }
+
+.uzp-vol {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.uzp-vol-range {
+    width: 0;
+    opacity: 0;
+    height: 4px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--uzp-accent);
+    cursor: pointer;
+    transition: width .18s ease, opacity .18s ease, margin .18s ease;
+    background: transparent;
+}
+
+.uzp-vol:hover .uzp-vol-range,
+.uzp-vol:focus-within .uzp-vol-range {
+    width: 74px;
+    opacity: 1;
+    margin-left: 2px;
+    margin-right: 6px;
+}
+
+/* ------------------------------------------------------------------ menus */
+.uzp-menu-wrap { position: relative; }
+
+.uzp-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 10px);
+    min-width: 150px;
+    max-height: 280px;
+    overflow: auto;
+    padding: 6px;
+    border-radius: 12px;
+    background: #17191d;
+    border: 1px solid #2b2f35;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
+    z-index: 20;
+}
+
+.uzp-menu[hidden] { display: none; }
+
+.uzp-menu-h {
+    padding: 7px 10px 5px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: #7f8791;
+}
+
+.uzp-menu-item {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: transparent;
+    color: #e8eaee;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.uzp-menu-item:hover { background: rgba(255, 255, 255, .08); }
+.uzp-menu-item.on { color: var(--uzp-accent); }
+.uzp-menu-item.on::after { content: "✓"; font-size: 12px; }
+.uzp-menu-item:focus-visible { outline: 2px solid var(--uzp-accent); outline-offset: -2px; }
+
+/* ------------------------------------------------------------- next toast */
+.uzp-next {
+    position: absolute;
+    right: 16px;
+    bottom: calc(14px + 82px);
+    z-index: 12;
+    width: min(330px, calc(100% - 32px));
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 12px 12px 14px;
+    border-radius: 14px;
+    background: #17191d;
+    border: 1px solid #30343a;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
+    animation: uzp-toast-in .24s ease;
+}
+
+@keyframes uzp-toast-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.uzp-next-tx {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12.5px;
+    color: #aeb5bf;
+    line-height: 1.35;
+}
+.uzp-next-tx b {
+    display: block;
+    color: #fff;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.uzp-next-go,
+.uzp-next-x {
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 9px;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.uzp-next-go {
+    padding: 8px 12px;
+    background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
+    color: #121315;
+    font-size: 12px;
+}
+.uzp-next-x {
+    width: 30px;
+    height: 30px;
+    background: rgba(255, 255, 255, .08);
+    color: #cfd4da;
+    font-size: 16px;
+    line-height: 1;
+}
+.uzp-next-go:hover { filter: brightness(1.06); }
+.uzp-next-x:hover { background: rgba(255, 255, 255, .14); }
+
+/* ------------------------------------------------------------- responsive */
+@media (max-width: 720px) {
+    .uzp-bar {
+        left: 8px;
+        right: 8px;
+        bottom: max(8px, env(safe-area-inset-bottom));
+        padding: 6px 8px 4px;
+        border-radius: 14px;
+    }
+    .uzp-btn { width: 34px; height: 34px; border-radius: 9px; }
+    .uzp-btn svg { width: 19px; height: 19px; }
+    .uzp-btn.uzp-pill,
+    .uzp-btn.uzp-txt { min-width: 36px; padding: 0 7px; font-size: 11px; }
+    .uzp-time { font-size: 11.5px; margin-left: 2px; gap: 3px; }
+    .uzp-row { min-height: 34px; gap: 4px; }
+    .uzp-vol-range { display: none; }
+    .uzp-top { padding: 10px 12px 28px; }
+    .uzp-top-title { font-size: 12px; max-width: 70%; }
+    .uzp-bigplay { width: 62px; height: 62px; margin: -31px 0 0 -31px; }
+    .uzp-bigplay svg { width: 25px; height: 25px; }
+    .uzp-next { right: 8px; left: 8px; width: auto; bottom: calc(8px + 74px); }
+}
+
+@media (max-width: 430px) {
+    .uzp-btn.uzp-skip { display: none; }
+    .uzp-row-r .uzp-menu-wrap:first-child { display: none; }
+    .uzp-select-quality { display: none; }
+}
+
+/* ==========================================================================
+   BOSHQARUV PANELI: bitta qatorli "shisha" kapsula (anibla uslubi)
+   Tartib: play | -10 | +10 | joriy vaqt | progress | umumiy vaqt | 1x | Auto | ovoz | PiP | to'liq ekran
+   JS o'zgarmaydi: eski sinflar saqlangan, joylashuv faqat CSS (display: contents + order).
+   ========================================================================== */
+.uzp-bar {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 18px;
+    border-radius: 20px;
+    /* markazda, cho'zilib ketmasin: kengligi cheklangan */
+    width: auto;
+    max-width: 880px;
+    margin-left: auto;
+    margin-right: auto;
+    /* "oq aralash" shisha: qora fon YO'Q, video ranglari blur orqali ko'rinadi */
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .26) 0%, rgba(255, 255, 255, .14) 100%);
+    border: 1px solid rgba(255, 255, 255, .22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28);
+    backdrop-filter: blur(22px) saturate(1.7);
+    -webkit-backdrop-filter: blur(22px) saturate(1.7);
+}
+
+.uzp:fullscreen .uzp-bar,
+.uzp:-webkit-full-screen .uzp-bar { max-width: 1120px; }
+
+/* anibla'da vaqtinchalik sarlavha va o'rtadagi katta play yo'q */
+.uzp-top { display: none; }
+.uzp-bigplay { display: none !important; }
+.uzp.is-blocked .uzp-bigplay { display: flex !important; }
+
+.uzp-row,
+.uzp-row-l,
+.uzp-row-r,
+.uzp-time { display: contents; }
+
+/* tartib (order) */
+.uzp-bar .uzp-play { order: 1; }
+.uzp-bar .uzp-skip { order: 2; }
+.uzp-time > [data-cur] { order: 3; }
+.uzp-bar .uzp-seek { order: 4; }
+.uzp-time > [data-dur] { order: 5; }
+.uzp-row-r > * { order: 6; }
+
+.uzp-time > [data-cur],
+.uzp-time > [data-dur] {
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    white-space: nowrap;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, .35);
+}
+.uzp-time > [data-cur] { margin-left: 4px; }
+.uzp-time > [data-dur] { margin-right: 6px; }
+
+/* progress: ikki vaqt orasida cho'ziladi */
+.uzp-bar .uzp-seek {
+    flex: 1 1 auto;
+    min-width: 60px;
+    margin: 0 4px;
+    height: 22px;
+}
+.uzp-seek-track { height: 4px; background: rgba(255, 255, 255, .32); }
+.uzp-seek:hover .uzp-seek-track,
+.uzp-seek.is-drag .uzp-seek-track { height: 6px; }
+.uzp-seek-buf { background: rgba(255, 255, 255, .45); }
+.uzp-seek-play { background: #fff; }
+.uzp-seek-tip { bottom: 26px; }
+
+/* tugmalar: shaffof, yumaloq, oq ikonka */
+.uzp-bar .uzp-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: #fff;
+}
+.uzp-bar .uzp-btn:hover { background: rgba(255, 255, 255, .22); }
+.uzp-bar .uzp-btn svg { width: 20px; height: 20px; }
+.uzp-bar .uzp-btn.uzp-play svg { width: 19px; height: 19px; }
+.uzp-bar .uzp-btn.uzp-play:hover { color: #fff; }
+
+/* "1x" va "Auto" - matnli tugmalar */
+.uzp-bar .uzp-btn.uzp-pill,
+.uzp-bar .uzp-btn.uzp-txt {
+    width: auto;
+    height: 32px;
+    min-width: 0;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
+}
+
+/* menyular: to'q shisha, panel ustida ochiladi */
+.uzp-menu {
+    bottom: calc(100% + 18px);
+    background: rgba(22, 21, 20, .9);
+    border: 1px solid rgba(255, 255, 255, .14);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+}
+
+/* telefon: panel baribir BIR qatorda qoladi */
+@media (max-width: 720px) {
+    .uzp-bar { gap: 4px; padding: 6px 10px; border-radius: 18px; }
+    .uzp-bar .uzp-btn { width: 32px; height: 32px; }
+    .uzp-bar .uzp-btn svg { width: 20px; height: 20px; }
+    .uzp-bar .uzp-btn.uzp-pill,
+    .uzp-bar .uzp-btn.uzp-txt { height: 32px; padding: 0 6px; font-size: 12px; }
+    .uzp-time > [data-cur],
+    .uzp-time > [data-dur] { font-size: 11.5px; }
+    .uzp-bar .uzp-seek { min-width: 40px; margin: 0 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .uzp-spinner { animation-duration: 1.6s; }
+    .uzp-bar,
+    .uzp-top,
+    .uzp-bigplay,
+    .uzp-next { transition: none; animation: none; }
+}
+
+/* ==========================================================================
+   v3 - ANIBLA O'LCHAMLARI (to'liq ekran rasmidan o'lchangan)
+   Panel: 78px balandlik, kengligi <= 1120px, markazda, burchak 28px.
+   Tugma 38px, ikonka 24px, matn 15px, tugmalar oralig'i ~48px.
+   `!important` faqat eski fullscreen/o'lcham qoidalarini bosib o'tish uchun.
+   ========================================================================== */
+.uzp .uzp-bar {
+    position: absolute;
+    left: 50% !important;
+    right: auto !important;
+    bottom: 12px;
+    width: min(896px, calc(100% - 24px)) !important;
+    max-width: none !important;
+    height: 64px;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    border-radius: 24px !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .15) 0%, rgba(255, 255, 255, .08) 100%);
+    border: 0 !important;
+    outline: 0;
+    box-shadow: none !important;
+    backdrop-filter: blur(26px) saturate(1.8);
+    -webkit-backdrop-filter: blur(26px) saturate(1.8);
+    translate: -50% 0;
+    transform: translateY(10px) !important;
+}
+.uzp.is-active .uzp-bar,
+.uzp.is-paused .uzp-bar,
+.uzp.is-menu .uzp-bar { transform: none !important; }
+
+.uzp .uzp-bar .uzp-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    color: #fff;
+}
+.uzp .uzp-bar .uzp-btn svg,
+.uzp .uzp-bar .uzp-btn.uzp-play svg { width: 20px; height: 20px; }
+.uzp .uzp-bar .uzp-btn:hover { background: rgba(255, 255, 255, .2); }
+.uzp .uzp-bar .uzp-btn:focus,
+.uzp .uzp-bar .uzp-btn:focus-visible { outline: none; }
+.uzp .uzp-bar .uzp-btn:focus-visible { background: rgba(255, 255, 255, .2); }
+
+.uzp .uzp-bar .uzp-btn.uzp-pill,
+.uzp .uzp-bar .uzp-btn.uzp-txt {
+    width: auto;
+    min-width: 0;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.uzp .uzp-time > [data-cur],
+.uzp .uzp-time > [data-dur] {
+    font-size: 13px;
+    font-weight: 500;
+    margin: 0;
+}
+
+.uzp .uzp-bar .uzp-seek { margin: 0 6px; min-width: 80px; }
+.uzp .uzp-seek-track { height: 4px; }
+
+.uzp .uzp-menu { bottom: calc(100% + 14px); }
+
+/* telefon / tor oyna: panel ixchamlashadi, lekin baribir BIR qatorda */
+@media (max-width: 720px) {
+    .uzp .uzp-bar {
+        bottom: 8px;
+        width: calc(100% - 16px) !important;
+        height: 54px;
+        padding: 0 12px !important;
+        gap: 2px;
+        border-radius: 20px !important;
+    }
+    .uzp .uzp-bar .uzp-btn { width: 32px; height: 32px; }
+    .uzp .uzp-bar .uzp-btn svg,
+    .uzp .uzp-bar .uzp-btn.uzp-play svg { width: 20px; height: 20px; }
+    .uzp .uzp-bar .uzp-btn.uzp-pill,
+    .uzp .uzp-bar .uzp-btn.uzp-txt { height: 32px; padding: 0 6px; font-size: 12px; }
+    .uzp .uzp-time > [data-cur],
+    .uzp .uzp-time > [data-dur] { font-size: 12px; }
+    .uzp .uzp-bar .uzp-seek { min-width: 36px; margin: 0 2px; }
+}

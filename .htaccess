@@ -25,6 +25,36 @@
 Options -Indexes
 DirectoryIndex index.php index.html
 
+# ============================================================ GRAMJS BUNDLE
+#
+# `tg-client.bundle.js.gz` — 5.34 MB JS ning gzip nusxasi (718 KB).
+#
+# Nima uchun aynan shu sarlavhalar:
+#   • `Content-Type: application/javascript` — brauzer uni SKRIPT sifatida
+#     bajaradi (aks holda u faqat yuklab olinadigan fayl bo'lib qoladi);
+#   • `Content-Encoding: gzip` — gzip'ni BRAUZER O'ZI ochadi. Ilgari bu
+#     ishni sahifa JS'i (DecompressionStream) qilardi: 5.3 MB matn main
+#     thread'da ochilardi va har ochilishda qaytadan parse qilinardi.
+#     Endi brauzer buni fon oqimida bajaradi.
+#   • URL BARQAROR bo'lgani uchun V8 KOD KESHIDAN foydalanadi — takroriy
+#     ochilishda 5.3 MB qayta parse qilinmaydi (300–800 ms tejaladi).
+#
+# DIQQAT: `mod_deflate` bu faylni QAYTA siqmaydi (yuqorida `.gz` uchun
+# `no-gzip` qo'yilgan) — aks holda ikki marta siqilib, brauzer ocholmasdi.
+<IfModule mod_mime.c>
+  <FilesMatch "tg-client\.bundle\.js\.gz$">
+    ForceType application/javascript
+    AddType application/javascript .gz
+  </FilesMatch>
+</IfModule>
+<IfModule mod_headers.c>
+  <FilesMatch "tg-client\.bundle\.js\.gz$">
+    Header set Content-Encoding gzip
+    Header unset Vary
+    Header set Vary "Accept-Encoding"
+  </FilesMatch>
+</IfModule>
+
 AddDefaultCharset UTF-8
 AddType application/javascript .js
 AddType text/css .css
@@ -65,6 +95,11 @@ AddType text/css .css
   # o'qiladi). Yuqoridagi `[^\.]` chegarasi `.htaccess` ni himoya qilmaydi.
   <FilesMatch "^\.htaccess$">
     Require all granted
+  </FilesMatch>
+  # Bot polling skripti faqat CLI uchun. PHP ichida ham guard bor
+  # (`PHP_SAPI !== 'cli'`) — bu ikkinchi, Apache darajasidagi qatlam.
+  <FilesMatch "^bot\.php$">
+    Require all denied
   </FilesMatch>
 </IfModule>
 
@@ -211,3 +246,12 @@ AddType text/css .css
 # (wss://venus.web.telegram.org). Bu sayt serveri orqali EMAS — shuning
 # uchun hech qanday proxy/solve qoidalari kerak emas.
 # (Maxfiy Telegram CDN rasmlari <img> orqali o'qiлadi — CORS kerak emas.)
+
+# ------------------------------------------------------------------ ADMIN
+#
+# Qulay manzil: /tele_uzdub/admin  ->  admin.php
+# (parol sahifasi o'zi ochiladi, keyin 30 kun eslab qoladi)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^admin/?$ admin-panel.php [L,QSA]
+</IfModule>

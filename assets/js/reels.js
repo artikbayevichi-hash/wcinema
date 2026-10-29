@@ -402,6 +402,37 @@
     }
 
     // ================================================================ oqim
+
+    // Joriy (birinchi ko'rinadigan) slaydni BAYT darajasida isitamiz.
+    //
+    // `mountTg` dan OLDIN chaqiriladi: fayl boshi va `moov` indeksi RAM ga
+    // tushib ulguradi. `mount` paytida esa brauzerning birinchi Range
+    // so'rovi 0 RTT da javob oladi - birinchi kadr Telegram'ni kutmaydi.
+    //
+    // `mount` ichida `cancelOtherWarms(mKey)` bor: agar shu kontent
+    // isitilayotgan bo'lsa, u SAQLANADI (bekor qilinmaydi).
+    function warmVisible(i) {
+        const el = state.slideEls[i];
+        if (!el || !window.TgStream) return;
+        const box = el.querySelector('.reels-tg');
+        if (!box || box.dataset.mounted === '1') return;
+        const ch = box.dataset.channel || '';
+        const post = Number(box.dataset.post) || 0;
+        if (!ch || !post) return;
+        const opts = {
+            channel: ch,
+            post: post,
+            url: box.dataset.url || '',
+            deep: box.dataset.deep || ''
+        };
+        if (typeof window.TgStream.warmMedia === 'function') {
+            try { window.TgStream.warmMedia(opts); } catch (e) {}
+        }
+        if (typeof window.TgStream.prefetch === 'function') {
+            try { window.TgStream.prefetch(opts); } catch (e) {}
+        }
+    }
+
     function mountTg(i) {
         const el = state.slideEls[i];
         if (!el) return;
@@ -549,7 +580,7 @@
         if (i !== state.active) return;
         const took = Date.now() - (state.mountStartedAt || Date.now());
         if (took > 20000) return;
-        if (!window.TgStream || !window.TgStream.prefetch) return;
+        if (!window.TgStream) return;
 
         const next = state.slideEls[i + 1];
         if (!next) return;
@@ -559,12 +590,21 @@
         const post = Number(box.dataset.post) || 0;
         if (!ch || !post) return;
 
-        window.TgStream.prefetch({
+        const opts = {
             channel: ch,
             post: post,
             url: box.dataset.url || '',
             deep: box.dataset.deep || ''
-        });
+        };
+
+        // Metama'lumot oldindan tayyorlanadi (tez ochilish).
+        if (typeof window.TgStream.prefetch === 'function') {
+            try { window.TgStream.prefetch(opts); } catch (e) {}
+        }
+        // Bayt darajasida "isitish": fayl boshi + indeks RAM ga.
+        if (typeof window.TgStream.warmMedia === 'function') {
+            try { window.TgStream.warmMedia(opts); } catch (e) {}
+        }
     }
 
     function playAt(i) {
@@ -608,6 +648,9 @@
         state.mountStartedAt = Date.now();
 
         pauseAll(i);
+        // Joriy slaydni DARHOL isitamiz (baytlar + indeks). `playAt` ->
+        // `mountTg` shundan keyin ishga tushadi va tayyor baytlarni topadi.
+        warmVisible(i);
         playAt(i);
         mountCarousel(i);
 

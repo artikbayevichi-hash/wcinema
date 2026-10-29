@@ -245,6 +245,8 @@ main { padding: 4px 0 20px; }
     background: var(--card-2);
     border-radius: 12px;
     overflow: hidden;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .04) inset;
+    transition: box-shadow .25s ease;
 }
 .yt-thumb img {
     width: 100%; height: 100%; object-fit: cover; display: block;
@@ -253,14 +255,40 @@ main { padding: 4px 0 20px; }
 .card.yt-card:hover .yt-thumb img { transform: scale(1.045); }
 .yt-thumb .poster-fallback { font-size: 34px; }
 
+/* Pastdan to'q gradient — davomiylik va nishonlar har qanday kadrda
+   o'qiladigan bo'lishi uchun (YouTube'dagi bilan bir xil usul). */
+.yt-thumb::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 44%;
+    background: linear-gradient(to top, rgba(0, 0, 0, .58), rgba(0, 0, 0, 0));
+    pointer-events: none; z-index: 1;
+    opacity: .9; transition: opacity .25s ease;
+}
+.card.yt-card:hover .yt-thumb::after { opacity: 1; }
+
+/* Video kadridan olingan muqova yumshoq paydo bo'ladi. */
+.yt-thumb img.yt-frame { animation: ytFrameIn .42s ease both; }
+@keyframes ytFrameIn {
+    from { opacity: 0; transform: scale(1.06); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* Hoverda karta "ko'tariladi" va nozik halqa paydo bo'ladi. */
+.card.yt-card:hover .yt-thumb {
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .10);
+}
+.card.yt-card:hover .yt-title { color: #fff; }
+
 .yt-dur {
-    position: absolute; right: 6px; bottom: 6px;
-    padding: 2px 5px; border-radius: 5px;
-    background: rgba(0, 0, 0, .82);
-    color: #fff; font-size: 11px; font-weight: 600;
+    position: absolute; right: 6px; bottom: 6px; z-index: 2;
+    padding: 3px 6px; border-radius: 6px;
+    background: rgba(0, 0, 0, .78);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, .35);
+    color: #fff; font-size: 11.5px; font-weight: 700;
     font-variant-numeric: tabular-nums; letter-spacing: .2px;
     line-height: 1.3;
 }
+.yt-thumb .badge { z-index: 2; box-shadow: 0 1px 6px rgba(0, 0, 0, .35); }
 .yt-thumb .badge-series  { top: 6px; left: 6px; bottom: auto; }
 .yt-thumb .badge-premium { top: 6px; right: 6px; left: auto; }
 .yt-thumb .badge-episode { top: 6px; left: 6px; bottom: auto; }

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // ============================================================================
 // profile.php — YouTube/Instagram uslubidagi profil sahifasi
 // ----------------------------------------------------------------------------
@@ -27,6 +27,7 @@ $meId       = $user ? (int) $user['id'] : null;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?></title>
+    <?php require __DIR__ . '/includes/perf-head.php'; ?>
     <meta name="description" content="Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?>">
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/profile.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/profile.css') ?: 1; ?>">
@@ -77,6 +78,12 @@ $meId       = $user ? (int) $user['id'] : null;
 
         <div class="pf-stats" id="pfStats">
             <div class="pf-stat"><b data-k="reels">0</b><span>Reels</span></div>
+            <button type="button" class="pf-stat pf-stat-link" data-list="followers">
+                <b data-k="followers">0</b><span>Kuzatuvchilar</span>
+            </button>
+            <button type="button" class="pf-stat pf-stat-link" data-list="following">
+                <b data-k="following">0</b><span>Kuzatilayotgan</span>
+            </button>
             <div class="pf-stat"><b data-k="views">0</b><span>Ko'rishlar</span></div>
             <div class="pf-stat"><b data-k="likes">0</b><span>Yoqtirishlar</span></div>
         </div>
@@ -158,6 +165,18 @@ $meId       = $user ? (int) $user['id'] : null;
                 <button type="submit" class="pf-btn prim" id="pfModalSave"><?php echo ig_svg('check'); ?> Saqlash</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Kuzatuvchilar / kuzatilayotganlar ro'yxati (Instagram uslubi) -->
+<div class="pf-modal" id="pfListModal" hidden>
+    <div class="pf-modal-box pf-list-box">
+        <div class="pf-list-head">
+            <h3 id="pfListTitle">Kuzatuvchilar</h3>
+            <button type="button" class="pf-list-x" id="pfListX" aria-label="Yopish">&times;</button>
+        </div>
+        <div class="pf-list-body" id="pfListBody"></div>
+        <div class="pf-list-more" id="pfListMore" hidden><span class="spinner"></span></div>
     </div>
 </div>
 

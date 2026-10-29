@@ -1467,3 +1467,69 @@
     .reels-slide { background: #000; }
     .reels-slide video, .reels-slide iframe { max-width: 480px; margin: 0 auto; }
 }
+
+/* ==========================================================================
+   IZOHLAR — Instagram sayqali
+   --------------------------------------------------------------------------
+   Quyidagi qoidalar yuqoridagi asosiy uslublarni NOZIK sayqallaydi:
+   qator ustida yumshoq belgi, avatar atrofidagi gradient halqa, yoqtirish
+   animatsiyasi va telefonda zichroq joylashuv. Hech bir elementni
+   yashirmaydi — faqat ko'rinishni yumshatadi.
+   ========================================================================== */
+.reels-c-row {
+    padding: 4px 6px;
+    margin: 0 -6px;
+    border-radius: 12px;
+    transition: background .18s ease, opacity .25s ease, transform .25s ease;
+}
+.reels-c-row:hover { background: rgba(255, 255, 255, .035); }
+
+/* Avatar — nozik gradient halqa (Instagram'dagi "story" halqasiga yaqin) */
+.reels-c-av {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .06);
+    transition: box-shadow .18s ease, transform .18s ease;
+}
+.reels-c-row:hover .reels-c-av {
+    box-shadow: 0 0 0 2px rgba(42, 171, 238, .55);
+}
+
+/* Javoblar chizig'i yumshoqroq va "thread" hissini beradi */
+.reels-c-replies { border-left-color: rgba(255, 255, 255, .12); }
+.reels-c-viewreplies { color: var(--muted); transition: color .15s ease; }
+.reels-c-viewreplies:hover { color: var(--accent); }
+
+/* Yoqtirish — bosilganda kichik "sakrash" */
+.reels-c-like-btn { transition: transform .16s cubic-bezier(.2, 1.5, .4, 1), color .15s ease; }
+.reels-c-like-btn.on { color: #ff5c5c; }
+.reels-c-like-btn:active { transform: scale(1.22); }
+.reels-c-like-n { font-variant-numeric: tabular-nums; }
+
+/* Amal tugmalari (javob / vaqt) — Instagram kabi mayda va xira */
+.reels-c-mact { letter-spacing: .1px; }
+
+/* Kompozitor maydoni fokusda nozik yorug' halqa oladi */
+.reels-comments-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(42, 171, 238, .16);
+}
+.reels-comments-send[data-mode="send"] {
+    box-shadow: 0 4px 14px rgba(42, 171, 238, .35);
+}
+
+/* Telefonda: ro'yxat zichroq, sarlavha kichikroq, xavfsiz hudud hisobga olinadi */
+@media (max-width: 640px) {
+    .reels-comments-list { padding: 10px 12px; gap: 12px; }
+    .reels-c-row { padding: 4px 4px; margin: 0 -4px; }
+    .reels-c-av { width: 34px; height: 34px; }
+    .reels-comments-title { font-size: 15px; }
+    .reels-c-replies { margin-left: 12px; padding-left: 18px; }
+    .reels-comments-input { font-size: 16px; }   /* iOS zoom'ni oldini oladi */
+}
+
+/* Yupqa va chiroyli skroll chizig'i */
+.reels-comments-list::-webkit-scrollbar { width: 8px; }
+.reels-comments-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, .14); border-radius: 999px;
+}
+.reels-comments-list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .22); }
+.reels-comments-list::-webkit-scrollbar-track { background: transparent; }

@@ -135,10 +135,26 @@
     }
 
     // ---------------------------------------------------------------- card
+    // Poster ustuvorligi (YouTube uslubi):
+    //   1) serverdagi HAQIQIY poster (rasm),
+    //   2) brauzerda avval video kadridan olingan muqova (WCLib.frames),
+    //   3) server generatsiya qilgan SVG fon (gradient + sarlavha).
+    function isSvgPoster(u) { return /^data:image\/svg\+xml/i.test(String(u || '')); }
+
+    function frameFor(id) {
+        try {
+            return (window.WCLib && WCLib.frames) ? WCLib.frames.get(id) : '';
+        } catch (e) { return ''; }
+    }
+
     function cardHTML(c, opts) {
         opts = opts || {};
-        const poster = c.poster
-            ? `<img src="${esc(c.poster)}" alt="${esc(c.title)}" loading="lazy"
+        const realPoster = (c.poster && !isSvgPoster(c.poster)) ? c.poster : '';
+        const frame = realPoster ? '' : frameFor(c.id);
+        const imgSrc = realPoster || frame || c.poster || '';
+        const isFrame = !realPoster && !!frame;
+        const poster = imgSrc
+            ? `<img class="yt-img${isFrame ? ' yt-frame' : ''}" src="${esc(imgSrc)}" alt="${esc(c.title)}" loading="lazy"
                    referrerpolicy="no-referrer" onerror="this.remove()">`
             : '';
         const fallback = poster ? '' :
@@ -245,6 +261,27 @@
         return p;
     }
 
+    // Karta muqovasiga haqiqiy video kadrini qo'yadi (yumshoq o'tish bilan).
+    function applyFrame(card, url) {
+        if (!card || !url) return;
+        const thumb = card.querySelector('.yt-thumb');
+        if (!thumb) return;
+        let img = thumb.querySelector('img.yt-img');
+        if (!img) {
+            img = document.createElement('img');
+            img.className = 'yt-img';
+            img.alt = '';
+            img.loading = 'lazy';
+            img.referrerPolicy = 'no-referrer';
+            const fb = thumb.querySelector('.poster-fallback');
+            if (fb) fb.remove();
+            thumb.insertBefore(img, thumb.firstChild);
+        }
+        img.classList.add('yt-frame');
+        img.src = url;
+        thumb.classList.add('has-frame');
+    }
+
     async function previewStart(card) {
         const id = card.dataset.id;
         const thumb = card.querySelector('.yt-thumb');
@@ -262,6 +299,17 @@
         box.className = 'card-preview';
         thumb.appendChild(box);
         pvEl = box;
+
+        // Oqim ishga tushgach birinchi kadrni olamiz va shu kartaning
+        // muqovasi qilib qo'yamiz (keyingi ochilishlarda ham saqlanadi).
+        const grab = () => {
+            if (!window.WCLib || !WCLib.frames) return;
+            WCLib.frames.watch(box, id, {
+                minTime: 0.15,
+                width: 480,
+                onFrame: (url) => { if (pvCard === card || !pvCard) applyFrame(card, url); }
+            });
+        };
 
         if (type === 'telegram') {
             const mount = document.createElement('div');
@@ -285,6 +333,7 @@
             v.addEventListener('loadeddata', () => { v.play().catch(() => {}); });
             box.appendChild(v);
         }
+        grab();
         card.classList.add('pv-on');
     }
 
@@ -648,6 +697,23 @@
         try {
             const d = await api('content.php?' + q.toString());
             state.current = d;
+
+            // Joriy (birinchi ko'rinadigan) kontentni BAYT darajasida
+            // isitamiz: fayl boshi + `moov` indeksi RAM ga tushadi, keyin
+            // `wireModal` -> `TgStream.mount()` tayyor baytlarni topadi
+            // (birinchi kadr Telegram'ni kutmaydi). Xato bo'lsa - jim.
+            const pb0 = d && d.playback;
+            if (pb0 && pb0.type === 'telegram' && window.TgStream
+                    && typeof window.TgStream.warmMedia === 'function') {
+                const wOpts = { channel: pb0.channel || '', post: Number(pb0.post) || 0 };
+                try { window.TgStream.warmMedia(wOpts); } catch (e) {}
+                try {
+                    if (typeof window.TgStream.prefetch === 'function') {
+                        window.TgStream.prefetch(wOpts);
+                    }
+                } catch (e) {}
+            }
+
             $('#modalBody').innerHTML = renderModal(d);
             wireModal(d);
             document.dispatchEvent(new CustomEvent('wc:modalOpen'));

@@ -845,7 +845,55 @@ html.tv .ig-ico { width: 30px; height: 30px; }
 }
 .ig-ntf-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
+/* --- Avatar uyumi: bir nechta kishi (Instagram kabi ustma-ust doiralar) --- */
+.ig-ntf-av--stack { width: auto; display: flex; align-items: center; }
+.ig-ntf-stack { display: flex; align-items: center; }
+.ig-ntf-stack-it {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 2px solid var(--bg); background: var(--card-2);
+    overflow: hidden; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .4);
+}
+.ig-ntf-stack-it + .ig-ntf-stack-it { margin-left: -15px; }
+.ig-ntf-stack-it img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ig-ntf-stack-it .ig-ntf-ph {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; color: var(--muted); background: var(--card-2);
+}
+.ig-ntf-stack-more { font-size: 12px; font-weight: 800; color: var(--muted); }
+
+/* --- Yuklash skeleti (yumshoq pulsatsiya) --- */
+.ig-ntf-skel { display: flex; align-items: center; gap: 12px; padding: 13px 12px; }
+.ig-ntf-skel .sk-av {
+    width: 46px; height: 46px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--card-2);
+}
+.ig-ntf-skel .sk-main { flex: 1; display: flex; flex-direction: column; gap: 9px; }
+.ig-ntf-skel .sk-l1, .ig-ntf-skel .sk-l2 { height: 11px; border-radius: 6px; background: var(--card-2); }
+.ig-ntf-skel .sk-l1 { width: 72%; }
+.ig-ntf-skel .sk-l2 { width: 38%; }
+.ig-ntf-skel .sk-av, .ig-ntf-skel .sk-l1, .ig-ntf-skel .sk-l2 {
+    animation: igSkelPulse 1.15s ease-in-out infinite;
+}
+@keyframes igSkelPulse {
+    0%, 100% { opacity: .5; }
+    50%      { opacity: 1; }
+}
+
+/* --- Bo'sh holat (chiroyli, izohli) --- */
+.ig-ntf-empty {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    color: var(--muted); text-align: center; padding: 56px 26px;
+}
+.ig-ntf-empty .ig-svg { width: 54px; height: 54px; opacity: .45; }
+.ig-ntf-empty b { color: var(--text); font-size: 16px; font-weight: 700; }
+.ig-ntf-empty span { font-size: 13px; line-height: 1.45; max-width: 270px; }
+
 @media (max-width: 999px) {
-    .ig-ntf-panel { width: 100%; border-left: none; }
+    .ig-ntf-panel {
+        width: 100%; border-left: none;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .ig-ntf-row { padding: 12px 14px; }
 }
 

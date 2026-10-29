@@ -608,3 +608,132 @@
     .pf-modal-box { border-radius: 18px; margin-bottom: 12vh; }
     .pf-card { border-radius: 0 0 0 0; }
 }
+
+/* =======================================================================
+   KUZATUVCHILAR / KUZATILAYOTGANLAR (Instagram uslubi)
+   -----------------------------------------------------------------------
+   Sanoqlar bosiladigan bo'ladi va ro'yxat pastdan ochiladigan modalda
+   ko'rsatiladi: avatar + ism/@username + "Kuzatish" tugmasi.
+   ======================================================================= */
+
+/* Sanoqni tugmaga aylantiramiz (ko'rinishi o'zgarmaydi, faqat bosiladi). */
+.pf-stat-link {
+    appearance: none; -webkit-appearance: none;
+    background: none; border: 0; margin: 0; padding: 0;
+    font: inherit; color: inherit; cursor: pointer;
+    transition: opacity .15s ease, transform .12s ease;
+}
+.pf-stat-link:hover { opacity: .78; }
+.pf-stat-link:active { transform: scale(.96); }
+.pf-stat-link:focus-visible { outline: 2px solid var(--pf-blue); outline-offset: 2px; }
+
+body.pf-list-open { overflow: hidden; }
+
+.pf-list-box {
+    display: flex; flex-direction: column;
+    max-height: 80vh; padding: 0;
+    overflow: hidden;
+}
+.pf-list-head {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px 48px 12px;
+    border-bottom: 1px solid var(--pf-border);
+}
+.pf-list-head h3 {
+    margin: 0; font-size: 16px; font-weight: 700; color: var(--pf-text);
+}
+.pf-list-head::before {
+    content: ''; position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+    width: 42px; height: 4px; border-radius: 999px;
+    background: rgba(255, 255, 255, .22);
+}
+.pf-list-x {
+    position: absolute; right: 10px; top: 50%;
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    transform: translateY(-50%);
+    background: none; border: 0; cursor: pointer;
+    color: var(--pf-sub); font-size: 26px; line-height: 1; border-radius: 50%;
+
+    transition: background .15s ease, color .15s ease;
+}
+.pf-list-x:hover { background: rgba(255, 255, 255, .08); color: var(--pf-text); }
+.pf-list-body {
+    flex: 1 1 auto;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 6px 8px calc(12px + env(safe-area-inset-bottom));
+}
+
+.pf-li {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 10px; border-radius: 12px;
+    transition: background .15s ease;
+}
+.pf-li:hover { background: rgba(255, 255, 255, .045); }
+.pf-li-l {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; gap: 12px;
+    text-decoration: none; color: inherit;
+}
+.pf-li-ava {
+    flex: 0 0 auto; width: 46px; height: 46px; border-radius: 50%;
+    overflow: hidden; background: rgba(255, 255, 255, .07);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: var(--pf-text);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .07) inset;
+}
+.pf-li-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pf-li-txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pf-li-name {
+    font-size: 14.5px; font-weight: 700; color: var(--pf-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pf-li-user {
+    font-size: 12.5px; color: var(--pf-sub);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.pf-li-btn {
+    flex: 0 0 auto;
+    padding: 8px 16px; border-radius: 999px;
+    border: 1px solid var(--pf-border);
+    background: rgba(255, 255, 255, .06);
+    color: var(--pf-text);
+    font-size: 13px; font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease, transform .12s ease, opacity .15s ease;
+}
+.pf-li-btn:hover { background: rgba(255, 255, 255, .12); }
+.pf-li-btn:active { transform: scale(.96); }
+.pf-li-btn.prim {
+    background: linear-gradient(180deg, #37b7f5, var(--pf-blue));
+    border-color: transparent; color: #fff;
+    box-shadow: 0 4px 14px rgba(42, 171, 238, .32);
+}
+.pf-li-btn.prim:hover { background: linear-gradient(180deg, #4cc1f8, #1c9fe0); }
+.pf-li-btn.ghost { background: rgba(255, 255, 255, .05); }
+.pf-li-btn[disabled] { opacity: .55; cursor: default; }
+
+.pf-li-empty {
+    padding: 34px 16px; text-align: center;
+    color: var(--pf-sub); font-size: 13.5px; line-height: 1.5;
+}
+.pf-list-more {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    padding: 12px;
+}
+.pf-list-more[hidden] { display: none; }
+
+/* Telefonda: ro'yxat zichroq */
+@media (max-width: 480px) {
+    .pf-li { padding: 7px 6px; gap: 10px; }
+    .pf-li-ava { width: 42px; height: 42px; }
+    .pf-li-btn { padding: 7px 13px; font-size: 12.5px; }
+    .pf-list-box { max-height: 86vh; }
+}
+
+/* Kuzatuvchilar/Kuzatilayotgan sanoqlari ko'p bo'lganda ham sig'ishi uchun */
+.pf-stats { flex-wrap: wrap; row-gap: 10px; }
+.pf-btn.prim.pf-following, .pf-li-btn.ghost { letter-spacing: 0; }

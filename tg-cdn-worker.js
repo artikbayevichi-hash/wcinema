@@ -100,6 +100,23 @@ function say(msg) {
     })
     .catch(() => { /* sahifa yopilgan bo'lishi mumkin */ });
 }
+// Sahifaga statistika yuborish (o'lchov / QA).
+//
+// Ishlab chiqarishda bu deaktiv (faqat `?wcperf=1` rejimida yoqiladi).
+// Sahifa tomonda `window.__wcPerf` ga yig'iladi.
+function stats(patch) {
+  const d = Object.assign({
+    requests: STATS.requests,
+    bytes: STATS.bytes,
+    seeks: STATS.seeks,
+    par: STATS.par
+  }, patch || {});
+  self.clients.matchAll()
+    .then((list) => {
+      for (const c of list) c.postMessage({ type: 'stats', stats: d });
+    })
+    .catch(() => { /* sahifa yopilgan bo'lishi mumkin */ });
+}
 
 // "Qayta ulan" degan murojaat: SW'ning xotirasi bo'shaganda chaqiriladi.
 function askForProvider() {
@@ -502,31 +519,42 @@ function parseRange(header, size) {
 //     RTT. MP4 sarlavhasi (`ftyp` + `moov`) shu yerda bo'lsa, brauzer birinchi
 //     kadrni deyarli darhol ko'rsatadi.
 //
-//   2-BOSQICH (2 sekundan keyin) — qolgan butun fayl. Endi tezlik muhim:
-//     har tortish 2 MB va ichida 4 ta parallel so'rov (PARALLEL).
+//   2-BOSQICH (darhol, kechikishsiz) — qolgan butun fayl. Endi tezlik
+//     muhim: har tortish 2 MB va ichida 4 ta parallel so'rov (PARALLEL).
 //
 // NIMA UCHUN "FON ISHLOVCHI" (producer) va NAVBAT:
 //
 // Oqimning o'zini to'xtatib kutsa — brauzer `pull()` ga to'xtamaydi
-// chaqirib turadi va video 2 soniya "tosib" qoladi. Shuning uchun:
+// chaqirib turadi va video "tosib" qoladi. Shuning uchun:
 //
 //   * `produce()` — FONDA ishlaydi: Telegram'dan o'qib, navbatga soladi.
-//     1-bosqichni darhol, 2-bosqichni 2 s dan keyin boshlaydi va
+//     1-bosqichni darhol, 2-bosqichni ham darhol boshlaydi va
 //     NAVBAT TO'LMAY turib davom etadi (foydalanuvchi ko'rayotgan paytda
 //     keyingi qism oldindan tayyor bo'lib turadi — "buffer" qisqa bo'lmaydi).
 //   * `pull(controller)` — faqat navbatdan oladi. Navbat bo'sh bo'lsa
+//   * `pull(controller)` - faqat navbatdan oladi. Navbat bo'sh bo'lsa
 //     `produce()` tugashini kutadi, lekin o'z-o'zidan Telegram'ga
 //     so'rov YUBORMAYDI.
 //
 // XOTIRA: navbat chegaralanadi (QUEUE_MAX). Aks holda 546 MB li fayl
 // butunlay RAM ga yig'ilib, telefonda brauzerni o'ldirardi. Chegara
 // oshilganda `produce` kutadi — bu aynan `backpressure` roli.
-const FIRST_PULL = 512 * 1024;      // 1-bosqich: bitta bo'lak, darhol
+// 1-bosqich: birinchi bo'lak. Ilgari 512 KB edi — brauzer birinchi baytni
+// ko'rishdan oldin butun 512 KB ni kutardi (sekin tarmoqda 1–2.5 s).
+// Birinchi kadr uchun 128 KB yetarli; qolgani darhol davom etadi.
+const FIRST_PULL = 128 * 1024;
 const REST_PULL = 2 * 1024 * 1024;   // 2-bosqich: katta bo'lak, tez
-const REST_DELAY = 2000;             // ms — qolgani shundan keyin yuklanadi
-const QUEUE_MAX = 2;                 // navbatda nechta bo'lak (2 x 2 MB = 4 MB)
+// 2-bosqich KECHIKISHI. Ilgari 2000 ms edi — ya'ni birinchi 512 KB dan
+// keyin brauzer 2 SEKUND hech qanday bayt olmasdi. `moov` fayl boshida
+// bo'lsa ham video shu sababli "qotib" turardi (foydalanuvchi shikoyati:
+// "6 sekundda ochilyapti"). Endi kechiktirmaymiz: birinchi bo'lak
+// yuborilishi bilan qolgani darhol oqadi. Tartib saqlanadi (avval 0 dan
+// o'qilgan 512 KB, keyin davomi), chunki `off` ketma-ket o'sadi.
+const REST_DELAY = 0;                // ms — qolgani shundan keyin yuklanadi
+const QUEUE_MAX = 3;                 // navbatda nechta bo'lak (3 x 2 MB = 6 MB)
 
-async function progressiveResponse(size, mime, baseHeaders) {
+async function progressiveResponse(size, mime, baseHeaders, t0) {
+  const born = (t0 || Date.now());
   let off = 0;                       // Telegram'dan o'qilgan bayt soni
   let dead = false;                  // brauzer bekor qilgan (yopilgan/seek)
   let done = false;                  // fayl to'liq o'qib bo'ldi
@@ -559,14 +587,22 @@ async function progressiveResponse(size, mime, baseHeaders) {
         STATS.requests++;
         STATS.bytes += first.length;
         queue.push(first);
-        say('~ oqim #1 ' + (first.length / 1024).toFixed(0) + ' KB — darhol');
+        say('~ oqim #1 ' + (first.length / 1024).toFixed(0) + ' KB - darhol');
+        // Birinchi bayt qancha vaqtda keldi? Bu - TTFB. Sahifa uni
+        // `window.__wcPerf` da ko'radi (QA uchun).
+        stats({
+          ttfb: Date.now() - born,
+          first: first.length,
+          progressive: true,
+          size: size
+        });
         notify();
       }
       part++;                              // keyingi bo'lak "#2" bo'lib hisoblanadi
 
-      // ---- 2-BOSQICH: 2 sekunddan keyin qolgan fayl ----------------------
-      // `dead` bo'lsa kutmaymiz — brauzer allaqachon yopgan bo'lsa 2 sekun
-      // bekor qilib turish ortiqcha. 50 ms da bo'lib `dead` ga tez javob beramiz.
+      // ---- 2-BOSQICH: darhol qolgan fayl --------------------------------
+      // Kechikish yo'q (`REST_DELAY = 0`): birinchi 512 KB yuborilishi
+      // bilan davomi o'qila boshlaydi. `dead` bo'lsa to'xtaymiz.
       if (!dead && !done && REST_DELAY > 0) {
         let left = REST_DELAY;
         while (left > 0 && !dead) {
@@ -593,7 +629,7 @@ async function progressiveResponse(size, mime, baseHeaders) {
         if (part <= 2 || part % 20 === 0) {
           say('~ oqim #' + part + ' ' + (off / 1048576).toFixed(1) + ' / '
             + (size / 1048576).toFixed(1) + ' MB'
-            + (part === 2 ? '  (2 s dan keyin — qolgani)' : ''));
+            + (part === 2 ? '  (qolgani — kechikishsiz)' : ''));
         }
         part++;
         notify();
@@ -646,6 +682,21 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (!/(^|\/)tgfile(\/|$)/.test(url.pathname)) return;   // boshqa so'rovlarga tegma
 
+  // XAVFSIZLIK: faqat O'Z ORIGIN'IMIZDAGI so'rovlarni ushlaymiz.
+  //
+  // Service Worker boshqa ORIGIN'dagi so'rovlarni ham ko'radi: masalan,
+  // boshqa sayt `<video src="https://boshqa-sayt/tgfile/?size=...">`
+  // qilsa, bu SW uni ushlab, Telegram'ga proksi qilib yuboradi. Bu -
+  // server-side request forgery (SSRF) yuzasi: sayt ichidagi begona
+  // manzillar Telegram orqali o'qilishi mumkin bo'lardi.
+  //
+  // Shuning uchun origin'ni qat'iy tekshiramiz. Boshqa origin -> SW tegilmay,
+  // so'rov odatdagidek networkga boradi (mavjud xavfsizlik saqlanadi).
+  if (url.origin !== self.location.origin) return;
+
+  // So'rov qabul qilingan vaqti - TTFB (first byte) ni o'lchash uchun.
+  const t0 = Date.now();
+
   e.respondWith((async () => {
     const size = Number(url.searchParams.get('size')) || 0;
 
@@ -688,7 +739,7 @@ self.addEventListener('fetch', (e) => {
     // ko'rish davomida oqib keladi. Ilgari bu holatda faqat 2 MB berilib,
     // brauzer qayta-qayta so'rardi — birinchi kadr kechikardi.
     if (!rg || (rg.open && rg.start === 0)) {
-      return progressiveResponse(size, mime, headers);
+      return progressiveResponse(size, mime, headers, t0);
     }
 
     const start = rg.start;
@@ -751,10 +802,17 @@ self.addEventListener('fetch', (e) => {
       + ' (' + (u8.length / 1048576).toFixed(2) + ' MB)'
       + (start > 1048576 ? '  ← seek' : ''));
 
+    // TTFB: so'rov kelgandan bayt tayyor bo'lguncha o'tgan vaqt.
+    // Sahifa shuni `window.__wcPerf` da ko'radi (QA).
+    const ttfb = Date.now() - t0;
+    stats({ ttfb: ttfb, range: start + '-' + (start + u8.length - 1), size: size });
+
     return new Response(u8, { status: 206, headers: {
       ...headers,
       'Content-Range': 'bytes ' + start + '-' + (start + u8.length - 1) + '/' + size,
       'Content-Length': String(u8.length),
+      'X-WC-Served-By': 'tg-cdn-worker',
+      'X-WC-TTFB': String(ttfb),
     }});
   })());
 });

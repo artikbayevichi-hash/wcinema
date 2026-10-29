@@ -376,6 +376,64 @@ function probeContainer(u8) {
     return { id: 'unknown', name: 'noma\'lum format', playable: false,
              reason: 'Fayl formati aniqlanmadi — brauzer uni o\'ynata olmaydi' };
   }
+
+// ---------------------------------------------------------------------------
+//  FAYL TUZILMASI (layout) — faqat BOSHDAN o'qilgan baytlardan
+// ---------------------------------------------------------------------------
+//
+//  MP4 da `mdat` = filmning o'zi, `moov` = indeks (jadval). `mdat` hajmi
+//  sarlavhada ANIQ yozilgan bo'lgani uchun, undan keyingi quti — ya'ni
+//  `moov` — aynan qaysi manzildan boshlanishini BILIB qo'yamiz.
+//
+//  Bu nima uchun muhim? Ilgari indeks "faylning oxiridan 2 MB" deb
+//  qidirilardi — ya'ni har bir ochilishda 2 MB ortiqcha o'qish (o'lchovda
+//  1–3 s). Endi indeks aniq manzildan o'qiladi: odatda 256 KB yetadi.
+//
+//  Natija: `<video>` yaratilishi uchun FAQAT fayl boshi kerak — indeks
+//  keyin, fon rejimida o'qiladi va keshga yoziladi.
+function rawBoxSize(u8, p) {
+    try {
+        var dv = viewOf(u8);
+        var s = dv.getUint32(p);
+        if (s === 1) return Number(dv.getBigUint64(p + 8));   // 64-bit hajm
+        return s;                                            // 0 = "fayl oxirigacha"
+    } catch (e) { return 0; }
+}
+
+function probeLayout(u8, size) {
+    var out = { moovOff: null, moovSize: 0, moovAtHead: false, mdatEnd: null };
+    if (!u8 || u8.byteLength < 16) return out;
+
+    var boxes = readBoxes(u8, 0, u8.byteLength);
+    var i, b;
+
+    // 1) `moov` boshda bo'lsa — hammasi kerak.
+    for (i = 0; i < boxes.length; i++) {
+        b = boxes[i];
+        if (b.type !== 'moov') continue;
+        out.moovOff = b.start;
+        out.moovSize = b.cut ? 0 : b.size;
+        out.moovAtHead = !b.cut;
+        return out;
+    }
+
+    // 2) `moov` boshda yo'q -> uni `mdat` dan keyin izlaymiz.
+    //    `mdat` hajmi sarlavhada yozilgan -> keyingi quti aynan shu
+    //    manzildan boshlanadi (kichik "boshqa quti" bo'lishi mumkin,
+    //    shuning uchun biroz qoldiq qoldiramiz).
+    for (i = 0; i < boxes.length; i++) {
+        b = boxes[i];
+        if (b.type !== 'mdat') continue;
+        var raw = rawBoxSize(u8, b.start);
+        if (raw > 0) {
+            out.mdatEnd = b.start + raw;
+            if (out.mdatEnd < size) out.moovOff = out.mdatEnd;
+            break;
+        }
+        break;   // `mdat` hajmi 0 = "oxirigacha" -> undan keyin quti yo'q
+    }
+    return out;
+}
 // -----------------------------------------------------------------------
 //  DIQQAT: quyidagi barcha indekslar BO'LAK ichidagi (chunk-relative),
 //  fayl manzili EMAS. Sababi: DataView bo'lakka qarashli, fayl esa
@@ -529,7 +587,10 @@ function moovCandidates(u8) {
 function codecOk(t) { return t === 'avc1' || t === 'avc3' || t === 'vp09' || t === 'av01'; }
 async function probeMp4(size, fetchRange) {
     var HEAD = Math.min(65536, size);
-    var TAIL = Math.min(4 * 1024 * 1024, size);
+    // TEZLIK: ilgari 4 MB edi. Kodek ma'lumoti (`stsd`) `moov` ning BOSHIDA
+    // turadi, shuning uchun oxirgi 2 MB yetarli. Kamroq o'qish = tezroq
+    // ochilish (o'lchovda bu qadam 4.4 s yeyotgan edi).
+    var TAIL = Math.min(2 * 1024 * 1024, size);
 
     var head = await fetchRange(0, HEAD - 1);
 
@@ -600,7 +661,15 @@ async function probeMp4(size, fetchRange) {
     //  Har oynada faqat VIDEO KODEKI topilgan nomzat qabul qilinadi: `mdat`
     //  ichida tasodifan "moov" so'zi uchrashi mumkin.
     // -----------------------------------------------------------------------
-    var MAX_WINDOW = 24 * 1024 * 1024;
+    // TEZLIK (asosiy tuzatish): ilgari 24 MB edi — uzun kinolarda bu bitta
+    // probe uchun 20 MB gacha o'qish demak. O'lchov: kino ochilishida shu
+    // qadam +4447 ms yedi. Kodek ma'lumoti (`moov` → `trak` → `stsd`) oynaning
+    // BOSHIDA bo'ladi, shuning uchun 2 MB yetarli.
+    //
+    // Muhim: topilmasa ham XATO EMAS — `uncertain` bo'lib qoladi va video
+    // baribir optimistik o'ynaydi; haqiqiy kodessizlik chiqsa `onVideoError`
+    // zaxira yo'lni (qayta tayyorlash) ishga tushiradi.
+    var MAX_WINDOW = 2 * 1024 * 1024;
 
     var headList = readBoxes(head, 0, head.byteLength);
     var headTypes = headList.map(function (b) { return b.type; });
@@ -619,10 +688,13 @@ async function probeMp4(size, fetchRange) {
     }
 
     // Bir oynani skanerlaydi. Qaytaradi {box, codes} yoki null.
-    async function scanWindow(start, want) {
-      var len = Math.min(want, MAX_WINDOW, size - start);
-      if (!(len >= 8)) return null;
-      var w = await fetchRange(start, start + len - 1);
+    //
+    // OYNA BOSQICHLI o'qiladi: avval 256 KB, yetmasa katta oyna. Sababi:
+    // `moov` indeksi odatda bir necha yuz KB, va `stsd` (kodek ma'lumoti)
+    // uning BOSHIDA turadi. Ilgari har bir oyna "oxiridan 2 MB" deb
+    // o'qilardi — ochiqda 2 MB ortiqcha trafik va 1–3 s kechikish.
+    var WIN_STEP = 256 * 1024;
+    function pickMoov(w) {
       var list = moovCandidates(w);
       var first = null;
       for (var i = 0; i < list.length; i++) {
@@ -632,6 +704,19 @@ async function probeMp4(size, fetchRange) {
         if (!first) first = { box: b, codes: c };
       }
       return first;
+    }
+    async function scanWindow(start, want) {
+      var len = Math.min(want, MAX_WINDOW, size - start);
+      if (!(len >= 8)) return null;
+      var step = Math.min(len, WIN_STEP);
+      var w = await fetchRange(start, start + step - 1);
+      var hit = pickMoov(w);
+      // Video kodeki topildi yoki `moov` to'liq ko'rindi — kattaroq
+      // oyna kerak emas.
+      if (hit && (hit.codes.vide.length || !hit.box.cut)) return hit;
+      if (step >= len) return hit;
+      w = await fetchRange(start, start + len - 1);
+      return pickMoov(w);
     }
 
     // --- 1) mo'ov bosh oynada bormi? -------------------------------------
@@ -770,5 +855,9 @@ async function probeMp4(size, fetchRange) {
   }
 
 if (typeof window !== 'undefined') {
-  window.WcProbe = { probeMp4: probeMp4, probeContainer: probeContainer };
+  window.WcProbe = {
+    probeMp4: probeMp4,
+    probeContainer: probeContainer,
+    probeLayout: probeLayout
+  };
 }

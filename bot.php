@@ -1,5 +1,21 @@
 <?php
 // ============================================================================
+// XAVFSIZLIK: bu skript FAQAT terminal (CLI) dan ishga tushadi.
+//
+// Nima uchun: bot.php cheksiz `while (true)` polling bajaradi. Agar uni
+// brauzerdan ochish mumkin bo'lsa, har qanday odam:
+//   1) `getUpdates` bilan haqiqiy botning update'larini "yeb" qo'yardi
+//      (offset fayl umumiy) — foydalanuvchi xabarlari yo'qolardi;
+//   2) Apache ostida uzoq ishlab, workerlarni band qilardi.
+// Shuning uchun web so'rovini darhol 403 bilan to'xtatamiz.
+// ============================================================================
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('Bu skript faqat CLI orqali ishlaydi.');
+}
+
+// ============================================================================
 // Telegram Bot - W CINEMA SUPPORT (qo'llab-quvvatlash boti)
 // ============================================================================
 // Bu skript bot'ni polling orqali boshqaradi. Vazifalari:
@@ -41,6 +57,48 @@ $tickets = file_exists($ticketsFile) ? (json_decode(file_get_contents($ticketsFi
 // Support guruhining RAQAMLI chat id'si (TG_SUPPORT_CHAT @username bo'lsa,
 // javob kaliti mos kelishi uchun ishga tushishda aniqlanadi).
 $supportChatId = '';
+
+/**
+ * Foydalanuvchi botga yozganda uning chat_id sini bazaga saqlaymiz.
+ *
+ * Nima uchun: admin panelidan Telegram DM yuborish uchun `users.telegram_chat_id`
+ * kerak. Foydalanuvchi botga bir marta yozsa (masalan `/start`), bu maydon
+ * to'ladi — shundan keyin barcha bildirishnomalar unga yetib boradi.
+ */
+function saveUserChatId($userId, $chatId, array $from = []) {
+    global $db, $auth;
+    $userId = (string) $userId;
+    $chatId = (string) $chatId;
+    if ($userId === '' || $chatId === '') {
+        return;
+    }
+    try {
+        $row = $db->fetchOne(
+            "SELECT id, telegram_chat_id FROM users WHERE telegram_user_id = ? LIMIT 1",
+            [$userId]
+        );
+        if (!$row && $auth) {
+            // Botga birinchi bo'lib yozgan foydalanuvchi hali bazada yo'q —
+            // yaratamiz (ban qilingan bo'lsa ensureUserFromClient 0 qaytaradi).
+            $newId = $auth->ensureUserFromClient([
+                'id'         => $userId,
+                'first_name' => $from['first_name'] ?? 'User',
+                'last_name'  => $from['last_name'] ?? '',
+                'username'   => $from['username'] ?? '',
+            ]);
+            if ($newId > 0) {
+                $row = ['id' => $newId, 'telegram_chat_id' => null];
+            }
+        }
+        if ($row && (string) ($row['telegram_chat_id'] ?? '') !== $chatId) {
+            $db->update('users', ['telegram_chat_id' => $chatId], 'id = ?', [(int) $row['id']]);
+            echo "chat_id saqlandi: user $userId -> $chatId\n";
+        }
+    } catch (Throwable $e) {
+        error_log('bot: chat_id saqlanmadi - ' . $e->getMessage());
+    }
+}
+
 
 /**
  * Telegram API'ga umumiy so'rov (curl + timeout).
@@ -419,6 +477,24 @@ while (true) {
             echo "Update qabul qilindi: " . $update['update_id'] . "\n";
 
             // -----------------------------------------------------------------
+            // Bot bloklangan / blokdan chiqarilgan (my_chat_member)
+            // -----------------------------------------------------------------
+            if (isset($update['my_chat_member'])) {
+                $mc     = $update['my_chat_member'];
+                $mcUser = (string) ($mc['from']['id'] ?? '');
+                $st     = (string) ($mc['new_chat_member']['status'] ?? '');
+                if ($mcUser !== '') {
+                    try {
+                        $db->query(
+                            "UPDATE users SET is_bot_blocked = ? WHERE telegram_user_id = ?",
+                            [in_array($st, ['kicked', 'left'], true) ? 1 : 0, $mcUser]
+                        );
+                    } catch (Throwable $e) { /* jim */ }
+                }
+                continue;
+            }
+
+            // -----------------------------------------------------------------
             // Inline tugmalar
             // -----------------------------------------------------------------
             if (isset($update['callback_query'])) {
@@ -499,6 +575,13 @@ while (true) {
             $chatType = $message['chat']['type'] ?? 'private';
             if ($chatType !== 'private' && !$fromSupportGroup) {
                 continue;
+            }
+
+            // --- 0) Chat ID ni saqlash -------------------------------------
+            // Shaxsiy chatdan yozgan har bir foydalanuvchining `telegram_chat_id`
+            // si bazaga yoziladi — admin panelidan DM yuborish shu orqali ishlaydi.
+            if ($chatType === 'private') {
+                saveUserChatId($userId, $chatId, $from);
             }
 
             // --- 1) Admin/support-guruh javobi (reply) -> foydalanuvchiga qaytarish

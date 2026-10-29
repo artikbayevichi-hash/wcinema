@@ -1,4 +1,9 @@
 <?php
+// CLI-only guard — brauzerdan chaqirilishi mumkin emas (403).
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    exit('CLI only');
+}
 // ============================================================================
 // cli/tg-pull-worker.php - Telegram'dan video yuklab olish (CLI ishchi).
 // ============================================================================

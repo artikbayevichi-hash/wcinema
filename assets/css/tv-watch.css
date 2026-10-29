@@ -1,0 +1,275 @@
+/* ==========================================================================
+ * tv-watch.css — watch.php TELEVIZOR uchun (FAQAT html.tv-mode)
+ * --------------------------------------------------------------------------
+ * Telefon/kompyuterda bu fayldagi hech qaysi qoida ishlamaydi:
+ * hammasi `html.tv-mode` bilan boshlanadi.
+ *
+ *  1) Video BUTUN EKRANni qoplaydi (YouTube TV kabi)
+ *  2) Boshqaruv paneli kattaroq, fokus aniq ko'rinadi (10-foot UI);
+ *     "kichik ekran" (PiP) va "to'liq ekran" tugmalari olib tashlangan
+ *  3) Videoning tagida gorizontal QATORLAR (qismlar / animelar / kinolar /
+ *     multfilmlar) — pultda 2 marta "pastga" bosilganda ochiladi
+ * ========================================================================== */
+
+/* ---- 1) Butun ekran ---------------------------------------------------- */
+html.tv-mode body.watch-body {
+    overflow: hidden;
+    background: #000;
+}
+html.tv-mode body.watch-body .watch-player {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    aspect-ratio: auto !important;
+    z-index: 2147483000;
+    background: #000;
+}
+html.tv-mode body.watch-body .watch-player .watch-tg,
+html.tv-mode body.watch-body .watch-player .udp-player,
+html.tv-mode body.watch-body .watch-player .uzp {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 0 !important;
+}
+
+/* Yon panel televizorda kerak emas (ma'lumot pastdagi qatorlardan olinadi) */
+html.tv-mode body.watch-body .watch-side { display: none !important; }
+
+/* Video ekranni to'ldiradi (nisbat ekranga yaqin bo'lsa; tv-watch.js `tv-fill` qo'yadi) */
+html.tv-mode body.watch-body .watch-player video {
+    width: 100% !important;
+    height: 100% !important;
+}
+html.tv-mode body.watch-body.tv-fill .watch-player video,
+html.tv-mode body.watch-body.tv-fill .watch-player .udp-player video {
+    object-fit: cover !important;
+}
+
+/* ---- 2) Boshqaruv paneli: katta + aniq fokus --------------------------- */
+html.tv-mode .uzp .uzp-bar {
+    height: 96px !important;
+    width: min(1560px, calc(100% - 96px)) !important;
+    bottom: 56px !important;
+    gap: 14px !important;
+    padding: 0 30px !important;
+    border-radius: 40px !important;
+}
+html.tv-mode .uzp .uzp-bar .uzp-btn {
+    width: 60px;
+    height: 60px;
+}
+html.tv-mode .uzp .uzp-bar .uzp-btn svg,
+html.tv-mode .uzp .uzp-bar .uzp-btn.uzp-play svg {
+    width: 36px;
+    height: 36px;
+}
+html.tv-mode .uzp .uzp-bar .uzp-btn.uzp-pill,
+html.tv-mode .uzp .uzp-bar .uzp-btn.uzp-txt {
+    width: auto;
+    height: 60px;
+    padding: 0 18px;
+    font-size: 24px;
+}
+html.tv-mode .uzp .uzp-time > [data-cur],
+html.tv-mode .uzp .uzp-time > [data-dur] {
+    font-size: 24px;
+}
+html.tv-mode .uzp .uzp-seek-track { height: 8px; }
+html.tv-mode .uzp .uzp-menu { font-size: 24px; }
+html.tv-mode .uzp .uzp-menu-item { padding: 14px 24px; }
+
+/* Televizorda KERAK EMAS: kichik ekran (PiP) va to'liq ekran tugmalari */
+html.tv-mode .uzp .uzp-bar [data-act="pip"],
+html.tv-mode .uzp .uzp-bar [data-act="full"] {
+    display: none !important;
+}
+
+/* Fokus: oq halqa + biroz kattalashish (pultda hozir qayerdaligi ko'rinadi) */
+html.tv-mode .uzp .uzp-bar .uzp-btn:focus,
+html.tv-mode .uzp .uzp-bar .uzp-btn:focus-visible {
+    outline: 4px solid #fff !important;
+    outline-offset: 3px;
+    background: rgba(255, 255, 255, .28) !important;
+    transform: scale(1.1);
+}
+html.tv-mode .uzp .uzp-menu-item:focus,
+html.tv-mode .uzp .uzp-menu-item:focus-visible {
+    outline: 4px solid #fff;
+    outline-offset: -4px;
+    background: rgba(255, 255, 255, .22);
+}
+
+/* Pastki yordamchi yozuv: panel ko'ringanda */
+html.tv-mode body.watch-body .watch-player .uzp.is-active::after {
+    content: "\25BC  Qismlar va tavsiyalar";
+    position: absolute;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    font-size: 20px;
+    color: rgba(255, 255, 255, .72);
+    letter-spacing: .02em;
+    pointer-events: none;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .6);
+}
+
+/* ---- 3) Videoning tagidagi QATORLAR ------------------------------------ */
+html.tv-mode .tv-tray {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 66vh;
+    z-index: 2147483100;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(to top,
+        rgba(8, 9, 12, .99) 0%,
+        rgba(8, 9, 12, .97) 70%,
+        rgba(8, 9, 12, 0) 100%);
+    transform: translateY(102%);
+    visibility: hidden;             /* yopiqda fokus ham, spatial nav ham ko'rmaydi */
+    transition: transform .28s ease, visibility 0s linear .28s;
+}
+html.tv-mode body.tv-tray-open .tv-tray {
+    transform: none;
+    visibility: visible;
+    transition: transform .28s ease, visibility 0s;
+}
+/* Qatorlar ochiq: boshqaruv paneli yashirinadi, video xira bo'ladi */
+html.tv-mode body.tv-tray-open .uzp .uzp-bar,
+html.tv-mode body.tv-tray-open .watch-player .uzp::after {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+html.tv-mode .tv-tray-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 64px 56px 48px;
+    scrollbar-width: none;
+}
+html.tv-mode .tv-tray-scroll::-webkit-scrollbar { display: none; }
+
+html.tv-mode .tv-row { margin: 0 0 30px; }
+html.tv-mode .tv-row > h3 {
+    margin: 0 0 14px 8px;
+    font: 700 30px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #fff;
+    letter-spacing: .01em;
+}
+html.tv-mode .tv-row-track {
+    display: flex;
+    gap: 22px;
+    overflow-x: auto;
+    padding: 14px 12px 22px;
+    scrollbar-width: none;
+}
+html.tv-mode .tv-row-track::-webkit-scrollbar { display: none; }
+html.tv-mode .tv-row-note {
+    padding: 8px;
+    font-size: 22px;
+    color: rgba(255, 255, 255, .6);
+}
+
+html.tv-mode .tv-card {
+    flex: 0 0 auto;
+    width: 300px;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #fff;
+    text-align: left;
+    text-decoration: none;
+    font: inherit;
+    cursor: pointer;
+    border-radius: 16px;
+    transition: transform .15s ease;
+}
+html.tv-mode .tv-card-thumb {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #1b1d23;
+}
+html.tv-mode .tv-card-thumb img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+html.tv-mode .tv-card-fb {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 48px;
+}
+html.tv-mode .tv-card-dur,
+html.tv-mode .tv-card .watch-ep-dur {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, .78);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+}
+html.tv-mode .tv-card .watch-ep-fb {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 48px;
+}
+html.tv-mode .tv-card .watch-ep-thumb img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+html.tv-mode .tv-card-ttl {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 12px;
+    font-size: 23px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+html.tv-mode .tv-card-meta {
+    display: block;
+    margin-top: 4px;
+    font-size: 18px;
+    color: rgba(255, 255, 255, .62);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+html.tv-mode .tv-card.on .tv-card-thumb { box-shadow: 0 0 0 3px #f59e0b; }
+html.tv-mode .tv-card.on .tv-card-meta { color: #f59e0b; font-weight: 600; }
+
+/* Fokus: yorqin oq halqa + kattalashish */
+html.tv-mode .tv-card:focus,
+html.tv-mode .tv-card:focus-visible {
+    outline: 5px solid #fff;
+    outline-offset: 4px;
+    transform: scale(1.06);
+    position: relative;
+    z-index: 2;
+}

@@ -255,29 +255,60 @@
     var host = el('watchPlayer');
     if (!host) return;
 
-    // Eski player'ni to'liq tozalaymiz - aks holda eski `<video>` oqishda
-    // davom etadi va Telegram klienti ikki barobar yuklanadi.
+    try { if (global.UzPlayer && typeof global.UzPlayer.destroyAll === 'function') global.UzPlayer.destroyAll(); } catch (e) {}
     try { if (global.UDP) global.UDP.destroyAll(); } catch (e) {}
     try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
     host.innerHTML = '';
 
     var pb = S.playback || {};
     var type = pb.type || 'none';
-    var cfg = udpConfig();
+
+    if (global.UzPlayer && typeof global.UzPlayer.configure === 'function') {
+      try {
+        var e = curEp();
+        var i = epIndex(S.selectedId);
+        var nx = i >= 0 ? S.episodes[i + 1] : null;
+        global.UzPlayer.configure({
+          contentId: D.id,
+          episodeId: S.selectedId || 0,
+          title: e && S.episodes.length > 1 ? (D.title + ' — ' + e.number + '-qism') : D.title,
+          apiBase: base,
+          loggedIn: !!(W.loggedIn),
+          autoplay: true,
+          resumeAt: S.hashStart ? 0 : (Math.floor(S.resumeAt) || 0),
+          next: nx ? { id: nx.id, label: (nx.number || nx.id) + '-qism' } : null,
+          onNext: nx ? function (nid) { switchEpisode(Number(nid)); } : null
+        });
+      } catch (ex) {}
+    }
 
     if (type === 'direct' || type === 'file' || type === 'hls') {
+      if (global.UzPlayer && typeof global.UzPlayer.mount === 'function') {
+        var media = {
+          type: type === 'hls' ? 'hls' : 'direct',
+          src: pb.url || '',
+          poster: pb.poster || ''
+        };
+        if (type === 'hls') {
+          var sep = String(pb.url || '').indexOf('?') !== -1 ? '&' : '?';
+          media.refresh = pb.url + sep + 'json=1';
+        }
+        global.UzPlayer.mount(host, media);
+        wireVideo(host.querySelector('video'));
+        return;
+      }
       var poster = pb.poster ? ' poster="' + esc(pb.poster) + '"' : '';
       var vattrs = '';
       if (type === 'hls') {
-        var sep = String(pb.url || '').indexOf('?') !== -1 ? '&' : '?';
+        var sep2 = String(pb.url || '').indexOf('?') !== -1 ? '&' : '?';
         vattrs = ' data-hls-pending="1" data-hls-refresh="'
-          + esc(pb.url + sep + 'json=1') + '"';
+          + esc(pb.url + sep2 + 'json=1') + '"';
       } else if (pb.url) {
         vattrs = ' src="' + esc(pb.url) + '"';
       }
       host.innerHTML =
         '<div class="player-wrap has-video-container">'
-        + '<div class="udp-player" data-udp data-udp-config="' + udpAttr(cfg) + '">'
+        + '<div class="udp-player" data-udp data-udp-config="' + udpAttr(udpConfig()) + '">'
         + '<video playsinline preload="auto"' + poster + vattrs + '></video>'
         + '</div></div>';
       if (global.UDP) global.UDP.initAll();
@@ -293,11 +324,6 @@
     }
 
     if (type === 'telegram') {
-      // Video SHU KONTEYNERDA ochiladi - t.me ga o'tmaydi. `tg-stream.js`
-      // o'z `<video>` sini ichiga qo'yadi (GramJS + Service Worker).
-      //
-      // `TgStream` yo'q bo'lsa (skript yuklanmagan / bloklangan) xatoga
-      // tushmaslik kerak - aks holda butun sahifa yarim chiziq qoladi.
       if (!global.TgStream || typeof global.TgStream.mount !== 'function') {
         host.innerHTML = '<div class="player-wrap no-video">'
           + '<div class="nv-msg">Telegram moduli yuklanmadi. Sahifani yangilang.</div>'
@@ -307,20 +333,21 @@
       var m = document.createElement('div');
       m.className = 'watch-tg';
       host.appendChild(m);
-      var e = curEp();
+      var e2 = curEp();
       global.TgStream.mount(m, {
         channel: pb.channel || '',
         post:    Number(pb.post) || 0,
         url:     pb.url || '',
         deep:    pb.deep || '',
         poster:  pb.poster || '',
-        cfg:     cfg,
-        epLabel: e ? (e.season + '-fasl ' + e.number + '-qism') : '',
-        // Player tayyor bo'lgach KEYINGI qismni oldindan tayyorlaymiz:
-        // foydalanuvchi shu paytda joriy qismni ko'rayotgan bo'ladi, demak
-        // tarmoq bo'sh - yuklash uning hisobiga tez ketadi.
+        cfg:     global.UzPlayer ? undefined : udpConfig(),
+        epLabel: e2 ? (e2.season + '-fasl ' + e2.number + '-qism') : '',
         onReady: function () {
-          wireVideo(m.querySelector('video'));
+          var tv = m.querySelector('video');
+          if (tv && global.UzPlayer && typeof global.UzPlayer.attach === 'function') {
+            try { global.UzPlayer.attach(tv, { poster: pb.poster || '' }); } catch (ex) {}
+          }
+          wireVideo(tv);
           prefetchNext();
         }
       });

@@ -33,6 +33,7 @@ unset($__script, $__isApi);
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/Database.php';
+require_once __DIR__ . '/../includes/ClientSessions.php';
 require_once __DIR__ . '/../includes/TelegramBot.php';
 require_once __DIR__ . '/../includes/Auth.php';
 require_once __DIR__ . '/../includes/Catalog.php';
@@ -54,6 +55,42 @@ $catalog = new Catalog();
 $reels   = new Reels();
 $user    = $auth->getCurrentUser();
 $userId  = $user ? (int) $user['id'] : null;
+
+// ---------------------------------------------------------------------------
+// TEXNIK ISH REJIMI (admin panel → Sozlamalar)
+//
+// Yoqilgan bo'lsa oddiy foydalanuvchi saytni ko'rmaydi. Adminlar, admin
+// paneli va login sahifasi ishlashda davom etadi (o'chirish uchun yo'l kerak).
+// ---------------------------------------------------------------------------
+if (!defined('WC_SKIP_MAINTENANCE')) {
+    require_once __DIR__ . '/SiteSettings.php';
+    if ((int) SiteSettings::get('maintenance', 0) === 1 && !$auth->isAdmin()) {
+        $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+        $isApi = strpos($uri, '/api/') !== false;
+        $allow = $isApi
+            || strpos($uri, 'admin-login.php') !== false
+            || strpos($uri, 'admin-panel.php') !== false
+            || strpos($uri, 'admin.php') !== false;
+
+        if (!$allow) {
+            http_response_code(503);
+            header('Retry-After: 600');
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<!doctype html><html lang="uz"><head><meta charset="utf-8">'
+                . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                . '<title>Texnik ish</title></head>'
+                . '<body style="margin:0;min-height:100vh;display:flex;align-items:center;'
+                . 'justify-content:center;background:#0f0d15;color:#eae6f2;'
+                . 'font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:24px">'
+                . '<div><div style="font-size:44px;margin-bottom:10px">🛠</div>'
+                . '<h1 style="font-size:22px;margin:0 0 8px">Texnik ish davom etmoqda</h1>'
+                . '<p style="color:#9b93ad;margin:0">Tez orada qaytamiz. Sabr qilganingiz uchun rahmat.</p>'
+                . '</div></body></html>';
+            exit;
+        }
+    }
+}
+
 
 /**
  * GET/POST parametrni toza olish (trim + uzunlik cheklovi).
@@ -147,19 +184,34 @@ function requireUser() {
 /**
  * Joriy foydalanuvchi ID'si (0 bo'lsa — aniqlanmadi).
  *
- * Avval PHP sessiyasi (`$user`), bo'lmasa brauzerdagi MTProto akkaunt
- * identifikatori `tg_me` (`localStorage['wc_tg_me_v1']`) dan aniqlanadi.
+ * Aniqlash tartibi:
+ *   1) PHP sessiyasi (`$user`) — login.php / bot-token orqali kirilgan bo'lsa;
+ *   2) IMZOLANGAN cookie (`wc_cs`) — brauzerdagi MTProto login paytida
+ *      api/client-session.php bergan token. Bazada faqat SHA-256 hash
+ *      saqlanadi, shuning uchun cookie'ni qo'lda o'zgartirish befoyda;
+ *   3) `tg_me` — FAQAT `TG_TRUST_CLIENT_ID=1` (moslik rejimi) bo'lganda.
+ *      Production'da 0 qilinadi: u holda faqat 1 va 2 ishlaydi.
  *
- * Sayt brauzerdagi MTProto orqali ishlaganda serverda PHP sessiyasi
- * bo'lmaydi. Shu sabab mijoz har so'rovga `tg_me=...` qo'shadi; undan
- * foydalanuvchi topiladi yoki yaratiladi. Bu amal FAQAT o'z amallari
- * (yoqdi/saqlash/davomiylik/yuklash) uchun — admin huquqi BERMAYDI.
+ * XAVFSIZLIK: 3-band o'chirilganda boshqa odamning Telegram ID'sini yozib,
+ * uning nomidan ish qilish mumkin emas — token egasi bo'lish kerak.
  */
 function clientUserId() {
     global $user, $auth;
     if ($user) {
         return (int) $user['id'];
     }
+
+    // (2) Server bergan imzolangan token (HttpOnly cookie).
+    $uid = ClientSessions::currentUserId();
+    if ($uid > 0) {
+        return $uid;
+    }
+
+    // (3) Vaqtinchalik moslik rejimi — o'chirilgan bo'lsa, tamom.
+    if (!TG_TRUST_CLIENT_ID) {
+        return 0;
+    }
+
     $raw = input('tg_me', '', 2000);
     if ($raw === '' || $raw[0] !== '{') {
         return 0;

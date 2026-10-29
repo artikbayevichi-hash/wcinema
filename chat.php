@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // ============================================================================
 // chat.php - Instagram/Telegram uslubidagi chat
 // ============================================================================
@@ -22,6 +22,7 @@ $NAV_ACTIVE = 'chat';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Chat — <?php echo htmlspecialchars(SITE_NAME); ?></title>
+    <?php require __DIR__ . '/includes/perf-head.php'; ?>
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/reels.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/reels.css') ?: 1; ?>">

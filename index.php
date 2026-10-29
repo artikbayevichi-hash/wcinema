@@ -59,6 +59,20 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES); ?></title>
+    <?php require __DIR__ . '/includes/perf-head.php'; ?>
+    <?php
+    // GramJS bundle'ni BO'SH vaqtda oldindan yuklaymiz.
+    //
+    // Nima uchun: foydalanuvchi kartaga bosganda `watch.php` darhol 735 KB
+    // bundle'ni yuklashni kutadi. Bu yerda `prefetch` (past ustuvorlik)
+    // uni kompyuter bo'sh turganda yuklab qo'yadi — o'tish bir zumda.
+    // `as="fetch"` + `crossorigin` — `tg-stream.js` dagi fetch() bilan
+    // bir xil rejim, aks holda brauzer keshni ishlatmaydi.
+    $__bundleBase = rtrim((string) (parse_url(SITE_URL, PHP_URL_PATH) ?: ''), '/');
+    ?>
+    <link rel="prefetch" as="script"
+          href="<?php echo htmlspecialchars($__bundleBase . '/assets/js/tg-client.bundle.js.gz', ENT_QUOTES); ?>?v=<?php echo (int) (@filemtime(__DIR__ . '/assets/js/tg-client.bundle.js.gz') ?: 1); ?>">
+    <?php unset($__bundleBase); ?>
     <meta name="description" content="<?php echo htmlspecialchars($pageDesc, ENT_QUOTES); ?>">
 
     <!-- Telegram Mini App / tarmoqqa chiqarish -->
@@ -77,6 +91,8 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/player.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/player.css') ?: 1; ?>">
 <link rel="stylesheet" href="assets/css/tg-stream.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-stream.css') ?: 1; ?>">
+<?php /* uz-loader.css - bitta yuklanish halqasi; player.css va tg-stream.css dan KEYIN */ ?>
+<link rel="stylesheet" href="assets/css/uz-loader.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/uz-loader.css') ?: 1; ?>">
 <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. Oddiy
          tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani
@@ -229,6 +245,8 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 -->
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
+<script src="assets/js/prefetch-hover.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/prefetch-hover.js') ?: 1; ?>" defer></script>
+<script src="assets/js/tg-notify-prompt.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-notify-prompt.js') ?: 1; ?>" defer></script>
 <script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
 <script src="assets/js/app.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/app.js') ?: 1; ?>"></script>
 <script>

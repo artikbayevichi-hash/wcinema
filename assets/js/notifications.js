@@ -118,6 +118,11 @@
         setTimeout(function () { a.classList.remove('has-ntf'); }, 900);
       }
     });
+    // Brauzer VARAG'I sarlavhasida ham sanoq (boshqa varaqlardan ham ko'rinadi).
+    try {
+      var clean = String(document.title || '').replace(/^\(\d+\+?\)\s*/, '');
+      document.title = (count > 0 ? '(' + (count > 99 ? '99+' : count) + ') ' : '') + clean;
+    } catch (e) { /* sarlavha yo'q */ }
   }
   function refreshCount() {
     apiGet('api/notifications.php?action=count').then(function (d) {
@@ -126,14 +131,36 @@
   }
 
   // ---------------------------------------------------------------- render
-  function avatarHtml(item) {
-    var a = (item.actors && item.actors[0]) || null;
+  // Bir nechta kishi (masalan 5 kishi yoqtirdi) bo'lsa — Instagram kabi
+  // AVATAR UYUMI (ustma-ust doiralar). Bitta bo'lsa oddiy avatar + amal belgisi.
+  function avatarInner(a) {
     if (a && a.avatar) {
-      return '<img src="' + esc(a.avatar) + '" alt="" referrerpolicy="no-referrer">';
+      return '<img src="' + esc(a.avatar) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()">';
     }
-    var ch = '';
-    if (a) ch = (a.name || a.username || '').charAt(0);
+    var ch = a ? (a.name || a.username || '').charAt(0) : '';
     return '<span class="ig-ntf-ph">' + esc((ch || '?').toUpperCase()) + '</span>';
+  }
+  function avatarHtml(item) {
+    var actors = (item.actors || []).filter(function (a) {
+      return a && (a.avatar || a.name || a.username);
+    });
+
+    if (actors.length >= 2) {
+      var shown = actors.slice(0, 3);
+      var more  = actors.length - shown.length;
+      var html  = '<span class="ig-ntf-av ig-ntf-av--stack"><span class="ig-ntf-stack">';
+      for (var i = 0; i < shown.length; i++) {
+        html += '<span class="ig-ntf-stack-it">' + avatarInner(shown[i]) + '</span>';
+      }
+      if (more > 0) {
+        html += '<span class="ig-ntf-stack-it ig-ntf-stack-more">+' + more + '</span>';
+      }
+      return html + '</span></span>';
+    }
+
+    var ico = ICONS[item.type] || ICONS.system;
+    return '<span class="ig-ntf-av">' + avatarInner(actors[0] || null)
+      + '<span class="ig-ntf-type type-' + esc(item.type) + '">' + ico + '</span></span>';
   }
   function rowHtml(item) {
     var t = item.text || '';
@@ -145,23 +172,36 @@
     var thumb = item.reel_poster
       ? '<span class="ig-ntf-thumb"><img src="' + esc(item.reel_poster) + '" alt="" referrerpolicy="no-referrer" onerror="this.remove()"></span>'
       : '';
-    var ico = ICONS[item.type] || ICONS.system;
     return '<a class="ig-ntf-row' + (item.is_read ? '' : ' unread') + '" href="' + esc(item.url || '#') + '" data-id="' + (item.id || 0) + '">'
-      + '<span class="ig-ntf-av">' + avatarHtml(item)
-      + '<span class="ig-ntf-type type-' + esc(item.type) + '">' + ico + '</span></span>'
+      + avatarHtml(item)
       + '<span class="ig-ntf-main"><span class="ig-ntf-text">' + esc(t) + detail + '</span>'
       + '<span class="ig-ntf-time">' + esc(timeAgo(item.at)) + '</span></span>'
       + thumb
       + '</a>';
   }
 
+  // Yuklash paytida bo'sh matn o'rniga "skelet" (Instagram kabi).
+  function skeletonHtml() {
+    var one = '<div class="ig-ntf-skel"><span class="sk-av"></span>'
+      + '<span class="sk-main"><span class="sk-l1"></span><span class="sk-l2"></span></span></div>';
+    return one + one + one + one;
+  }
+  var EMPTY_HTML = '<div class="ig-ntf-empty">'
+    + '<svg class="ig-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>'
+    + '<path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>'
+    + '<b>Hozircha bildirishnomalar yo‘q</b>'
+    + '<span>Yoqtirish, izoh, obuna va yangi videolar haqidagi xabarlar shu yerda ko‘rinadi.</span>'
+    + '</div>';
+
   function fetchList() {
     if (!BODY) return;
-    BODY.innerHTML = '<div class="ig-ntf-empty">Yuklanmoqda…</div>';
+    BODY.innerHTML = skeletonHtml();
     apiGet('api/notifications.php?action=list&limit=30').then(function (d) {
       var items = (d && d.items) || [];
       if (!items.length) {
-        BODY.innerHTML = '<div class="ig-ntf-empty">Hozircha bildirishnomalar yo‘q</div>';
+        BODY.innerHTML = EMPTY_HTML;
         setBadge(0);
         return;
       }
@@ -172,7 +212,8 @@
       if (hadUnread) clearUnread();
       else setBadge(0);
     }).catch(function () {
-      BODY.innerHTML = '<div class="ig-ntf-empty">Yuklab bo‘lmadi</div>';
+      BODY.innerHTML = '<div class="ig-ntf-empty"><b>Yuklab bo‘lmadi</b>'
+        + '<span>Internet aloqasini tekshirib, qayta urinib ko‘ring.</span></div>';
     });
   }
 

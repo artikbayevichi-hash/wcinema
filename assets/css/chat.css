@@ -569,3 +569,54 @@
     .chat-thread { height: calc(100vh - 120px); }
     .chat-page { min-height: calc(100vh - 40px); }
 }
+
+/* ==========================================================================
+   CHAT — Instagram sayqali
+   --------------------------------------------------------------------------
+   Pufakchalar allaqachon Telegram/Instagram uslubida qurilgan. Quyidagi
+   qoidalar ularni yumshoqroq qiladi: avatar tomondagi burchak "quyruq"
+   bo'lib ochiladi, pufakka yengil soya tushadi, kontakt qatorlari bosilganda
+   jonlanadi va telefonda zichroq joylashadi.
+   ========================================================================== */
+
+/* Pufak burchagi — avatar tomonda kalta (Instagram usuli) */
+.chat-row:not(.mine) .chat-bub { border-bottom-left-radius: 6px; }
+.chat-row.mine .chat-bub       { border-bottom-right-radius: 6px; }
+
+/* Yengil soya — pufak fondan ajralib turadi */
+.chat-bub {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+    transition: box-shadow .16s ease;
+}
+.chat-row.mine .chat-bub {
+    box-shadow: 0 2px 10px rgba(42, 171, 238, .26);
+}
+
+/* Kontaktlar ro'yxati — bosishda jonli javob */
+.chat-contact { transition: background .15s ease, transform .12s ease; }
+.chat-contact:active { transform: scale(.985); }
+
+/* Ixcham va chiroyli skroll chizig'i */
+.chat-body::-webkit-scrollbar,
+.chat-contacts::-webkit-scrollbar { width: 8px; }
+.chat-body::-webkit-scrollbar-thumb,
+.chat-contacts::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, .14); border-radius: 999px;
+}
+.chat-body::-webkit-scrollbar-thumb:hover,
+.chat-contacts::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .22); }
+
+/* Kompozitor — fokusda nozik yorug' halqa */
+.chat-composer input:focus,
+.chat-composer textarea:focus {
+    box-shadow: 0 0 0 3px rgba(42, 171, 238, .16);
+}
+
+/* Telefonda zichroq; iOS'da maydonga bosganda sahifa zoom qilmasin */
+@media (max-width: 640px) {
+    .chat-col { max-width: 82%; }
+    .chat-bub { font-size: 15px; }
+    .chat-composer input,
+    .chat-composer textarea { font-size: 16px; }
+    .chat-dm-media img { max-height: 320px; }
+}

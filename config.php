@@ -242,7 +242,21 @@ define('SITE_URL_FALLBACK', env_value('SITE_URL_FALLBACK', 'http://localhost/tel
 // so'rovdan avtomatik aniqlanadi - shunda ngrok/cloudflared tunnel URL'i
 // har restartda o'zgarsada config.php'ni tahrirlash shart bo'lmaydi.
 define('SITE_URL', rtrim(env_value('SITE_URL', '') ?: detect_site_url(), '/'));
-define('SITE_NAME', 'W CINEMA');
+
+// CDN for uploaded files (optional but RECOMMENDED for million-user scale).
+// If set, "uploads/..." relative urls are served directly from CDN instead of
+// api/stream.php, so origin server never touches video bytes.
+// Example (Cloudflare R2 / S3): https://cdn.example.com  (no trailing slash)
+define('CDN_BASE_URL', rtrim((string) env_value('CDN_BASE_URL', ''), '/'));
+
+// How local file links are served: 'origin' (api/stream.php) or 'cdn' (CDN_BASE_URL).
+// 'cdn' is used automatically when CDN_BASE_URL non-empty.
+define('FILE_SERVE_MODE', env_value('CDN_BASE_URL', '') !== '' ? 'cdn' : 'origin');
+// Sayt nomi: admin panel → Sozlamalar (storage/settings.json) ustun turadi.
+require_once __DIR__ . '/includes/SiteSettings.php';
+$_siteName = trim((string) SiteSettings::get('site_name', ''));
+define('SITE_NAME', $_siteName !== '' ? $_siteName : 'W CINEMA');
+unset($_siteName);
 define('MINI_APP_URL', SITE_URL . '/login.php');
 
 // ---------------------------------------------------------------------------
@@ -331,6 +345,25 @@ define('TRENDING_MIN_VIEWS', 1);
 // Session
 // ---------------------------------------------------------------------------
 define('SESSION_TTL_DAYS', 30);
+
+// ---------------------------------------------------------------------------
+// Brauzer (MTProto) sessiyasi — imzolangan cookie
+// ---------------------------------------------------------------------------
+// Sayt brauzerdagi GramJS orqali ishlaydi va serverda PHP sessiyasi bo'lmaydi.
+// Ilgari joriy foydalanuvchi `tg_me` JSON'i bilan aniqlanardi — ya'ni har kim
+// boshqaning Telegram ID'sini yozib, uning nomidan ish qila olardi.
+//
+// Endi: api/client-session.php bir marta imzolangan token beradi, u HttpOnly
+// cookie'da saqlanadi, bazada esa faqat SHA-256 hash yotadi. `clientUserId()`
+// avval shu tokenni tekshiradi.
+define('CLIENT_SESSION_DAYS', max(1, (int) env_value('CLIENT_SESSION_DAYS', '30')));
+
+// MOSLIK REJIMI. 1 = eski `tg_me` usuli ham qabul qilinadi (sayt buzilmasligi
+// uchun), 0 = faqat imzolangan sessiya (qat'iy, tavsiya etiladi).
+// Ishlab chiqish/tunnelda 1, production'da 0 qiling.
+$__trust = strtolower(trim((string) env_value('TG_TRUST_CLIENT_ID', '1')));
+define('TG_TRUST_CLIENT_ID', in_array($__trust, ['1', 'true', 'yes', 'on'], true));
+unset($__trust);
 
 // ---------------------------------------------------------------------------
 // Reels - qisqa vertikal videolar
@@ -469,6 +502,14 @@ define('ADMIN_TELEGRAM_IDS', array_values(array_filter(array_map(
 // Bo'sh bo'lsa — kalit bilan kirish o'chirilgan bo'ladi (faqat Telegram ID
 // bo'yicha adminlar ishlaydi).
 define('ADMIN_PANEL_KEY', trim((string) env_value('ADMIN_PANEL_KEY', '')));
+
+// TMDB (The Movie Database) API kaliti — admin panelning "Avtomatik to'ldirish"
+// bo'limi shu orqali film/serial ma'lumotini (nomi, tavsif, poster, treyler)
+// to'ldiradi. Kalit faqat serverda qoladi, brauzerga chiqmaydi.
+//   .env ga yoziladi:  TMDB_API_KEY="..."
+// Bo'sh bo'lsa — avtomatik to'ldirish o'chirilgan (panelning qolgan qismi
+// ishlayveradi).
+define('TMDB_API_KEY', trim((string) env_value('TMDB_API_KEY', '')));
 
 // ---------------------------------------------------------------------------
 // Support bot - foydalanuvchi savollari uchun manzil

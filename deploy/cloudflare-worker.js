@@ -28,6 +28,7 @@
 // ============================================================================
 
 // Faqat shu Telegram CDN domenlariga ruxsat beriladi.
+// Faqat shu Telegram CDN domenlariga ruxsat beriladi.
 const ALLOWED = /^(?:[a-z0-9-]+\.)*(?:telesco\.pe|cdn-telegram\.org)$/i;
 
 const CORS_HEADERS = {
@@ -36,6 +37,47 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Range, Content-Type, Origin',
   'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type',
 };
+
+// Edge kesh sozlamalari.
+//
+// DIQQAT: Telegram CDN imzolangan (signed) URL'lar beradi. Imzo vaqtida
+// muddati bor, shuning uchun kesh muddati QISQA (default 60 s) bo'lishi
+// kerak - imzo o'tib ketgandan keyin eskirgan URL ishlamaydi.
+//
+// Range so'rovlari (206) KESHGA SOLINMAYDI: ular qisman javoblar va
+// turli offset'larga mos keladi. Faqat to'liq (200) javoblar keshlanadi.
+const EDGE_TTL = 60;              // soniya
+const MAX_EDGE_BYTES = 32 * 1024 * 1024;   // 32 MB dan kattasini keshlamaymiz
+
+// Bir xil manzilga parallel so'rovlarni birlashtirish (dedup).
+//
+// Masalan: brauzer `<video>` uchun bir necha Range so'rovi yuboradi, hamda
+// boshqa tab ham o'sha faylni so'raydi. Barchasi edge'da bitta Telegram
+// so'roviga birlashadi - Telegram'ga yuk kamayadi.
+const INFLIGHT = new Map();
+
+async function edgeFetch(t, request, headers, ctx) {
+  const key = request.method + ' ' + t.toString();
+  const running = INFLIGHT.get(key);
+  if (running) return running;
+
+  const p = (async () => {
+    let resp;
+    try {
+      resp = await fetch(t.toString(), { method: request.method, headers });
+    } catch (e) {
+      return new Response('Telegram CDN yetib bo\'lmadi', { status: 502 });
+    }
+    return resp;
+  })();
+
+  INFLIGHT.set(key, p);
+  try {
+    return await p;
+  } finally {
+    INFLIGHT.delete(key);
+  }
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -75,12 +117,34 @@ export default {
     headers.delete('origin');
     headers.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36');
 
-    let resp;
-    try {
-      resp = await fetch(t.toString(), { method: request.method, headers });
-    } catch (e) {
-      return new Response('Telegram CDN yetib bo\'lmadi', { status: 502 });
+    const hasRange = !!request.headers.get('Range');
+
+    // --- EDGE KESH ------------------------------------------------------
+    //
+    // Faqat to'liq (200) javoblar keshlanadi. Range so'rovlari (206)
+    // qisman javoblar - ularni keshlash noto'g'ri bo'lardi (offset
+    // mos kelmaydi).
+    //
+    // Kalit: HAQIQIY Telegram CDN manzili (imzo bilan). So'rov manzili
+    // (`?url=...`) ham bo'lishi mumkin, lekin u barcha kalitlarni
+    // bir xilga bog'laydi - esa haqiqiy manzil to'g'ri ajratadi.
+    const cache = caches.default;
+    const cacheKey = new Request(t.toString(), { method: 'GET' });
+    let cacheable = request.method === 'GET' && !hasRange;
+
+    if (cacheable) {
+      try {
+        const hit = await cache.match(cacheKey);
+        if (hit) {
+          const hh = new Headers(hit.headers);
+          hh.set('Access-Control-Allow-Origin', '*');
+          hh.set('X-WC-Cache', 'HIT');
+          return new Response(hit.body, { status: hit.status, headers: hh });
+        }
+      } catch (e) { /* kesh ishlamasa - oddiy yo'l */ }
     }
+
+    const resp = await edgeFetch(t, request, headers, ctx);
     if (resp.status >= 400) {
       // Eski imzo (URL muddati tugagan) bo'lsa foydalanuvchi aniq xato ko'radi
       return new Response('Telegram CDN xato: ' + resp.status, { status: resp.status });
@@ -91,6 +155,17 @@ export default {
     out.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
     if (!out.has('Accept-Ranges')) out.set('Accept-Ranges', 'bytes');
     out.delete('Set-Cookie');
+    out.set('X-WC-Cache', 'MISS');
+
+    // Keshga yozish: faqat to'liq javob va kichik fayllar uchun.
+    const len = Number(out.get('Content-Length') || 0);
+    if (cacheable && resp.status === 200 && len > 0 && len <= MAX_EDGE_BYTES) {
+      try {
+        const copy = new Response(resp.body, { status: 200, headers: out });
+        out.set('Cache-Control', 'public, max-age=' + EDGE_TTL);
+        await cache.put(cacheKey, copy);
+      } catch (e) { /* keshga yozilmasa - muammo yo'q */ }
+    }
 
     // resp.body ni to'g'ridan-to'g'ri oqitamiz (bufer qilmaymiz) —
     // free planda CPU limitiga ta'sir qilmaydi, trafik CDN orqali o'tadi.

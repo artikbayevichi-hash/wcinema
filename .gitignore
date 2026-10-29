@@ -39,3 +39,9 @@ Thumbs.db
 
 # Agent/IDE lokal papkalari
 /.kilo/
+/.manus/
+/.freebuff/
+/_trash_review/
+
+# Diagnostika loglari
+/errlog.txt

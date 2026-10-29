@@ -36,6 +36,18 @@ $userId = $user ? (int) $user['id'] : null;
 
 <main class="st-main">
 
+    <!-- ==================== 0) PROFIL KARTASI (Instagram uslubi) ============ -->
+    <!-- Avatar + ism + @username. Ma'lumotlar settings.js da `api/settings.php`
+         javobidan to'ldiriladi (ma'lumot kelmasa "Hisobingiz" ko'rinadi). -->
+    <section class="st-hero">
+        <span class="st-hero-av" id="stHeroAv"><i></i></span>
+        <span class="st-hero-main">
+            <span class="st-hero-name" id="stHeroName">Hisobingiz</span>
+            <span class="st-hero-user" id="stHeroUser"></span>
+        </span>
+        <a class="st-hero-btn" href="profile.php">Profil</a>
+    </section>
+
     <!-- ========================= 1) ACCOUNT PRIVACY ========================= -->
     <section class="st-sec">
         <div class="st-sec-head">Account Privacy</div>

@@ -6,6 +6,18 @@
 // ichki yo'llar) chiqmaydi. Diqqat: bu Telegram CDN emas - trafik bizda.
 require_once __DIR__ . '/../includes/bootstrap.php';
 
+// MUHIM: sessiya fayli qulfini BO'SHATAMIZ.
+//
+// PHP sessiyasi so'rov tugaguncha fayl qulfini ushlab turadi. Video oqimi
+// esa daqiqalab davom etadi — shu vaqt ichida foydalanuvchining boshqa
+// so'rovlari (progress, bildirishnoma, layk) navbatda kutib qolardi va
+// sahifa "qotib" qolgandek ko'rinardi. Oqim hech narsa yozmaydi, shuning
+// uchun qulfni darhol bo'shatish xavfsiz.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+@set_time_limit(0);
+
 $id  = inputInt('id');
 $ep  = inputInt('episode');
 $reel = inputInt('reel');
@@ -88,14 +100,53 @@ if (!$full || strpos($full, $uploadsRoot) !== 0 || !is_file($full)) {
 }
 
 $size = (int) filesize($full);
+$mtime = (int) filemtime($full);
 $mime = Catalog::mimeFromFile($full);
+
+// ETag / Last-Modified
+// ---------------------------------------------------------------------------
+// Brauzer bir xil faylni qayta so'raganda (masalan, sahifadan keyingi
+// ochilishda yoki "qayta och" tugmasi bosilganda) 304 Not Modified oladi -
+// server bayt YUBORMAYDI. Bu qayta ochilish holatida yuzlab KB lik
+// tekshiruvni yo'q qiladi.
+//
+// ETag = fayl hajmi + o'zgartirilgan vaqti (nginx usuli). Kichik, arzon
+// va to'g'ri: fayl o'zgarganda ETag ham o'zgaradi.
+$etag = '"' . $size . '-' . $mtime . '"';
+$lastModified = gmdate('D, d M Y H:i:s', $mtime) . ' GMT';
 
 // ---------------------------------------------------------------- Range (206)
 $range = $_SERVER['HTTP_RANGE'] ?? '';
+$ifNoneMatch = trim($_SERVER['HTTP_IF_NONE_MATCH'] ?? '');
+$ifModifiedSince = $_SERVER['HTTP_IF_MODIFIED_SINCE'] ?? '';
+$ifRange = trim($_SERVER['HTTP_IF_RANGE'] ?? '');
 
 header('Content-Type: ' . $mime);
 header('Accept-Ranges: bytes');
 header('Cache-Control: private, max-age=3600');
+header('ETag: ' . $etag);
+header('Last-Modified: ' . $lastModified);
+
+// "304" tekshiruvi - FAQAT Range'siz so'rov uchun. (Range + If-None-Match
+// kombinatsiyasida RFC bo'yicha 206 qaytarish kerak, 304 emas.)
+if ($range === '' && $ifNoneMatch !== '') {
+    if ($ifNoneMatch === '*' || $ifNoneMatch === $etag) {
+        http_response_code(304);
+        exit;
+    }
+} elseif ($range === '' && $ifModifiedSince !== '') {
+    $ims = strtotime($ifModifiedSince);
+    if ($ims && $ims >= $mtime) {
+        http_response_code(304);
+        exit;
+    }
+}
+
+// `If-Range`: mijoz eski ETag bilan Range so'raganda butun faylni
+// qaytarishimiz kerak (qisman javob eskirgan bo'lishi mumkin).
+if ($range !== '' && $ifRange !== '' && $ifRange !== $etag) {
+    $range = '';
+}
 
 if ($range === '' || !preg_match('/bytes=(\d*)-(\d*)/', $range, $m)) {
     // To'liq fayl
@@ -113,6 +164,7 @@ $endRaw   = $m[2];
 
 if ($startRaw === '' && $endRaw === '') {
     header('Content-Length: ' . $size);
+    header('Content-Disposition: inline; filename="' . basename($full) . '"');
     readfile($full);
     exit;
 }
@@ -142,6 +194,7 @@ $length = $end - $start + 1;
 http_response_code(206);
 header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
 header('Content-Length: ' . $length);
+header('Content-Disposition: inline; filename="' . basename($full) . '"');
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
     exit;
@@ -152,7 +205,8 @@ fseek($fp, $start);
 $remaining = $length;
 
 while ($remaining > 0 && !feof($fp)) {
-    $chunk = fread($fp, (int) min(8192, $remaining));
+    // 8 KB emas, 256 KB — kamroq `fread`/`echo` chaqiruvi, yuqori throughput.
+    $chunk = fread($fp, (int) min(262144, $remaining));
     if ($chunk === false || $chunk === '') {
         break;
     }

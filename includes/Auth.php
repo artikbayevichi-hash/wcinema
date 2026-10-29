@@ -475,11 +475,27 @@ class Auth {
             [date('Y-m-d H:i:s'), $session['id']]
         );
 
-        return $this->getUserById($_SESSION['user_id']);
+        $u = $this->getUserById($_SESSION['user_id']);
+        // Ban qilingan foydalanuvchi sessiyasi darhol yopiladi.
+        if ($u && (int) ($u['is_banned'] ?? 0) === 1) {
+            $this->logout();
+            return null;
+        }
+        return $u;
     }
 
     public function getUserById($userId) {
         return $this->db->fetchOne("SELECT * FROM users WHERE id = ?", [(int) $userId]);
+    }
+
+    /** Foydalanuvchi ban qilinganmi? (admin panel: ban/unban) */
+    public function isBanned($userId) {
+        try {
+            $r = $this->db->fetchOne("SELECT is_banned FROM users WHERE id = ? LIMIT 1", [(int) $userId]);
+            return $r && (int) ($r['is_banned'] ?? 0) === 1;
+        } catch (Throwable $e) {
+            return false;
+        }
     }
 
     /**
@@ -491,15 +507,94 @@ class Auth {
      * kirib, o'zgalar reel'ini tasdiqlab bo'lardi.
      */
     public function isAdmin() {
-        // Admin panel kaliti bilan kirilgan bo'lsa (sessiya bayrog'i).
+        // 1) Admin kaliti bilan kirilgan (PHP sessiyasi).
         if (!empty($_SESSION['wc_admin_ok'])) {
             return true;
         }
+        // 2) Uzoq muddatli "admin qurilma" cookie'si (imzolangan).
+        //    Nima uchun: brauzerdagi MTProto kirishida PHP sessiyasi yo'q,
+        //    shuning uchun kalitni har safar kiritish kerak bo'lardi. Endi
+        //    bir marta kiritiladi — 30 kun amal qiladi.
+        if ($this->adminCookieValid()) {
+            return true;
+        }
+        // 3) Telegram ID bo'yicha admin (PHP sessiyasi bor bo'lsa).
         $u = $this->getCurrentUser();
         if (!$u || empty($u['telegram_user_id'])) {
             return false;
         }
         return in_array((string) $u['telegram_user_id'], ADMIN_TELEGRAM_IDS, true);
+    }
+
+    // =========================================================================
+    // Admin "qurilma" cookie'si (30 kun)
+    // =========================================================================
+    // Qiymat: "<muddat>.<hmac_sha256('admin|<muddat>', ADMIN_PANEL_KEY)>".
+    // Imzo kaliti — ADMIN_PANEL_KEY. Uni o'zgartirsangiz barcha qurilmalar
+    // avtomatik chiqarib yuboriladi (bu kerak bo'lganda foydali).
+    const ADMIN_COOKIE      = 'wc_adm';
+    const ADMIN_COOKIE_DAYS = 30;
+
+    private function adminCookieSecure() {
+        return (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+            || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+    }
+
+    private function adminCookiePath() {
+        if (class_exists('ClientSessions')) {
+            return ClientSessions::cookiePath();
+        }
+        return '/';
+    }
+
+    private function adminCookieValid() {
+        if (!defined('ADMIN_PANEL_KEY') || ADMIN_PANEL_KEY === '') {
+            return false;
+        }
+        $raw = (string) ($_COOKIE[self::ADMIN_COOKIE] ?? '');
+        if ($raw === '' || !preg_match('/^(\d{10})\.([a-f0-9]{64})$/', $raw, $m)) {
+            return false;
+        }
+        if ((int) $m[1] < time()) {
+            return false;
+        }
+        $expect = hash_hmac('sha256', 'admin|' . $m[1], (string) ADMIN_PANEL_KEY);
+        return hash_equals($expect, $m[2]);
+    }
+
+    /** Admin cookie'sini o'rnatadi (kalit to'g'ri bo'lgandan keyin). */
+    public function adminCookieSet() {
+        if (!defined('ADMIN_PANEL_KEY') || ADMIN_PANEL_KEY === '') {
+            return;
+        }
+        $exp   = time() + (self::ADMIN_COOKIE_DAYS * 86400);
+        $value = $exp . '.' . hash_hmac('sha256', 'admin|' . $exp, (string) ADMIN_PANEL_KEY);
+        if (headers_sent()) {
+            return;
+        }
+        setcookie(self::ADMIN_COOKIE, $value, [
+            'expires'  => $exp,
+            'path'     => $this->adminCookiePath(),
+            'secure'   => $this->adminCookieSecure(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        $_COOKIE[self::ADMIN_COOKIE] = $value;
+    }
+
+    /** Admin cookie'sini o'chiradi (chiqish). */
+    public function adminCookieClear() {
+        if (!headers_sent()) {
+            setcookie(self::ADMIN_COOKIE, '', [
+                'expires'  => time() - 3600,
+                'path'     => $this->adminCookiePath(),
+                'secure'   => false,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+        }
+        unset($_COOKIE[self::ADMIN_COOKIE]);
     }
 
     /**
@@ -508,7 +603,8 @@ class Auth {
      * Nima uchun kerak: sayt brauzerdagi MTProto orqali ishlaydi va
      * serverda PHP sessiyasi bo'lmaydi, shuning uchun `isAdmin()` hech
      * qachon true bo'lmasdi. Endi config'dagi `ADMIN_PANEL_KEY` to'g'ri
-     * kiritilsa, sessiyaga bayroq qo'yiladi (kalit o'zi SAQLANMAYDI).
+     * kiritilsa, sessiyaga bayroq VA 30 kunlik imzolangan cookie qo'yiladi
+     * (kalit o'zi SAQLANMAYDI — faqat HMAC imzo).
      */
     public function adminKeyLogin($key) {
         $key = (string) $key;
@@ -523,8 +619,10 @@ class Auth {
             unset($file, $line);
         }
         $_SESSION['wc_admin_ok'] = true;
+        $this->adminCookieSet();
         return true;
     }
+
 
     /**
      * Brauzer yuborgan Telegram ma'lumotlaridan foydalanuvchini
@@ -540,6 +638,19 @@ class Auth {
         $id = trim((string) ($tg['id'] ?? ''));
         if ($id === '' || !ctype_digit($id)) {
             return 0;
+        }
+        // BAN tekshiruvi: ban qilingan foydalanuvchi hech qanday amal
+        // bajara olmaydi (admin panel → Foydalanuvchilar → Ban).
+        try {
+            $row = $this->db->fetchOne(
+                "SELECT id, is_banned FROM users WHERE telegram_user_id = ? LIMIT 1",
+                [$id]
+            );
+            if ($row && (int) ($row['is_banned'] ?? 0) === 1) {
+                return 0;
+            }
+        } catch (Throwable $e) {
+            // `is_banned` ustuni hali qo'shilmagan bo'lishi mumkin — davom.
         }
         return (int) $this->upsertUser([
             'id'         => $id,

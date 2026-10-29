@@ -38,6 +38,11 @@ const LIVE_READ_BYTES = 262144;      // har bir o'qish bloki (256 KB)
 set_time_limit(0);
 ini_set('memory_limit', '-1');
 
+// Oqim davomida sessiya qulfi boshqa so'rovlarni bloklamasin.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 // ---------------------------------------------------------------------------
 // Yordamchilar
 // ---------------------------------------------------------------------------

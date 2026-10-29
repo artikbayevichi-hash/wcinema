@@ -1,0 +1,26 @@
+# ============================================================================
+# cli/ — bu papkadagi skriptlar FAQAT terminal (CLI) uchun.
+# ============================================================================
+# Brauzerdan ochilish butunlay yopiladi: workerlar bot sessiyasi, MTProto
+# kalitlari va himoyalangan kanal kontenti bilan ishlaydi. Hatto skript
+# o'zini himoya qilsa ham (PHP_SAPI guard), ikkinchi qatlam kerak.
+#
+# DIQQAT: Apache 2.2 va 2.4 sintaksisi ikkalasi ham yozilgan.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>
+
+# Nuqta bilan boshlanuvchi fayllar (bu faylning o'zi ham) berilmasin.
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>

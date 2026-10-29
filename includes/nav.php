@@ -77,18 +77,21 @@ function ig_cat_icon($slug) {
 /** YouTube uslubidagi kontur ikonka (SVG). Default: oq kontur, ichi bo'sh. */
 function ig_svg($name) {
     static $icons = [
-        'search'   => '<circle cx="10.8" cy="10.8" r="6.6"/><line x1="15.6" y1="15.6" x2="21" y2="21"/>',
-        'home'     => '<path d="M3.8 10.4 12 3.7l8.2 6.7V19a1.7 1.7 0 0 1-1.7 1.7h-3.2v-6H8.7v6H5.5A1.7 1.7 0 0 1 3.8 19z"/>',
+        'search'   => '<circle cx="11" cy="11" r="6.6"/><circle style="fill:currentColor;stroke:none" cx="11" cy="11" r="1.5"/><line x1="15.8" y1="15.8" x2="20.6" y2="20.6"/>',
+        'home'     => '<path d="M3.9 10.3 12 3.7l8.1 6.6v8.3a2.4 2.4 0 0 1-2.4 2.4H6.3a2.4 2.4 0 0 1-2.4-2.4z"/><path style="fill:none" d="M13.9 21v-4.3a1.9 1.9 0 0 0-3.8 0V21"/>',
         'film'     => '<path fill-rule="evenodd" d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm6 4.3v7.4l6-3.7z"/>',
-        'movie'    => '<path fill-rule="evenodd" d="M5 4.5h14a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2zm5 4.2v6.6l5.6-3.3z"/>',
-        'reels'    => '<rect style="fill:none" x="3" y="3" width="18" height="18" rx="5"/><path style="fill:none" d="M3.4 8.6h17.2"/><path style="fill:none" d="M8.5 3.3 11.5 8.6M15.5 3.3 18.5 8.6"/><path style="fill:currentColor;stroke:none" d="M10.3 11.7v5.6l4.8-2.8z"/>',
-        // Chat — Instagram Messenger uslubidagi samolyotcha.
-        'chat'     => '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>',
-        'library'  => '<path d="M12 6.4C10.5 5 8.3 4.4 5.7 4.7a1.1 1.1 0 0 0-1 1.1v11.9a1.1 1.1 0 0 0 1.2 1.1c2.3-.2 4.3.3 6.1 1.5 1.8-1.2 3.8-1.7 6.1-1.5a1.1 1.1 0 0 0 1.2-1.1V5.8a1.1 1.1 0 0 0-1-1.1c-2.6-.3-4.8.3-6.3 1.7z"/><path d="M12 6.4v13.8"/>',
-        'history'  => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
-        'clock'    => '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.4V12l3.1 1.9"/>',
-        'like'     => '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
-        'heart'    => '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
+        'movie'    => '<rect x="2.8" y="5.4" width="18.4" height="13.2" rx="2.8"/><path style="fill:none" d="M7.4 5.4v13.2M16.6 5.4v13.2"/><circle style="fill:currentColor;stroke:none" cx="5.1" cy="8.7" r=".85"/><circle style="fill:currentColor;stroke:none" cx="5.1" cy="12" r=".85"/><circle style="fill:currentColor;stroke:none" cx="5.1" cy="15.3" r=".85"/><circle style="fill:currentColor;stroke:none" cx="18.9" cy="8.7" r=".85"/><circle style="fill:currentColor;stroke:none" cx="18.9" cy="12" r=".85"/><circle style="fill:currentColor;stroke:none" cx="18.9" cy="15.3" r=".85"/>',
+        'reels'    => '<rect style="fill:none" x="3" y="3" width="18" height="18" rx="5.2"/><path style="fill:none" d="M3.4 8.4h17.2"/><path style="fill:currentColor;stroke:none" d="M10.2 11.6v5.8l5-2.9z"/><circle style="fill:currentColor;stroke:none" cx="8" cy="5.9" r="1"/><circle style="fill:currentColor;stroke:none" cx="12" cy="5.9" r="1"/><circle style="fill:currentColor;stroke:none" cx="16" cy="5.9" r="1"/>',
+        // Chat — dumaloq pufakcha va "yozilmoqda" uchta nuqtasi.
+        'chat'     => '<path d="M20.6 11.5c0 4-3.85 7.2-8.6 7.2-1 0-1.96-.15-2.85-.42L4.1 20l1.32-3.7A6.85 6.85 0 0 1 3.4 11.5c0-4 3.85-7.2 8.6-7.2s8.6 3.2 8.6 7.2z"/><circle style="fill:currentColor;stroke:none" cx="8.6" cy="11.5" r="1.15"/><circle style="fill:currentColor;stroke:none" cx="12" cy="11.5" r="1.15"/><circle style="fill:currentColor;stroke:none" cx="15.4" cy="11.5" r="1.15"/>',
+        'library'  => '<path d="M3.6 5.8h3.2v14.1H3.6z"/><path d="M8.4 5.8h3.2v14.1H8.4z"/><path d="M13.2 7.1 16.2 6.2 20.5 18.8 17.5 19.8z"/><path style="fill:none" d="M2.8 20.6h18.4"/>',
+        // Tarix — soat va orqaga o'raluvchi (counter-clockwise) strelka.
+        'history'  => '<path style="fill:none" d="M12 3.9a8.1 8.1 0 1 1-7.9 9.8"/><path style="fill:none" d="M3.6 4.2v5.4h5.4"/><path style="fill:none" d="M12 8.2v4l3 1.8"/>',
+        'clock'    => '<circle cx="12" cy="12" r="8.1"/><path style="fill:none" d="M12 7.5V12l3.1 1.9"/>',
+        // Keyinroq ko'rish — xatcho'p + "qo'shish" belgisi.
+        'later'    => '<path d="M6.6 3.9h10.8v16.2L12 15.9l-5.4 4.2z"/><path style="fill:none" d="M12 7.4v5.4M9.3 10.1h5.4"/>',
+        'like'     => '<path d="M12 20.3 4.62 13.1a4.85 4.85 0 0 1 6.9-6.82l.48.47.48-.47a4.85 4.85 0 0 1 6.9 6.82z"/>',
+        'heart'    => '<path d="M12 20.3 4.62 13.1a4.85 4.85 0 0 1 6.9-6.82l.48.47.48-.47a4.85 4.85 0 0 1 6.9 6.82z"/>',
         'thumbUp'  => '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>',
         'thumbDown'=> '<path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>',
         'send'     => '<path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
@@ -103,19 +106,22 @@ function ig_svg($name) {
         'download' => '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
         'image'    => '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
         'play'     => '<polygon points="6 3 20 12 6 21 6 3"/>',
-        'bookmark' => '<path d="M6.6 4.5h10.8a.8.8 0 0 1 .8.8V20l-6.2-4.1L5.8 20V5.3a.8.8 0 0 1 .8-.8z"/>',
-        'bell'     => '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>',
-        'folder'   => '<path d="M3.6 6.6a1.6 1.6 0 0 1 1.6-1.6h4l2 2.2h7.6a1.6 1.6 0 0 1 1.6 1.6v9.6a1.6 1.6 0 0 1-1.6 1.6H5.2a1.6 1.6 0 0 1-1.6-1.6z"/>',
-        'settings' => '<path style="fill:none" d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle style="fill:none" cx="12" cy="12" r="3"/>',
-        'anime'    => '<path d="M12 3.5l2 5.2 5.2 2-5.2 2-2 5.2-2-5.2L4.8 10.7l5.2-2z"/><path d="M18.7 15.4l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
-        'smile'    => '<circle style="fill:none" cx="12" cy="12" r="8.2"/><path style="fill:none" d="M8.3 14a4.4 4.4 0 0 0 7.4 0"/><circle cx="9.2" cy="9.9" r="1.15" style="fill:currentColor;stroke:none"/><circle cx="14.8" cy="9.9" r="1.15" style="fill:currentColor;stroke:none"/>',
-        'tv'       => '<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8.2 3.6 12 6.8l3.8-3.2"/>',
-        'globe'    => '<circle cx="12" cy="12" r="8.2"/><path d="M3.8 12h16.4"/><path d="M12 3.8c2.5 2.4 2.5 13.9 0 16.4M12 3.8c-2.5 2.4-2.5 13.9 0 16.4"/>',
-        'tag'      => '<path d="M4 4h7.2l8.8 8.8-7.2 7.2L4 11.2z"/><circle cx="8.2" cy="8.2" r="1.2" style="fill:currentColor;stroke:none"/>',
+        'bookmark' => '<path d="M6.8 4.2h10.4a1.3 1.3 0 0 1 1.3 1.3v14.3L12 15.6l-6.5 4.2V5.5a1.3 1.3 0 0 1 1.3-1.3z"/>',
+        // Bildirishnoma — chinakam qo'ng'iroq (kalta tili bilan).
+        'bell'     => '<path d="M18.4 16.6H5.6l1.5-2.3V9.9a4.9 4.9 0 0 1 9.8 0v4.4z"/><path style="fill:none" d="M10.1 16.6a1.9 1.9 0 0 0 3.8 0"/><path style="fill:none" d="M12 3.3v2"/>',
+        'folder'   => '<path d="M3.5 7a2.1 2.1 0 0 1 2.1-2.1h3.3l1.9 2.2h7.6A2.1 2.1 0 0 1 20.5 9.2v8.7a2.1 2.1 0 0 1-2.1 2.1H5.6a2.1 2.1 0 0 1-2.1-2.1z"/><path style="fill:none" d="M7.8 13h8.4M7.8 16.1h5.2"/>',
+        'settings' => '<path style="fill:none" d="M8.4 4.4v3.6M8.4 13.2v6.2M15.6 4.4v8M15.6 17.6v2"/><circle cx="8.4" cy="10.6" r="2.6"/><circle cx="15.6" cy="15" r="2.6"/>',
+        'anime'    => '<path d="M10.6 3.4c.55 2.7 2 4.15 4.9 4.9-2.9.75-4.35 2.2-4.9 4.9-.55-2.7-2-4.15-4.9-4.9 2.9-.75 4.35-2.2 4.9-4.9z"/><path d="M17.3 13.4c.35 1.75 1.3 2.8 3.2 3.3-1.9.5-2.85 1.55-3.2 3.3-.35-1.75-1.3-2.8-3.2-3.3 1.9-.5 2.85-1.55 3.2-3.3z"/>',
+        // Multfilmlar — yuzli havo shari va ipi.
+        'smile'    => '<path d="M12 3.6c3.5 0 6.3 2.7 6.3 6.1 0 3.3-2.8 6.1-6.3 6.1s-6.3-2.8-6.3-6.1c0-3.4 2.8-6.1 6.3-6.1z"/><path style="fill:none" d="M10.9 15.5h2.2l-1.1 2.1z"/><path style="fill:none" d="M12 17.6c0 1.3.5 2.2 1.5 2.9"/><circle style="fill:currentColor;stroke:none" cx="9.8" cy="9" r="1.05"/><circle style="fill:currentColor;stroke:none" cx="14.2" cy="9" r="1.05"/><path style="fill:none" d="M9.7 11.8a3.1 3.1 0 0 0 4.6 0"/>',
+        // Seriallar — antenna va "qism" o'ynatish tugmasi bo'lgan retro TV.
+        'tv'       => '<rect x="2.9" y="7.5" width="18.2" height="12" rx="2.8"/><path style="fill:none" d="M8.3 3.7 12 7.5l3.7-3.8"/><path style="fill:currentColor;stroke:none" d="M10.6 11v5l4.3-2.5z"/>',
+        'globe'    => '<circle cx="12" cy="12" r="8.1"/><path style="fill:none" d="M3.9 12h16.2"/><path style="fill:none" d="M12 3.9c2.35 2.35 2.35 13.85 0 16.2M12 3.9c-2.35 2.35-2.35 13.85 0 16.2"/><path style="fill:none" d="M6 7.2h12M6 16.8h12"/>',
+        'tag'      => '<path d="M4.1 4.1h7.4l8.4 8.4-7.4 7.4-8.4-8.4z"/><circle style="fill:currentColor;stroke:none" cx="8.5" cy="8.5" r="1.25"/>',
         'plus'     => '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
         'user'     => '<circle cx="12" cy="8.4" r="3.4"/><path d="M5.4 19.4a6.6 6.6 0 0 1 13.2 0"/>',
         // Kataloglar (mobil header) — Instagram "Explore" uslubidagi grid.
-        'catalog'  => '<rect x="3.6" y="3.6" width="7.1" height="7.1" rx="1.9"/><rect x="13.3" y="3.6" width="7.1" height="7.1" rx="1.9"/><rect x="3.6" y="13.3" width="7.1" height="7.1" rx="1.9"/><rect x="13.3" y="13.3" width="7.1" height="7.1" rx="1.9"/>',
+        'catalog'  => '<rect x="3.4" y="3.4" width="7.4" height="7.4" rx="2.2"/><rect x="13.2" y="3.4" width="7.4" height="7.4" rx="2.2"/><rect x="3.4" y="13.2" width="7.4" height="7.4" rx="2.2"/><rect x="13.2" y="13.2" width="7.4" height="7.4" rx="2.2"/>',
     ];
     $inner = isset($icons[$name]) ? $icons[$name] : $icons['tag'];
     return '<svg class="ig-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . $inner . '</svg>';
@@ -240,7 +246,7 @@ function wc_logo_img($alt = '', $attrs = '') {
             <?php echo ig_item('history.php', 'history', 'history', 'Tarix', $NAV_ACTIVE); ?>
             <?php echo ig_item('profile.php?tab=liked', 'liked', 'like', 'Yoqqanlar', $NAV_ACTIVE); ?>
             <?php echo ig_item('saved.php', 'saved', 'bookmark', 'Saqlanganlar', $NAV_ACTIVE); ?>
-            <?php echo ig_item('saved.php', 'later', 'clock', 'Keyinroq ko‘rish', $NAV_ACTIVE); ?>
+            <?php echo ig_item('saved.php', 'later', 'later', 'Keyinroq ko‘rish', $NAV_ACTIVE); ?>
         </div>
 
         <!-- Bildirishnomalar -->
@@ -391,7 +397,7 @@ function wc_logo_img($alt = '', $attrs = '') {
             <?php if ($igLogged): ?>
             <div class="ig-set-group">
                 <a class="ig-set-row danger" href="logout.php">
-                    <span class="ig-set-ico"><?php echo ig_svg('user'); ?></span>
+                    <span class="ig-set-ico"><?php echo ig_svg('logout'); ?></span>
                     <span class="ig-set-txt">Chiqish</span>
                 </a>
             </div>

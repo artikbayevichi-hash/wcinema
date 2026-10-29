@@ -33,6 +33,9 @@
         searchRes:  $('#stSearchRes'),
         msg:        $('#stMsg'),
         toast:      $('#stToast'),
+        heroAv:     $('#stHeroAv'),
+        heroName:   $('#stHeroName'),
+        heroUser:   $('#stHeroUser'),
     };
 
     function esc(s) {
@@ -161,6 +164,26 @@
         if (els.fBio)  els.fBio.value  = p.bio || '';
         if (els.fAva)  els.fAva.value  = p.avatar || '';
         updateBioCount();
+        fillHero(p);
+    }
+
+    // Instagram uslubidagi yuqori profil kartasi.
+    function fillHero(p) {
+        if (!p) return;
+        var name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+        if (els.heroName) els.heroName.textContent = name || 'Hisobingiz';
+        if (els.heroUser) {
+            els.heroUser.textContent = p.username ? ('@' + String(p.username).replace(/^@/, '')) : '';
+        }
+        if (els.heroAv) {
+            if (p.avatar) {
+                els.heroAv.innerHTML = '<img src="' + esc(p.avatar) + '" alt=""'
+                    + ' onerror="this.remove()">';
+            } else {
+                var init = ((name || p.username || '?').charAt(0) || '?').toUpperCase();
+                els.heroAv.innerHTML = '<i>' + esc(init) + '</i>';
+            }
+        }
     }
 
     function updateBioCount() {

@@ -33,6 +33,7 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
     <title>Kirish — <?php echo htmlspecialchars(SITE_NAME, ENT_QUOTES); ?></title>
+    <?php require __DIR__ . '/includes/perf-head.php'; ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/css/tg-stream.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-stream.css') ?: 1; ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/css/tg-login.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-login.css') ?: 1; ?>">
     <script>

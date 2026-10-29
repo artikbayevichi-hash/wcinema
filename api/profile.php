@@ -56,6 +56,28 @@ if (!$isMe) {
 }
 
 // ===========================================================================
+// Kuzatuvchilar / kuzatilayotganlar ro'yxati (Instagram uslubi)
+//   GET ?user_id=N&list=followers|following&offset=0
+// ===========================================================================
+$list = input('list', '', 20);
+if ($list === 'followers' || $list === 'following') {
+    if (!$canView) {
+        fail('Bu profil maxfiy', 403);
+    }
+    $limit  = inputInt('limit', 40);
+    $offset = inputInt('offset', 0);
+    $items  = $reels->followList($profileId, $list, (int) ($userId ?: 0), $limit, $offset);
+
+    Auth::ok([
+        'items'    => $items,
+        'list'     => $list,
+        'counts'   => $reels->followCounts($profileId),
+        'has_more' => count($items) >= max(1, min(100, $limit)),
+        'offset'   => $offset,
+    ]);
+}
+
+// ===========================================================================
 // Grid yorliqlari
 // ===========================================================================
 $tab = input('tab', '', 20);
@@ -144,6 +166,7 @@ if ($tab !== '') {
 // Profil sarlavhasi (user + stats + highlights)
 // ===========================================================================
 $stats     = $reels->profileStats($profileId);
+$counts    = $reels->followCounts($profileId);
 $highlights = $isMe ? $reels->highlights($profileId) : [];
 
 // Ko'ruvchi bu profilni kuzatayaptimi? (profil "Kuzatish" tugmasi uchun)
@@ -177,6 +200,7 @@ Auth::ok([
         'is_private' => (int) ($profile['is_private'] ?? 0) === 1,
     ],
     'stats'      => $stats,
+    'follow_counts' => $counts,
     'highlights' => $highlights,
     'is_me'      => $isMe,
     'following'  => $isFollowing,

@@ -17,18 +17,55 @@ $base = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
 $next = (string) ($_GET['next'] ?? $_POST['next'] ?? '');
 if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
     || strpos($next, '\\') !== false || strpos($next, $base) !== 0) {
-    $next = $base . '/admin-content.php';
+    $next = $base . '/admin-panel.php';
 }
 
 $error = '';
 $noKey = (ADMIN_PANEL_KEY === '');
 
+// ---------------------------------------------------------------------------
+// BRUTE-FORCE HIMOYASI
+//
+// Parol oddiy so'z bo'lishi mumkin (masalan "mashhura"), shuning uchun
+// urinishlar soni cheklanadi: bitta IP 15 daqiqada 5 martadan ko'p
+// urina olmaydi. Hisob `storage/` da (web'dan yopiq) saqlanadi.
+// ---------------------------------------------------------------------------
+$rlFile = __DIR__ . '/storage/admin_login.json';
+$rlMax  = 5;
+$rlWin  = 900;
+$rlIp   = (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+
+$rlData = [];
+if (is_file($rlFile)) {
+    $rlData = json_decode((string) @file_get_contents($rlFile), true) ?: [];
+}
+$now = time();
+foreach ($rlData as $k => $v) {
+    if (!is_array($v) || ($now - (int) ($v['t'] ?? 0)) > $rlWin) {
+        unset($rlData[$k]);
+    }
+}
+$rlEntry   = isset($rlData[$rlIp]) && is_array($rlData[$rlIp])
+    ? $rlData[$rlIp]
+    : ['n' => 0, 't' => $now];
+$rlBlocked = ((int) $rlEntry['n'] >= $rlMax) && (($now - (int) $rlEntry['t']) < $rlWin);
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-    if ($auth->adminKeyLogin((string) ($_POST['key'] ?? ''))) {
+    if ($rlBlocked) {
+        $error = 'Juda ko‘p urinish. 15 daqiqadan keyin qayta urinib ko‘ring.';
+    } elseif ($auth->adminKeyLogin((string) ($_POST['key'] ?? ''))) {
+        // Muvaffaqiyat — hisobni tozalaymiz.
+        unset($rlData[$rlIp]);
+        @file_put_contents($rlFile, json_encode($rlData), LOCK_EX);
         header('Location: ' . $next);
         exit;
+    } else {
+        $rlData[$rlIp] = ['n' => (int) $rlEntry['n'] + 1, 't' => (int) $rlEntry['t']];
+        @file_put_contents($rlFile, json_encode($rlData), LOCK_EX);
+        $left = max(0, $rlMax - (int) $rlData[$rlIp]['n']);
+        $error = 'Kalit noto‘g‘ri. Qayta urinib ko‘ring.'
+            . ($left > 0 ? ' (yana ' . $left . ' urinish)' : '');
     }
-    $error = 'Kalit noto‘g‘ri. Qayta urinib ko‘ring.';
 }
 ?>
 <!DOCTYPE html>

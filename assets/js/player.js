@@ -11,18 +11,16 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
     'use strict';
 
     var ICONS = {
-        play: '<svg viewBox="0 0 24 24"><path d="M7 4.5v15L20 12z"/></svg>',
-        pause: '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>',
-        volOn: '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 9v6h3.5L12 17.5v-11L7.5 9H4z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M15.5 9.5a4 4 0 0 1 0 5"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M17.5 7.5a7 7 0 0 1 0 9"/></svg>',
-        volMute: '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 9v6h3.5L12 17.5v-11L7.5 9H4z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M15.5 9.5l4 5M19.5 9.5l-4 5"/></svg>',
-        pip: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="11.5" y="12" width="7" height="5" rx="1.5" fill="currentColor"/></svg>',
-        fs: '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 21H3v-6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 10l5-5"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 14l-5 5"/></svg>',
-        fsExit: '<svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 14h6v6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 10h-6V4"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 10l7-7"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 21l7-7"/></svg>',
-        gear: '<svg viewBox="0 0 24 24"><path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96a7.72 7.72 0 0 0-1.62-.94l-.36-2.54a.49.49 0 0 0-.48-.41h-3.84c-.25 0-.43.17-.47.41l-.36 2.54c-.59.24-1.12.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.32-.09.65-.09.98s.03.66.09.98L2.86 13.6a.499.499 0 0 0 .12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.04.24.22.41.47.41h3.84c.25 0 .43-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>',
-        cc: '<svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM8.5 14.8c-2.9 0-2.9-5.6 0-5.6 1.3 0 2.1.6 2.7 1.4l-1.5 1c-.3-.5-.6-.8-1.2-.8-.9 0-.9 2.4 0 2.4.6 0 .9-.3 1.2-.8l1.5 1c-.6.8-1.4 1.4-2.7 1.4zm7 0c-2.9 0-2.9-5.6 0-5.6 1.3 0 2.1.6 2.7 1.4l-1.5 1c-.3-.5-.6-.8-1.2-.8-.9 0-.9 2.4 0 2.4.6 0 .9-.3 1.2-.8l1.5 1c-.6.8-1.4 1.4-2.7 1.4z"/></svg>',
-        replay: '<svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>',
-        back10: '<svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>',
-        fwd10: '<svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/></svg>'
+        play: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--restart"><path d="M9 1a7.98 7.98 0 0 0-6.132 2.867l-1.441-1.44A.25.25 0 0 0 1 2.604V6.75c0 .138.112.25.25.25h4.146a.25.25 0 0 0 .177-.427L4.29 5.29A5.99 5.99 0 0 1 9 3a6 6 0 1 1-6 6H1a8 8 0 1 0 8-8"></path><path d="m11.61 9.639-3.331 2.07a.826.826 0 0 1-1.15-.266.86.86 0 0 1-.129-.452V6.849C7 6.38 7.374 6 7.834 6c.158 0 .312.045.445.13l3.331 2.071a.858.858 0 0 1 0 1.438"></path></svg>',
+        pause: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18"><rect x="4" y="3" width="3.5" height="12" rx=".8"/><rect x="10.5" y="3" width="3.5" height="12" rx=".8"/></svg>',
+        back10: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--seek media-icon--flipped"><path d="M9 1a7.98 7.98 0 0 1 6.132 2.867l1.441-1.44a.25.25 0 0 1 .427.177V6.75a.25.25 0 0 1-.25.25h-4.146a.25.25 0 0 1-.177-.427L13.71 5.29A5.99 5.99 0 0 0 9 3a6 6 0 1 0 4.242 10.242l1.415 1.415A8 8 0 0 1 9 1"></path></svg>',
+        fwd10: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--seek"><path d="M9 1a7.98 7.98 0 0 1 6.132 2.867l1.441-1.44a.25.25 0 0 1 .427.177V6.75a.25.25 0 0 1-.25.25h-4.146a.25.25 0 0 1-.177-.427L13.71 5.29A5.99 5.99 0 0 0 9 3a6 6 0 1 0 4.242 10.242l1.415 1.415A8 8 0 0 1 9 1"></path></svg>',
+        volOn: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18"><path d="M.714 6.008h3.072l4.071-3.857c.5-.376 1.143 0 1.143.601V15.28c0 .602-.643.903-1.143.602l-4.071-3.858H.714c-.428 0-.714-.3-.714-.752V6.76c0-.451.286-.752.714-.752M13 6.5a.75.75 0 0 1 1.28-.53l3.5 3.5a.75.75 0 0 1 0 1.06l-3.5 3.5A.75.75 0 0 1 13 13.5V6.5zM16 9a3 3 0 0 1-1.5 2.598v-5.196A3 3 0 0 1 16 9z"></path></svg>',
+        volMute: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--volume-off"><path d="M.714 6.008h3.072l4.071-3.857c.5-.376 1.143 0 1.143.601V15.28c0 .602-.643.903-1.143.602l-4.071-3.858H.714c-.428 0-.714-.3-.714-.752V6.76c0-.451.286-.752.714-.752M14.5 7.586l-1.768-1.768a1 1 0 1 0-1.414 1.414L13.085 9l-1.767 1.768a1 1 0 0 0 1.414 1.414l1.768-1.768 1.768 1.768a1 1 0 0 0 1.414-1.414L15.914 9l1.768-1.768a1 1 0 0 0-1.414-1.414z"></path></svg>',
+        pip: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--pip-enter"><path d="M13 2a4 4 0 0 1 4 4v2.036A3.5 3.5 0 0 0 16.5 8H15V6.273C15 5.018 13.96 4 12.679 4H4.32C3.04 4 2 5.018 2 6.273v5.454C2 12.982 3.04 14 4.321 14H6v1.5q0 .255.036.5H4a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z"></path><rect width="10" height="7" x="8" y="10" rx="2"></rect></svg>',
+        fs: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--fullscreen-enter"><path d="M9.57 3.617A1 1 0 0 0 8.646 3H4c-.552 0-1 .449-1 1v4.646a.996.996 0 0 0 1.001 1 1 1 0 0 0 .706-.293l4.647-4.647a1 1 0 0 0 .216-1.089m4.812 4.812a1 1 0 0 0-1.089.217l-4.647 4.647a.998.998 0 0 0 .708 1.706H14c.552 0 1-.449 1-1V9.353a1 1 0 0 0-.618-.924"></path></svg>',
+        fsExit: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 18 18"><path d="M8.5 14.383A1 1 0 0 0 9.43 15H14c.552 0 1-.449 1-1V9.354a.996.996 0 0 0-1.001-1 1 1 0 0 0-.706.293L8.647 13.293a1 1 0 0 0-.216 1.09zm-4.812-4.812a1 1 0 0 0 1.089-.217l4.647-4.647a.998.998 0 0 0-.708-1.706H4c-.552 0-1 .449-1 1v4.647a1 1 0 0 0 .618.923"></path></svg>',
+        cc: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--captions-off"><rect width="16" height="12" x="1" y="3" stroke="currentColor" stroke-width="2" rx="3"></rect><rect width="3" height="2" x="3" y="8" fill="currentColor" rx="1"></rect><rect width="2" height="2" x="13" y="8" fill="currentColor" rx="1"></rect><rect width="4" height="2" x="11" y="11" fill="currentColor" rx="1"></rect><rect width="5" height="2" x="7" y="8" fill="currentColor" rx="1"></rect><rect width="7" height="2" x="3" y="11" fill="currentColor" rx="1"></rect></svg>'
     };
 
     function parseConfig(root) {
@@ -176,7 +174,8 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         backBtn.type = 'button';
         backBtn.title = S.back10 || '-10 soniya';
         row1Center.appendChild(backBtn);
-        var playBtn = el('button', 'udp-btn udp-play', ICONS.play);
+        var playControlIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>';
+        var playBtn = el('button', 'udp-btn udp-play', playControlIcon);
         playBtn.type = 'button';
         playBtn.title = S.play || 'Ijro etish';
         row1Center.appendChild(playBtn);
@@ -251,6 +250,20 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         controls.appendChild(row2);
         root.appendChild(controls);
 
+        // Target: large centered play button before first play.
+        root.classList.add('udp-first');
+        var bigPlay = el('button', 'udp-bigplay', ICONS.play);
+        bigPlay.type = 'button';
+        bigPlay.setAttribute('aria-label', 'Ijro etish');
+        bigPlay.addEventListener('click', function () { root.classList.remove('udp-first'); var p = video.play(); if (p && p.catch) p.catch(function () {}); });
+        root.appendChild(bigPlay);
+        // Top-left duration badge before first play.
+        var durBadge = el('div', 'udp-duration-badge', '0:00');
+        root.appendChild(durBadge);
+        video.addEventListener('loadedmetadata', function () {
+            durBadge.textContent = fmtTime(video.duration || 0);
+        });
+
         // Settings menu (inside gear button)
         var menu = el('div', 'udp-menu');
         gearBtn.appendChild(menu);
@@ -300,7 +313,9 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         function fmtRate(r) {
             if (!isFinite(r)) r = 1;
             var n = Math.round(r * 10) / 10;
-            return (Math.abs(n - Math.round(n)) < 0.001 && n !== 1 ? String(Math.round(n)) : n.toFixed(1)) + 'x';
+            var rounded = Math.round(n);
+            var label = Math.abs(n - rounded) < 0.001 ? String(rounded) : n.toFixed(1);
+            return label + 'x';
         }
         function clampRate(r) {
             if (!isFinite(r)) return 1;
@@ -459,7 +474,7 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         updateQualityLabel();
 
         function updatePlayIcon() {
-            playBtn.innerHTML = (video.paused || video.ended) ? ICONS.play : ICONS.pause;
+            playBtn.innerHTML = (video.paused || video.ended) ? playControlIcon : ICONS.pause;
         }
         function updateVolumeUI() {
             muteBtn.innerHTML = video.muted || video.volume === 0 ? ICONS.volMute : ICONS.volOn;
@@ -515,9 +530,12 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             timeCurrent.textContent = fmtTime(video.currentTime);
             // Mobil: o'ng tomonda QOLGAN vaqt emas, UMUMIY vaqt ko'rsatiladi
             // ("11:11 / 25:57" uslubi). Desktop: "-14:46" (avvalgidek).
-            timeRemaining.textContent = mobileUi
+            // Watch sahifasida esa rasmga mos ravishda elapsed / total ko'rsatiladi.
+            timeRemaining.textContent = root.closest('.watch-player')
                 ? fmtTime(d)
-                : '-' + fmtTime(remaining);
+                : mobileUi
+                ? '/' + fmtTime(d)
+                : (timeRemaining.dataset.remaining === '0' ? fmtTime(d) : '-' + fmtTime(remaining));
         }
 
         function updateSeek() {
@@ -605,6 +623,10 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         }
 
         muteBtn.addEventListener('click', toggleMute);
+        timeRemaining.addEventListener('click', function () {
+            timeRemaining.dataset.remaining = (timeRemaining.dataset.remaining === '0') ? '1' : '0';
+            updateTime();
+        });
         playBtn.addEventListener('click', function () { togglePlay(); });
         fsBtn.addEventListener('click', function () { closeMenu(); toggleFullscreen(); });
 
@@ -633,10 +655,15 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         video.addEventListener('click', function (ev) {
             if (ev.target === video && !video.dragging) togglePlay();
         });
+        video.addEventListener('dblclick', function (ev) {
+            ev.preventDefault();
+            toggleFullscreen();
+        });
 
         video.addEventListener('play', function () {
             root.classList.add('udp-playing');
             root.classList.remove('udp-paused');
+            root.classList.remove('udp-first');
             updatePlayIcon();
         });
         video.addEventListener('pause', function () {
@@ -840,7 +867,8 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
                 if (found && found !== 'Auto') return found;
                 return 'Auto';
             }
-            return 'HD';
+            // Bitta MP4 manbasi uchun Auto — mavjud yagona streamni tanlaydi.
+            return S.quality_auto || 'Auto';
         }
         function updateQualityLabel() {
             var txt = qualityLabelText();
@@ -863,15 +891,18 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
                     qs.push({ label: label, url: cfg.qualities[label], active: false });
                 });
             }
-            if (qs.length > 1) {
+            if (qs.length > 0) {
                 var cur = video.currentSrc || '';
                 qs.forEach(function (q) { q.active = q.url === cur; });
+                if (qs.length === 1) qs[0].active = true;
             }
+            if (!qs.length) return [{ label: S.quality_auto || 'Auto', active: true, fixed: true }];
             return qs;
         };
         var hasQualityOptions = function () {
             if (isHls && hlsAutoLevels.length) return true;
-            return cfg.qualities && Object.keys(cfg.qualities).length > 1;
+            if (cfg.qualities && Object.keys(cfg.qualities).length > 1) return true;
+            return !!(video.currentSrc || video.src || video.dataset.hls || video.dataset.hlsPending);
         };
         var setQuality = function (q) {
             if (isHls && hls) {
@@ -879,6 +910,7 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
                 updateQualityLabel();
                 return;
             }
+            if (q.fixed) { updateQualityLabel(); return; }
             if (!q.url) return;
             var cur = video.currentTime;
             var wasPlaying = !video.paused && !video.ended;
@@ -910,6 +942,7 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             });
         };
         trackList();
+        if (!trackList().length) gearBtn.style.display = 'none';
 
         /* ================= PiP ================= */
         function togglePip() {
@@ -1010,7 +1043,7 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             hideTimer = setTimeout(function () {
                 if (menu.classList.contains('udp-open')) return;
                 root.classList.remove('udp-ui-visible');
-            }, 1000);
+            }, 2500);
         }
         root.addEventListener('mousemove', showUi);
         root.addEventListener('mouseenter', showUi);
@@ -1176,6 +1209,8 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         };
 
         /* ================= Initial state ================= */
+        root.classList.add('udp-paused');
+        root.classList.add('udp-ui-visible');
         updatePlayIcon();
         updateTime();
         updateSeek();

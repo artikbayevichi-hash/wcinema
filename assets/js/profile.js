@@ -56,6 +56,11 @@ const els = {
     avFile:    $('#pfInAvatarFile'),
     avRemove:  $('#pfAvRemove'),
     tabs:      $('#pfTabs'),
+    listModal: $('#pfListModal'),
+    listTitle: $('#pfListTitle'),
+    listBody:  $('#pfListBody'),
+    listMore:  $('#pfListMore'),
+    listX:     $('#pfListX'),
 };
 
 // Mahalliy rejim: PHP hisobi yo'q, faqat Telegram (MTProto) hisobi bilan
@@ -148,6 +153,13 @@ function renderHeader() {
     els.stats.querySelector('[data-k="reels"]').textContent  = fmt(st.approved ?? st.reels ?? 0);
     els.stats.querySelector('[data-k="views"]').textContent  = fmt(st.views);
     els.stats.querySelector('[data-k="likes"]').textContent  = fmt(st.likes);
+
+    // Kuzatuvchilar / kuzatilayotganlar (Instagram uslubi)
+    const fc = state.data.follow_counts || {};
+    const fEl = els.stats.querySelector('[data-k="followers"]');
+    const gEl = els.stats.querySelector('[data-k="following"]');
+    if (fEl) fEl.textContent = fmt(fc.followers ?? 0);
+    if (gEl) gEl.textContent = fmt(fc.following ?? 0);
 
     // highlightlar
     if (!state.locked && state.data.highlights && state.data.highlights.length) {
@@ -294,6 +306,190 @@ async function toggleFollowProfile(btn) {
     } finally {
         btn.disabled = false;
     }
+}
+
+// =======================================================================
+// Kuzatuvchilar / Kuzatilayotganlar RO'YXATI (Instagram uslubi)
+// -----------------------------------------------------------------------
+// Profil sarlavhasidagi "Kuzatuvchilar" yoki "Kuzatilayotgan" soni
+// bosilganda ochiladi. Sahifalash pastga skroll qilinganda davom etadi.
+// =======================================================================
+const LIST_LIMIT = 40;
+const listState = { which: '', offset: 0, hasMore: true, loading: false, busy: false };
+
+function listAvaHTML(u) {
+    const init = esc(((u.full_name || u.username || '?').charAt(0) || '?').toUpperCase());
+    if (u.avatar) {
+        return `<span class="pf-li-ava"><img src="${esc(u.avatar)}" alt="" loading="lazy"`
+             + ` onerror="this.parentNode.textContent='${init}'"></span>`;
+    }
+    return `<span class="pf-li-ava">${init}</span>`;
+}
+
+function renderListItems(items, append) {
+    if (!els.listBody) return;
+    const html = items.map((u) => {
+        const name = u.full_name || u.username || 'Foydalanuvchi';
+        const handle = u.username ? '@' + u.username : '';
+        const btn = u.is_me ? ''
+            : `<button type="button" class="pf-li-btn ${u.following ? 'ghost' : 'prim'}"`
+              + ` data-follow="${u.id}" data-following="${u.following ? '1' : '0'}">`
+              + `${u.following ? 'Kuzatilmoqda' : 'Kuzatish'}</button>`;
+        return `<div class="pf-li" data-uid="${u.id}">`
+            + `<a class="pf-li-l" href="profile.php?user_id=${encodeURIComponent(u.id)}">`
+            + listAvaHTML(u)
+            + `<span class="pf-li-txt">`
+            + `<span class="pf-li-name">${esc(name)}</span>`
+            + (handle ? `<span class="pf-li-user">${esc(handle)}</span>` : '')
+            + `</span></a>${btn}</div>`;
+    }).join('');
+    if (append) els.listBody.insertAdjacentHTML('beforeend', html);
+    else els.listBody.innerHTML = html;
+}
+
+async function loadList(reset) {
+    if (!els.listModal || listState.loading) return;
+    if (reset) {
+        listState.offset = 0;
+        listState.hasMore = true;
+        els.listBody.innerHTML = '<div class="pf-li-empty">Yuklanmoqda&hellip;</div>';
+    }
+    if (!listState.hasMore) return;
+
+    listState.loading = true;
+    if (els.listMore) els.listMore.hidden = false;
+
+    const uid = (state.data && state.data.user && state.data.user.id) || 0;
+    const params = new URLSearchParams({
+        user_id: String(uid),
+        list:    listState.which,
+        limit:   String(LIST_LIMIT),
+        offset:  String(listState.offset),
+    });
+    const raw = localMeRaw();
+    if (raw) params.set('tg_me', raw);
+
+    try {
+        const r = await fetch(API_BASE + '?' + params.toString(), { credentials: 'same-origin' });
+        const d = await r.json().catch(() => null);
+        const items = (d && d.items) || [];
+
+        if (reset) els.listBody.innerHTML = '';
+        if (!items.length && reset) {
+            els.listBody.innerHTML = '<div class="pf-li-empty">'
+                + (listState.which === 'followers'
+                    ? 'Hali kuzatuvchilar yo\u2018q'
+                    : 'Hali hech kim kuzatilmayapti')
+                + '</div>';
+        } else if (items.length) {
+            renderListItems(items, !reset);
+            listState.offset += items.length;
+        }
+
+        // Sanoqlarni serverdagi aniq qiymat bilan yangilaymiz.
+        if (d && d.counts) {
+            const fEl = els.stats && els.stats.querySelector('[data-k="followers"]');
+            const gEl = els.stats && els.stats.querySelector('[data-k="following"]');
+            if (fEl) fEl.textContent = fmt(d.counts.followers ?? 0);
+            if (gEl) gEl.textContent = fmt(d.counts.following ?? 0);
+            if (state.data) state.data.follow_counts = d.counts;
+        }
+        listState.hasMore = items.length >= LIST_LIMIT;
+    } catch (e) {
+        if (reset) els.listBody.innerHTML = '<div class="pf-li-empty">Tarmoq xatosi</div>';
+    } finally {
+        listState.loading = false;
+        if (els.listMore) els.listMore.hidden = true;
+    }
+}
+
+function openList(which) {
+    if (!els.listModal) return;
+    if (which !== 'followers' && which !== 'following') return;
+    if (state.locked) return;                       // maxfiy profil — ro'yxat yopiq
+    listState.which   = which;
+    listState.offset  = 0;
+    listState.hasMore = true;
+    if (els.listTitle) {
+        els.listTitle.textContent = which === 'followers' ? 'Kuzatuvchilar' : 'Kuzatilayotgan';
+    }
+    // Ko'rinish `.open` klassi orqali boshqariladi (`.pf-modal` bilan bir xil):
+    // `hidden` yolg'iz o'zi ishlamaydi, chunki klassda `display: flex` bor.
+    els.listModal.hidden = false;
+    requestAnimationFrame(() => els.listModal.classList.add('open'));
+    document.body.classList.add('pf-list-open');
+    loadList(true);
+}
+
+function closeList() {
+    if (!els.listModal) return;
+    els.listModal.classList.remove('open');
+    document.body.classList.remove('pf-list-open');
+    setTimeout(() => { els.listModal.hidden = true; }, 150);
+}
+
+// Ro'yxatdagi "Kuzatish / Kuzatilmoqda" tugmasi.
+async function toggleListFollow(btn) {
+    const id = Number(btn.getAttribute('data-follow')) || 0;
+    if (!id || listState.busy) return;
+    listState.busy = true;
+    btn.disabled = true;
+    try {
+        const raw = localMeRaw();
+        const body = new URLSearchParams({ action: 'follow', id: String(id) });
+        if (raw) body.set('tg_me', raw);
+        const r = await fetch('api/reels.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        });
+        const d = await r.json().catch(() => null);
+        if (d && typeof d.following === 'boolean') {
+            btn.setAttribute('data-following', d.following ? '1' : '0');
+            btn.textContent = d.following ? 'Kuzatilmoqda' : 'Kuzatish';
+            btn.classList.toggle('ghost', d.following);
+            btn.classList.toggle('prim', !d.following);
+        } else {
+            showToast((d && d.message) || 'Xatolik yuz berdi');
+        }
+    } catch (e) {
+        showToast('Tarmoq xatosi');
+    } finally {
+        btn.disabled = false;
+        listState.busy = false;
+    }
+}
+
+function initFollowList() {
+    // Mahalliy (localStorage) rejimda kuzatish serverda saqlanmaydi,
+    // shuning uchun ro'yxat tugmalarini ko'rsatmaymiz.
+    if (LOCAL) {
+        document.querySelectorAll('.pf-stat-link').forEach((b) => { b.hidden = true; });
+        return;
+    }
+    if (els.stats) {
+        els.stats.addEventListener('click', (e) => {
+            const b = e.target.closest ? e.target.closest('[data-list]') : null;
+            if (b) openList(b.getAttribute('data-list'));
+        });
+    }
+    if (els.listX) els.listX.onclick = closeList;
+    if (els.listModal) {
+        els.listModal.addEventListener('click', (e) => {
+            if (e.target === els.listModal) closeList();          // fon bosildi
+            const fb = e.target.closest ? e.target.closest('[data-follow]') : null;
+            if (fb) { e.preventDefault(); toggleListFollow(fb); }
+        });
+    }
+    if (els.listBody) {
+        els.listBody.addEventListener('scroll', () => {
+            const el = els.listBody;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) loadList(false);
+        }, { passive: true });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && els.listModal && !els.listModal.hidden) closeList();
+    });
 }
 
 // =======================================================================
@@ -844,4 +1040,5 @@ els.modal.addEventListener('click', (e) => {
 $('#pfModalCancel').addEventListener('click', closeModal);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
+initFollowList();
 loadProfile();

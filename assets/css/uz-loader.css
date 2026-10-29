@@ -1,0 +1,119 @@
+/* ==========================================================================
+ * uz-loader.css — video ochilguncha FAQAT BITTA yuklanish animatsiyasi
+ * --------------------------------------------------------------------------
+ * Sizning GIF'ingiz (aylanuvchi yoy) — lekin OQ EMAS: yoyning o'zi boshqaruv
+ * panelidagi kabi XIRALASHGAN SHAFFOF SHISHA bo'lib ko'rinadi (sal bilinadi).
+ * GIF "qolip (mask)" vazifasini qiladi, ichi esa orqa fonni xiralashtiradi.
+ * Sozlash: --uz-loader-size (kattalik), --uz-loader-tint (oqlik .10-.40),
+ * --uz-loader-blur (xiralik) — pastdagi :root ichida.
+ * GIF alohida rasm bo'lmasligi uchun `data:` ko'rinishida shu yerga joylangan.
+ * Almashtirish uchun faqat pastdagi `--uz-loader` qiymatini o'zgartiring.
+ *
+ * Ulanadigan sahifalar: watch.php va index.php (player.css / tg-stream.css dan KEYIN).
+ *
+ * Olib tashlangan ikkinchi/ortiqcha ko'rsatkichlar:
+ *   - yangi pleer: "Video yuklanmoqda..." yozuvi va eski halqa
+ *   - eski pleer (bosh sahifa): CSS halqa `.udp-spinner` + ∞ GIF `.udp-loading-img` + yozuv
+ *   - Telegram qatlami: yuqoridagi chiziq `.tgs-bar` va uning yaltirashi, `.tgs-prep` paneli
+ * Xato / ogohlantirish / QR / parol oynalari O'ZGARMAYDI.
+ * ========================================================================== */
+:root {
+    --uz-loader: url("data:image/gif;base64,R0lGODlhlgCWAPf/AAAAANr//+Xl/+vr6+z//+/v7/Dw//Hx8fLy//L4+PL///Pz8/Pz//P5+fP5+fT09PT5+fT5+fT5+fT///X19fX19fX1//X4+PX4+/X6+vX6+vX6+vX///b29vb29vb2+vb2//b4+vb4+vb4+vb4+vb5+fb5+fb5+fb5+fb5/Pb5/Pb5/Pb5/Pb6+vb6+vb6+vb6+vb6+vb///f39/f39/f39/f39/f3+/f3+/f3+/f3+/f3+/f3//f3//f5+ff5+ff5+ff5+ff5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5+/f5/Pf5/Pf5/Pf6+vf6+vf6+vf6+vf6+vf6/Pf6/Pf6/Pf6/Pf7+/f7+/f7+/f7+/f7+/f7+/f///j4+Pj4+Pj4+Pj4+Pj4+Pj4+vj4+vj4+vj4+vj4+vj4+/j4+/j4+/j4+/j4+/j4+/j4+/j4+/j4//j4//j5+/j5+/j5+/j5+/j5+/j5+/j5+/j6+vj6+vj6+vj6+vj6+vj6+vj6+/j6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj6/Pj7+/j7+/j7+/j7+/j7+/j7+/j7+/j7+/j7+/j7+/j///j///n5+fn5+fn5+fn5+fn5+/n5+/n5+/n5+/n5/Pn5/Pn5/Pn5/Pn5/Pn5/Pn5/Pn5/Pn5/Pn5/Pn5/Pn5//n5//n5//n5//n5//n7+/n7+/n7+/n7+/n7/fn7/fn7/fn7/fn8/Pn8/Pr6+vr6+vr6+vr6+vr6+vr6+vr6/Pr6/Pr6/Pr6/Pr6/Pr6/Pr6//r6//r6//r6//r6//r6//r6//v7+/v7+/v7//v7/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////wD/ACH/C05FVFNDQVBFMi4wAwEAAAAh+QQJAwBAACxIADEAHQAzAIYAAADa///l5f/r6+vs///v7+/w8P/x8fHy8v/y+Pjy///z8/Pz8//z+fn09PT0+fn0///19fX19f/1+Pj1+Pv1+vr1///29vb29vr29v/2+Pr2+fn2+fz2+vr2///39/f39/v39//3+fn3+fv3+fz3+vr3+vz3+/v3///4+Pj4+Pr4+Pv4+P/4+fv4+vr4+vv4+vz4+/v4///5+fn5+fv5+fz5+f/5+/v5+/35/Pz6+vr6+vz6+v/7+/v7+/////8A/wD///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8I7ACBYMhR4sUGgi2AKFzIsGHDCT4u5IAokWIOhxgZEjS48WBBjzQyOowwMWLJiiYhRhDJ0CPHjx07snyYsibKCzMzanjJcwOMnBlvntwBNGPMjz+LOsRhkaJSjDBgfnzqcEfTiFQbRuWpIitDpjW9apQaUqzCkxPNKnR5UK1CoW57ur3qFojUhGrRTnDL9qJam253unQLtqJbFTHd/rh5mKdbvXwT/0W50uxRt3DVyjVbOK3avmqvVvY6UKpZDTZxiEUs9YVY1Jmzsnbs9aphqi36FhTx1CZkpUdpK/VNUTVVFT0JmhWtdusGqgEBACH5BAkEAP8ALEkAMgAcADMAAAjrAP8JHPjvArYOwS4QXMiwYYlgVQw9rCKkocWFBxNmNEjh4sWIEyVClOjRokGEJzV26FWSYQiRIEeWONSyIQWVKpPVbChTJs2dC3ulPAmU4aGYIIsGHYqto9KBR2EaUvN0oNCN2KoO7ElRq0CcCr2GfOhVIMqMZaWWKMu07D+kFb2CLTs2WFmsHcq+DFn2Kkq2Pe+ezetVjdSyc8UG9orVadVkSMsOtutVrVe/CekursrUsdIPXLWGwKvVB1dDnPFS/nw69eSwQPPUjQi7pbbXG0seMjz7sEemuBGW7D27VEvVwHcitay0s9aAAAAh+QQJAwD/ACxCADQAIwAxAAAI/gD/CRxIsKBBbAYTKlwo8EKwKoZKMJy4EFuHYBcsIqTIUSDEEg8jHurIEaNFkx16kaQYEuTHkSsZ9sp4kebGmAoPfWyJcyJNlD0X6owYUk1QhTNP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");
+    --uz-loader-size: 190px;
+    --uz-loader-tint: rgba(255, 255, 255, .30);
+    --uz-loader-blur: 10px;
+}
+
+/* ---- 1) Yoy: GIF = qolip, ichi = xira shisha --------------------------- */
+.uzp-spinner::after,
+.udp-buffering::after,
+.tgs-bar::after {
+    content: "";
+    position: absolute !important;
+    left: 50% !important;
+    top: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: var(--uz-loader-size) !important;
+    height: var(--uz-loader-size) !important;
+    margin: calc(var(--uz-loader-size) / -2) 0 0 calc(var(--uz-loader-size) / -2) !important;
+    background: var(--uz-loader-tint) !important;
+    -webkit-backdrop-filter: blur(var(--uz-loader-blur)) saturate(1.8) brightness(1.12);
+    backdrop-filter: blur(var(--uz-loader-blur)) saturate(1.8) brightness(1.12);
+    -webkit-mask: var(--uz-loader) center / contain no-repeat;
+    mask: var(--uz-loader) center / contain no-repeat;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    animation: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+/* Disk endi yo'q */
+.uzp-spinner::before,
+.udp-buffering::before,
+.tgs-bar::before {
+    content: none !important;
+    display: none !important;
+}
+
+/* ---- 2) YANGI PLEER (.uzp): eski halqa va yozuvsiz --------------------- */
+.uzp-loading {
+    background: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    gap: 0 !important;
+}
+.uzp-load-t { display: none !important; }
+.uzp-spinner {
+    position: relative;
+    width: var(--uz-loader-size);
+    height: var(--uz-loader-size);
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+    animation: none !important;
+    filter: none !important;       /* filter bo'lsa shisha xiralashmaydi */
+}
+
+/* ---- 3) ESKI PLEER (.udp-*, bosh sahifa): ikkinchi ko'rsatkichlar yo'q -- */
+.udp-buffering .udp-spinner,
+.udp-buffering .udp-loading-img,
+.udp-buffering .udp-buffering-label {
+    display: none !important;
+}
+.watch-player .udp-player.is-loading::after { opacity: 0 !important; }
+
+/* ---- 4) TELEGRAM qatlami: chiziq o'rniga markazdagi yoy ---------------- */
+.tgs-bar {
+    position: absolute !important;
+    inset: 0;
+    height: auto !important;
+    background: none !important;
+    overflow: visible !important;
+    pointer-events: none;
+}
+.tgs-prog { display: none !important; }
+.tgs-prep { display: none !important; }
+
+/* ---- 5) IKKI NUSXA BIR VAQTDA CHIQMASIN ---------------------------------
+ * Telegram qatlami (.tgs-bar) ko'rinib turganda pleerning o'z yoyi yashirinadi
+ * (aks holda bir xil GIF ikki marta, turli fazada aylanib, "ikkita animatsiya" bo'lardi). */
+#modal:has(.tgs-bar) .udp-buffering::after,
+.watch-player:has(.tgs-bar) .udp-buffering::after,
+.watch-player:has(.tgs-bar) .uzp-spinner::after {
+    display: none !important;
+}
+
+/* QR / parol / xato / ogohlantirish chiqqanda yoy yashirinadi */
+.tgs:has(.tgs-qr:not([hidden])) .tgs-bar::after,
+.tgs:has(.tgs-pwd:not([hidden])) .tgs-bar::after,
+.tgs:has(.tgs-err) .tgs-bar::after,
+.tgs:has(.tgs-warn) .tgs-bar::after {
+    display: none !important;
+}
+
+/* ---- 6) Televizor: kattaroq -------------------------------------------- */
+html.tv-mode {
+    --uz-loader-size: 260px;
+}

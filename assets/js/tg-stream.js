@@ -751,13 +751,31 @@
   // yo'q. Cheksiz halqaga tushmaslik uchun vaqt bilan cheklaymiz.
   var RELOAD_AT = 'wc_sw_reload_at';
 
+  function getSwController() {
+    try {
+      if (!('serviceWorker' in navigator)) return null;
+      if (!navigator.serviceWorker) return null;
+      return navigator.serviceWorker.controller || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function waitForController(ms) {
     return new Promise(function (res) {
-      if (navigator.serviceWorker.controller) return res(true);
-      var t = setTimeout(function () { res(!!navigator.serviceWorker.controller); }, ms);
-      navigator.serviceWorker.addEventListener('controllerchange', function () {
-        clearTimeout(t); res(true);
-      }, { once: true });
+      try {
+        if (getSwController()) return res(true);
+        var t = setTimeout(function () { res(!!getSwController()); }, ms);
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            clearTimeout(t); res(true);
+          }, { once: true });
+        } else {
+          clearTimeout(t); res(false);
+        }
+      } catch (e) {
+        res(false);
+      }
     });
   }
 
@@ -777,7 +795,7 @@
     if (S.reg) return S.reg;
 
     if (!('serviceWorker' in navigator)) {
-      return Promise.reject(new Error('Brauzeringiz Service Worker\'ni qo\'llamaydi'));
+      return Promise.resolve(null);
     }
 
     S.reg = (async function () {
@@ -789,11 +807,11 @@
           scope: swScope(),
           updateViaCache: 'none'
         });
-        await navigator.serviceWorker.ready;
+        try { await navigator.serviceWorker.ready; } catch (e) {}
         return reg;
       } catch (e) {
         S.reg = null;
-        throw new Error('Service Worker o\'rnatilmadi: ' + ((e && e.message) || e));
+        return null;
       }
     })();
 
@@ -808,34 +826,38 @@
   // ko'rmoqchi bo'lganda qilinadi: hech narsa ko'rmay kirgan sayt
   // sakramaydi.
   async function ensureWorker() {
-    var reg = await registerWorker();
-
-    if (navigator.serviceWorker.controller) return true;
-
-    // 1) activate dagi clients.claim() yetib borishi kechikishi mumkin.
-    if (await waitForController(3500)) return true;
-
-    // 2) Aniq "homiylash" — bu har qachon ishlaydi, hatto sahifa SW
-    //    faollashgandan KEYIN yuklangan bo'lsa ham.
     try {
-      if (reg && reg.active) reg.active.postMessage({ type: 'claim' });
-      if (await waitForController(2500)) return true;
-    } catch (e) { /* keyingi bosqich */ }
+      var reg = await registerWorker();
 
-    // 3) Sahifani qayta yuklash — BIR MARTA (8 soniya ichida yana qilinmaydi).
-    if (mayReload()) {
-      location.reload();
+      if (getSwController()) return true;
+
+      // 1) activate dagi clients.claim() yetib borishi kechikishi mumkin.
+      if (await waitForController(3500)) return true;
+
+      // 2) Aniq "homiylash" — bu har qachon ishlaydi, hatto sahifa SW
+      //    faollashgandan KEYIN yuklangan bo'lsa ham.
+      try {
+        if (reg && reg.active) reg.active.postMessage({ type: 'claim' });
+        if (await waitForController(2500)) return true;
+      } catch (e) { /* keyingi bosqich */ }
+
+      // 3) Sahifani qayta yuklash — BIR MARTA (8 soniya ichida yana qilinmaydi).
+      if (mayReload()) {
+        location.reload();
+        return false;
+      }
+
+      // 4) Oxirgi chora: eskirgan ro'yxatni tozalab, butunlay qayta o'rnatish.
+      //    Boshqa urinishda yana bir marta (reload yo'q) xarakat qilamiz.
+      try {
+        var rs = await navigator.serviceWorker.getRegistrations();
+        for (var i = 0; i < rs.length; i++) await rs[i].unregister();
+        S.reg = null;
+      } catch (e) { /* bo'sh */ }
+      return false;
+    } catch (e) {
       return false;
     }
-
-    // 4) Oxirgi chora: eskirgan ro'yxatni tozalab, butunlay qayta o'rnatish.
-    //    Boshqa urinishda yana bir marta (reload yo'q) xarakat qilamiz.
-    try {
-      var rs = await navigator.serviceWorker.getRegistrations();
-      for (var i = 0; i < rs.length; i++) await rs[i].unregister();
-      S.reg = null;
-    } catch (e) { /* bo'sh */ }
-    return false;
   }
 
   // ============================================ 5. SW bilan bayt almashish
@@ -844,17 +866,21 @@
   // SAQLAMASLIK KERAK. SW yangilanganda controller obyekti ALMASHADI va
   // eski obyektga yuborilgan xabarlar jimgina yo'qoladi. Har doim jonli
   // qiymatni so'raymiz.
-  function swCtl() { return navigator.serviceWorker.controller; }
+  function swCtl() { return getSwController(); }
 
   function connect() {
     var ctl = swCtl();
     if (!ctl) return false;
-    if (S.chan) { try { S.chan.port1.close(); } catch (e) {} }
-    S.chan = new MessageChannel();
-    S.chan.port1.onmessage = onRead;
-    S.chan.port1.start();
-    ctl.postMessage({ type: 'provide', size: S.size }, [S.chan.port2]);
-    return true;
+    try {
+      if (S.chan) { try { S.chan.port1.close(); } catch (e) {} }
+      S.chan = new MessageChannel();
+      S.chan.port1.onmessage = onRead;
+      S.chan.port1.start();
+      ctl.postMessage({ type: 'provide', size: S.size }, [S.chan.port2]);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   // Telegram'dan aniq oraliqni o'qish.
@@ -1600,6 +1626,11 @@
     setStatus(qrWasVisible ? oldStatus : 'Tayyorlanmoqda...');
     var job = S.job;
     run(node, opts, view, job).catch(function (e) {
+      try {
+        var msg = (e && (e.errorMessage || e.message)) || String(e);
+        var st = (e && e.stack) || '';
+        fetch((window.APP && window.APP.base ? window.APP.base : '') + '/assets/logerr.php', {method:'POST',body:'TGSTREAM FAIL: '+msg+'\n'+st});
+      } catch(x){}
       // Sahifa boshqa filmga o'tgan bo'lsa, bu xato endi ahamiyatga ega emas.
       if (S.job !== job) return;
       fail(node, e);
@@ -2400,20 +2431,24 @@
   // Sahifa ochilganda chaqiriladi: SW'ni darhol o'rnatamiz, shunda film
   // birinchi ochilganda kutish bo'lmaydi.
   function init() {
-    if (!('serviceWorker' in navigator)) return;
-    // Faqat O'RNATAMIZ — reload qilmaymiz. Foydalanuvchi saytga kirishi
-    // bilan sahifasi sakramasligi uchun. To'liq tayyorlash (va kerak bo'lsa
-    // bir marta reload) film ochilganda ensureWorker() orqali bajariladi.
-    registerWorker().catch(function () { /* film ochilganda qayta uriniladi */ });
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      // Faqat O'RNATAMIZ — reload qilmaymiz. Foydalanuvchi saytga kirishi
+      // bilan sahifasi sakramasligi uchun. To'liq tayyorlash (va kerak bo'lsa
+      // bir marta reload) film ochilganda ensureWorker() orqali bajariladi.
+      registerWorker().catch(function () { /* film ochilganda qayta uriniladi */ });
+    } catch (e) {}
   }
 
   // Hover-preview uchun SW'ni "isitamiz": o'rnatamiz va sahifani
   // boshqarishini ta'minlaymiz — RELOAD QILMASDAN. Shunda hover paytida
   // `swCtl()` darhol tayyor bo'ladi va video kutmasdan boshlanadi.
   function warm() {
-    if (!('serviceWorker' in navigator)) return Promise.resolve(false);
+    try {
+      if (!('serviceWorker' in navigator)) return Promise.resolve(false);
+    } catch(e){ return Promise.resolve(false); }
     return registerWorker().then(function (reg) {
-      if (navigator.serviceWorker.controller) return true;
+      try { if (getSwController()) return true; } catch(e){}
       try { if (reg && reg.active) reg.active.postMessage({ type: 'claim' }); } catch (e) {}
       return waitForController(2500);
     }).catch(function () { return false; });

@@ -25,6 +25,12 @@ require_once __DIR__ . '/../includes/TgPull.php';
 set_time_limit(0);
 ini_set('memory_limit', '-1');
 
+// Sessiya qulfini darhol bo'shatamiz — segmentlar PARALLEL so'raladi,
+// qulf esa ularni ketma-ket qilib qo'yardi (o'nalab soniya kutish).
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 function hlsErr($msg, $code = 502) {
     @http_response_code($code);
     header('Content-Type: text/plain; charset=utf-8');
@@ -168,6 +174,35 @@ if ($key !== '' && $seg !== '') {
 }
 
 // ===========================================================================
+// (0.1) ISHGA TUSHIRISH CHEKLOVI — DoS/disk to'ldirishga qarshi
+// ===========================================================================
+// Muammo: har bir yangi manba ffmpeg + MTProto yuklab olishni boshlaydi.
+// Cheklovsiz endpoint orqali kimdir yuzlab turli `?url=` yuborib, diskni
+// to'ldirishi yoki CPU'ni band qilishi mumkin edi.
+//
+// Yechim: bitta IP 30 soniyada ko'pi bilan BITTA yangi worker ishga
+// tushira oladi. Tayyor playlist/segmentlar bu cheklovga tushmaydi
+// (ular keshdan beriladi) — ya'ni tomoshabin tezligi pasaymaydi.
+$HLS_RL_SEC = 30;
+
+function hlsThrottle() {
+    global $HLS_RL_SEC;
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+    if (!is_dir(HLS_CACHE_DIR)) {
+        @mkdir(HLS_CACHE_DIR, 0777, true);
+    }
+    $file = HLS_CACHE_DIR . '/.rate_' . substr(sha1($ip), 0, 16);
+    $now  = time();
+    $last = is_file($file) ? (int) @file_get_contents($file) : 0;
+    if ($last > 0 && ($now - $last) < $HLS_RL_SEC) {
+        @header('Retry-After: ' . max(1, $HLS_RL_SEC - ($now - $last)));
+        hlsErr('Juda ko\'p so\'rov. Iltimos, ' . $HLS_RL_SEC . ' soniyadan keyin qayta urinib ko\'ring.', 429);
+    }
+    @file_put_contents($file, (string) $now);
+    @chmod($file, 0666);
+}
+
+// ===========================================================================
 // (1) PLAYLIST
 // ===========================================================================
 $json = (string) input('json', '', 8) === '1';
@@ -195,6 +230,16 @@ if ($rawUrl !== '') {
 
 $src = null; // [content_id, episode_id, url]
 if ($rawUrl !== '') {
+    // XAVFSIZLIK: ixtiyoriy havola (?url=...) faqat admin uchun.
+    //
+    // Nima uchun: bu manzil istalgan t.me postini MTProto orqali yuklab,
+    // ffmpeg bilan transkodlaydi — ya'ni server resursini ishlatadi.
+    // api/live.php ham xuddi shu siyosatni yuritadi (u yerda butun
+    // endpoint admin-only). Katalog (id/episode) manbalari esa ochiq
+    // qoladi — oddiy tomoshabin ular orqali film ochadi.
+    if (!$auth->isAdmin()) {
+        hlsErr('Ixtiyoriy havola faqat admin uchun. Filmni katalogdan oching.', 403);
+    }
     if (!TgPull::parseUrl($rawUrl)) {
         hlsErr('Havola t.me/telegram.me ko\'rinishida emas', 400);
     }
@@ -256,6 +301,10 @@ $ensureStarted = function () use ($metaFile, $src, $key) {
         }
     }
     if ($needStart) {
+        // Yangi ish boshlanmoqda — IP bo'yicha tezlik cheklovi.
+        // 429 bo'lsa skript shu yerda tugaydi; flock PHP tomonidan
+        // avtomatik bo'shatiladi (jarayon o'lganda).
+        hlsThrottle();
         ftruncate($fh, 0);
         rewind($fh);
         fwrite($fh, json_encode([

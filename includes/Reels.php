@@ -1035,6 +1035,86 @@ class Reels {
         return $out;
     }
 
+    /**
+     * Foydalanuvchining obunachilari va kuzatilayotganlari soni.
+     * Profil sarlavhasidagi "Kuzatuvchilar / Kuzatilayotgan" uchun.
+     */
+    public function followCounts($userId) {
+        $userId = (int) $userId;
+        if ($userId <= 0) {
+            return ['followers' => 0, 'following' => 0];
+        }
+        $a = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS c FROM user_follows WHERE following_id = ?",
+            [$userId]
+        );
+        $b = $this->db()->fetchOne(
+            "SELECT COUNT(*) AS c FROM user_follows WHERE follower_id = ?",
+            [$userId]
+        );
+        return [
+            'followers' => (int) ($a['c'] ?? 0),
+            'following' => (int) ($b['c'] ?? 0),
+        ];
+    }
+
+    /**
+     * Kuzatuvchilar yoki kuzatilayotganlar RO'YXATI (Instagram uslubi).
+     *
+     * @param string $which    'followers' yoki 'following'
+     * @param int    $viewerId ko'ruvchi — har bir qatordagi "Kuzatish" holati
+     *                         uchun (o'zini ko'rsatmaymiz).
+     */
+    public function followList($userId, $which, $viewerId = 0, $limit = 40, $offset = 0) {
+        $userId = (int) $userId;
+        $limit  = max(1, min(100, (int) $limit));
+        $offset = max(0, (int) $offset);
+        if ($userId <= 0) {
+            return [];
+        }
+
+        // Ikki yo'nalish ham BIR XIL ustunlarni qaytaradi — farq faqat
+        // qaysi tomon bo'yicha bog'lanishda (follower_id / following_id).
+        $joinOn  = $which === 'followers' ? 'uf.follower_id'  : 'uf.following_id';
+        $whereOn = $which === 'followers' ? 'uf.following_id' : 'uf.follower_id';
+
+        $rows = $this->db()->fetchAll(
+            "SELECT u.id, u.first_name, u.last_name, u.username, u.avatar, u.is_private
+             FROM user_follows uf
+             JOIN users u ON u.id = $joinOn
+             WHERE $whereOn = ?
+             ORDER BY uf.created_at DESC
+             LIMIT $limit OFFSET $offset",
+            [$userId]
+        );
+        if (!$rows) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($rows as $r) {
+            $ids[] = (int) $r['id'];
+        }
+
+        $viewerId  = (int) $viewerId;
+        $following = $viewerId > 0 ? $this->followingMap($ids, $viewerId) : [];
+
+        $out = [];
+        foreach ($rows as $r) {
+            $id = (int) $r['id'];
+            $out[] = [
+                'id'        => $id,
+                'full_name' => trim(((string) ($r['first_name'] ?? '')) . ' ' . ((string) ($r['last_name'] ?? ''))),
+                'username'  => (string) ($r['username'] ?? ''),
+                'avatar'    => (string) ($r['avatar'] ?? ''),
+                'private'   => (int) ($r['is_private'] ?? 0) === 1,
+                'is_me'     => $viewerId > 0 && $id === $viewerId,
+                'following' => !empty($following[$id]),
+            ];
+        }
+        return $out;
+    }
+
     /** Saqlashni o'zgartirish (toggle). */
     public function toggleSave($reelId, $userId) {
         return $this->toggleFlag('reel_saves', 'saves_count', $reelId, $userId, 'saved', 'saves');

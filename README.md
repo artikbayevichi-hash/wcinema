@@ -333,3 +333,88 @@ Sozlash (bir marta, ~5 daqiqa):
 | Reels stream 403 | Reel tasdiqlanmagan yoki rad etilgan |
 | 428 `need_start` | Botga `/start` yuboring |
 | O'chirilganda fayl diskda qolib ketaveradi | Windows'da qisqa vaqt fayl qulflanishi mumkin — `Reels::unlinkWithRetry` buni hal qiladi |
+
+---
+
+## 🔐 Brauzer sessiyasi (imzolangan cookie) — 2026-10-21
+
+Ilgari joriy foydalanuvchi har so'rovda `tg_me` JSON'i bilan aniqlanardi.
+Bu **har kimga** boshqa odamning Telegram ID'sini yozib, uning nomidan ish
+qilish imkonini berardi (DM, bloklash, layk, yuklash).
+
+Endi:
+
+| Qism | Vazifa |
+|---|---|
+| `includes/ClientSessions.php` | tokenni yaratadi, bazada faqat SHA-256 hash saqlaydi, HttpOnly cookie beradi |
+| `api/client-session.php` | sessiya berish (isbot: `initData` HMAC yoki bot tasdig'i) / holat / logout |
+| `clientUserId()` (`includes/bootstrap.php`) | avval cookie'ni tekshiradi, keyin (moslik rejimida) `tg_me` |
+
+Cookie: `wc_cs`, HttpOnly, SameSite=Lax, 30 kun. Jadval: `client_sessions`
+(`migrate-client-sessions.sql`; klass o'zi ham `CREATE TABLE IF NOT EXISTS`
+bilan yaratadi).
+
+**Sozlama** (`.env`):
+
+```env
+CLIENT_SESSION_DAYS=30
+TG_TRUST_CLIENT_ID=1   # 1 = eski `tg_me` ham qabul (moslik), 0 = QAT'IY
+```
+
+`TG_TRUST_CLIENT_ID=0` — production uchun tavsiya etiladi: u holda faqat
+imzolangan sessiya ishlaydi. Buning uchun login oqimi token olishi shart
+(`tg-stream.js` → `registerServerSession()`, yoki bot orqali `/start auth_…`).
+
+## ⚡ Video tezligi
+
+`includes/perf-head.php` — `index.php`, `watch.php`, `reels.php` ga ulanadi:
+
+- `preconnect` → `venus.web.telegram.org`, `api.telegram.org`,
+  `cdn.telesco.pe`, `telesco.pe` (va sozlangan Cloudflare Worker) —
+  DNS/TCP/TLS videoning birinchi kadriga qadar emas, HTML parse vaqtida
+  ochiladi;
+- `preload` sahifa posterini yuklaydi — thumbnail darhol ko'rinadi;
+- **Service Worker HTML parse paytida** ro'yxatdan o'tadi (bundle'dan
+  oldin) — birinchi ochilishdagi "reload kutish" deyarli yo'qoladi.
+
+`index.php` qo'shimcha: GramJS bundle'i `prefetch` (bo'sh vaqtda) —
+kartaga bosganda 735 KB allaqachon HTTP keshda.
+
+**`run()` (tg-stream.js) — parallel ishga tushirish.** Ilgari ketma-ket edi:
+
+```
+SW o'rnatish (0.3–1 s) → bundle 735 KB (0.5–2 s) → WSS connect → getMe → findDoc
+```
+
+Endi:
+
+```
+SW o'rnatish  ∥  bundle + WSS connect
+getMe         ∥  findDoc (fon rejimida — 1 RTT tejaladi)
+```
+
+Ya'ni sovuq ochilishda ~1–2 s + ~100–150 ms tejaladi. O'lchash:
+`watch.php?c=1&tgdebug` (yoki `localStorage.wc_tg_debug=1`) — tepada
+`[WC-TG] run … connect … findDoc …` lentasi chiqadi.
+
+**GramJS bundle — `<script>` + native gzip (2026-10-21).** Ilgari bundle
+`fetch` + `DecompressionStream` + `blob:` URL orqali yuklanardi: 5.3 MB matn
+main thread'da ochilardi va **har ochilishda qayta parse** qilinardi (blob
+URL har safar yangi → V8 kod keshisiz). Endi `.htaccess` `.gz` faylni
+`Content-Type: application/javascript` + `Content-Encoding: gzip` bilan
+beradi, sahifa esa uni oddiy `<script src>` bilan chaqiradi:
+
+- gzip'ni brauzer fon oqimida ochadi;
+- URL barqaror → **V8 kod keshi** ishlaydi, takroriy ochilishda parse
+  ~300–800 ms dan ~0 ga tushadi.
+
+**Kanal entity keshi.** `findDoc` endi kanalning `id` + `accessHash` ini
+`sessionStorage` da saqlaydi (`wc_tg_peer_v1`): takroriy ochilishda
+`resolveUsername` RTT si yo'q — ~150–300 ms tejaladi. Kesh eskirsa, xato
+jimgina o'tkazib yuboriladi va odatdagi yo'l ishlaydi.
+
+**Sessiya qulfi.** `api/stream.php`, `api/live.php`, `api/hls.php` boshida
+`session_write_close()` — oqim davomida foydalanuvchining boshqa so'rovlari
+(progress, bildirishnoma) bloklanmaydi. `stream.php` bo'laklari 8 KB → 256 KB.
+
+

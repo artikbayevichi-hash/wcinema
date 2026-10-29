@@ -327,7 +327,9 @@
         }
         if (textFieldType(tag, el)) return false;
         // `<a>` va `<button>` brauzer o'zi bosadi; boshqalar uchun click.
-        if (tag !== 'A' && tag !== 'BUTTON') {
+        // preventDefault() brauzerning o'z "Enter = bosish" harakatini bekor qiladi,
+        // shuning uchun <a> va <button> ham shu yerda bosiladi (aks holda Enter ishlamasdi).
+        if (true) {
             try { el.click(); } catch (e) {}
         }
         return true;

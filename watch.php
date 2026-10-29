@@ -231,7 +231,10 @@ $NAV_ACTIVE = 'home';
     <link rel="stylesheet" href="assets/css/tg-stream.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-stream.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/tg-format.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-format.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/voice.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/voice.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/player/player.css?v=<?php echo @filemtime(__DIR__ . '/assets/player/player.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/watch.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/watch.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/css/tv-watch.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tv-watch.css') ?: 1; ?>">
+    <link rel="stylesheet" href="assets/css/uz-loader.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/uz-loader.css') ?: 1; ?>">
     <?php /* GramJS bundle'ni OLDINDAN yuklash (735 KB siqilgan).
 
         Bu sahifadagi eng katta va eng sekin kutiladigan manba. Odatda u
@@ -499,6 +502,15 @@ $NAV_ACTIVE = 'home';
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script>
+(function(){
+  function send(msg, stack){
+    try { fetch('assets/logerr.php', {method:'POST',body:msg+'\n'+(stack||'')}); } catch(e){}
+  }
+  window.addEventListener('error', function(e){ send('ERROR: ' + (e.message||'') + ' @ ' + (e.filename||'') + ':' + (e.lineno||'') + ':' + (e.colno||''), e.error && e.error.stack); });
+  window.addEventListener('unhandledrejection', function(e){ var r=e.reason; send('REJECT: ' + (r && (r.message||r.errorMessage||String(r))), r && r.stack); });
+})();
+</script>
+<script>
     // Telegram quvurini SHU YERDA — qolgan skriptlardan OLDIN — qizdiramiz.
     //
     // Nima uchun aynan bu joy: videoni ochadigan `watch.js` `DOMContentLoaded`
@@ -557,6 +569,7 @@ $NAV_ACTIVE = 'home';
 <?php /* `tg-chat.js` bu sahifada KERAK EMAS - chat bloki olib tashlandi
          (chat alohida `chat.php` sahifasida). Skriptni yuklamaslik tezlik
          uchun ham foyda: yana bir katta fayl (telegram ulanishlari yo'q). */ ?>
-<script src="assets/js/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/player.js') ?: 1; ?>"></script>
+<script src="assets/player/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/player/player.js') ?: 1; ?>"></script>
 <script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
 <script src="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>"></script>
+<script src="assets/js/tv-watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tv-watch.js') ?: 1; ?>"></script>

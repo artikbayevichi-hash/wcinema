@@ -29,6 +29,52 @@
 
 .st-main { max-width: 680px; margin: 0 auto; padding: 16px 14px 0; }
 
+/* ---------------------------------------- 1.5 PROFIL KARTASI (hero)
+   Instagram sozlamalar sahifasidagi yuqori karta: doiraviy avatar,
+   ism + @username va o'ngda "Profil" tugmasi. */
+.st-hero {
+    display: flex; align-items: center; gap: 13px;
+    padding: 14px;
+    margin-bottom: 22px;
+    background: linear-gradient(135deg, rgba(42, 171, 238, .13), rgba(151, 92, 255, .10) 55%, transparent);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+}
+.st-hero-av {
+    flex: 0 0 auto; position: relative;
+    width: 62px; height: 62px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--card-2); overflow: hidden;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(42, 171, 238, .55);
+    font-size: 24px; font-weight: 800; color: var(--text);
+}
+.st-hero-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.st-hero-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.st-hero-name {
+    font-size: 17px; font-weight: 800; line-height: 1.25;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.st-hero-user {
+    font-size: 13px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.st-hero-btn {
+    flex: 0 0 auto;
+    padding: 8px 14px; border-radius: 10px;
+    background: var(--card-2); border: 1px solid var(--line);
+    color: var(--text); font-size: 13px; font-weight: 700;
+    text-decoration: none;
+    transition: background .15s ease, transform .12s ease, border-color .15s ease;
+}
+.st-hero-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.st-hero-btn:active { transform: scale(.96); }
+
+@media (max-width: 420px) {
+    .st-hero { padding: 12px; gap: 11px; }
+    .st-hero-av { width: 54px; height: 54px; }
+    .st-hero-name { font-size: 16px; }
+}
+
 /* ------------------------------------------------------------- 2. BO'LIM */
 .st-sec { margin-bottom: 22px; }
 .st-sec-head {
