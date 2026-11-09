@@ -749,7 +749,7 @@
         // ---- like
         const like = el.querySelector('#rLike_' + id);
         if (like) like.onclick = async () => {
-            if (!myTgId()) { location.href = 'login.php'; return; }
+            if (!myTgId()) { location.href = '1stlogin.php?next=' + encodeURIComponent(location.pathname + location.search); return; }
             like.classList.add('busy');
             try {
                 const d = await api('api/reels.php', {
@@ -806,7 +806,7 @@
 
     // ---------------------------------------------------------------- like'dan
     async function toggleSave(r, el) {
-        if (!myTgId()) { location.href = 'login.php'; return; }
+            if (!myTgId()) { location.href = '1stlogin.php?next=' + encodeURIComponent(location.pathname + location.search); return; }
         try {
             const d = await api('api/reels.php', {
                 method: 'POST',
@@ -820,7 +820,7 @@
     }
 
     async function toggleRepost(r, el) {
-        if (!myTgId()) { location.href = 'login.php'; return; }
+            if (!myTgId()) { location.href = '1stlogin.php?next=' + encodeURIComponent(location.pathname + location.search); return; }
         try {
             const d = await api('api/reels.php', {
                 method: 'POST',
@@ -836,7 +836,7 @@
     }
 
     async function toggleFollow(r, btn) {
-        if (!myTgId()) { location.href = 'login.php'; return; }
+            if (!myTgId()) { location.href = '1stlogin.php?next=' + encodeURIComponent(location.pathname + location.search); return; }
         btn.classList.add('busy');
         try {
             const d = await api('api/reels.php', {

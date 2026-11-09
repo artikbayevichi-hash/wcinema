@@ -358,12 +358,6 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
     if ($releaseYear > 0 && ($releaseYear < 1895 || $releaseYear > 2100)) {
         fail('Yil noto‘g‘ri (1895-2100)', 400);
     }
-    $rating = (float) input('rating', '0', 10);
-    if ($rating < 0 || $rating > 10) {
-        fail('Baholash 0-10 oralig‘ida', 400);
-    }
-
-    $duration = max(0, inputInt('duration'));
     $status   = in_array(input('status', 'published', 20), ['draft', 'published', 'archived'], true)
         ? input('status', 'published', 20) : 'published';
 
@@ -386,18 +380,16 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         'is_series'    => $isSeries,
         'description'  => input('description', '', 5000) ?: null,
         'poster'       => input('poster', '', 500) ?: null,
-        'banner_url'   => input('banner_url', '', 500) ?: null,
         'release_year' => $releaseYear ?: null,
-        'rating'       => $rating,
-        'duration'     => $duration ?: null,
-        'studio'       => input('studio', '', 255) ?: null,
-        'director'     => input('director', '', 255) ?: null,
-        'actors'       => input('actors', '', 2000) ?: null,
-        'country'      => input('country', '', 100) ?: null,
-        'language'     => input('language', '', 50) ?: null,
         'status'       => $status,
         'total_episodes' => max(0, inputInt('total_episodes')),
     ];
+
+    // Davomiylik endi foydalanuvchidan so‘ralmaydi; mavjud qiymatni saqlaymiz.
+    // Keyinchalik player metadata orqali avtomatik aniqlangan qiymat alohida yoziladi.
+    if (isset($_POST['duration'])) {
+        $fields['duration'] = max(0, inputInt('duration')) ?: null;
+    }
 
     // Ixtiyoriy yangi maydonlar (faqat ustun mavjud va forma yuborgan bo'lsa)
     foreach (existingCols($db, 'content', ['original_title' => 255, 'genres' => 500, 'trailer_url' => 500]) as $k => $len) {
@@ -411,10 +403,9 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         }
     }
 
-    // Poster bo'sh bo'lsa — video URL (t.me post) ni poster manzili qilib
-    // qo'yamiz. Rasm SERVERGA YUKLAB OLINMAYDI: ko'rsatish paytida
-    // Catalog::posterSrc() uni api/tg-resolve.php?mode=img ga o'giradi,
-    // u esa CDN rasmiga 302 qaytaradi. Shu bilan diskka rasm yozilmaydi.
+    // Poster bo'sh bo'lsa — Telegram video postining preview manzilini
+    // vaqtincha olamiz. Keyingi blok uni uploads/posters/ ichiga saqlaydi,
+    // shuning uchun Telegram CDN URL muddati tugasa ham poster ishlaydi.
     if (empty($fields['poster'])) {
         $srcUrl = trim(input('first_episode_url', '', 1000));
         if ($srcUrl === '' && $action === 'update_content') {
@@ -431,10 +422,28 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
                 }
             }
         }
-        if ($srcUrl !== ''
+    if ($srcUrl !== ''
             && preg_match('#(^|\.)(t\.me|telegram\.me)$#i',
                 (string) parse_url($srcUrl, PHP_URL_HOST))) {
             $fields['poster'] = $srcUrl;
+        }
+    }
+
+    // Telegram post/CDN manzillari vaqtinchalik bo‘lishi yoki hotlinkni
+    // bloklashi mumkin. Saqlash vaqtida posterning lokal nusxasini olamiz.
+    // Poster berilmagan bo‘lsa, yuqoridagi first_episode_url’dan Telegram
+    // preview-kadr olinadi — bu video uchun avtomatik poster bo‘ladi.
+    if (!empty($fields['poster'])) {
+        $posterHost = strtolower((string) parse_url((string) $fields['poster'], PHP_URL_HOST));
+        if (preg_match('#(^|\.)(t\.me|telegram\.me|telesco\.pe|cdn-telegram\.org)$#i', $posterHost)) {
+            try {
+                $localPoster = (new TgResolve())->downloadImage((string) $fields['poster']);
+                if ($localPoster) {
+                    $fields['poster'] = $localPoster;
+                }
+            } catch (Throwable $e) {
+                error_log('[content-admin] Telegram poster: ' . $e->getMessage());
+            }
         }
     }
 
@@ -448,8 +457,9 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         // sifatida darhol saqlaymiz. Anime/Serial'da esa video keyin
         // qismlar bo'limida qo'shiladi (bu maydon bo'sh keladi).
         $firstUrl = trim(input('first_episode_url', '', 1000));
+        $episodeId = 0;
         if ($firstUrl !== '') {
-            $db->insert('episodes', [
+            $episodeId = (int) $db->insert('episodes', [
                 'content_id'     => (int) $id,
                 'season'         => 1,
                 'episode_number' => 1,
@@ -459,7 +469,7 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
                 'duration'       => max(0, inputInt('first_episode_duration')) ?: null,
             ]);
         }
-        contentOk('Kontent yaratildi', ['id' => $id]);
+        contentOk('Kontent yaratildi', ['id' => $id, 'episode_id' => $episodeId]);
     } else {
         $cid = inputInt('id');
         $exists = $cid > 0 ? $db->fetchOne("SELECT id FROM content WHERE id = ?", [$cid]) : null;
@@ -561,21 +571,23 @@ if (in_array($action, ['add_episode', 'update_episode'], true)) {
         'episode_number' => $num,
         'title'          => input('title', '', 255) ?: ('Qism ' . $num),
         'description'    => input('description', '', 2000) ?: null,
-        'thumbnail'      => input('thumbnail', '', 500) ?: null,
         'video_type'     => $type,
         'video_url'      => $url ?: null,
-        'video_url_720p' => input('video_url_720p', '', 1000) ?: null,
-        'video_url_1080p'=> input('video_url_1080p', '', 1000) ?: null,
-        'duration'       => max(0, inputInt('duration')) ?: null,
         'is_premium'     => in_array(input('is_premium', '0', 4), ['1', 'on', 'true', 'yes'], true) ? 1 : 0,
     ];
+    if (isset($_POST['duration'])) {
+        $fields['duration'] = max(0, inputInt('duration')) ?: null;
+    }
 
-    foreach (['video_url', 'video_url_720p', 'video_url_1080p', 'thumbnail'] as $k) {
+    foreach (['video_url'] as $k) {
         if (!empty($fields[$k])) {
             $fields[$k] = cleanUrl($fields[$k], $k);
         }
     }
-    foreach (existingCols($db, 'episodes', ['subtitle_url' => 500, 'audio_lang' => 30]) as $k => $len) {
+    foreach (existingCols($db, 'episodes', [
+        'video_url_720p' => 1000, 'video_url_1080p' => 1000,
+        'thumbnail' => 500, 'subtitle_url' => 500, 'audio_lang' => 30
+    ]) as $k => $len) {
         if (isset($_POST[$k])) {
             $v = input($k, '', $len);
             $fields[$k] = $v !== '' ? ($k === 'subtitle_url' ? cleanUrl($v, $k) : $v) : null;

@@ -83,7 +83,12 @@ if ($q !== '' && (mb_strlen($q) >= 2 || ctype_digit($q))) {
         $reels[] = [
             'id'              => (int) $r['id'],
             'title'           => $r['title'] ?: ($r['content_title'] ?? 'Reels'),
-            'poster'          => $r['poster'] ?: null,
+            'poster'          => Catalog::resolvePoster(
+                $r['poster'] ?: null,
+                $r['title'] ?: ($r['content_title'] ?? 'Reels'),
+                'reels',
+                'Reels'
+            ),
             'views'           => (int) $r['views_count'],
             'likes'           => (int) $r['likes_count'],
             'author_id'       => $r['author_id'] ? (int) $r['author_id'] : null,

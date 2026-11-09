@@ -596,7 +596,7 @@ html.tv .ig-ico { width: 30px; height: 30px; }
 .ig-sprof-info span { font-size: 12.5px; color: var(--muted); }
 
 @media (max-width: 999px) {
-    .ig-search-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+    .ig-search-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 }
 
 /* ==========================================================================
@@ -897,3 +897,90 @@ html.tv .ig-ico { width: 30px; height: 30px; }
     .ig-ntf-row { padding: 12px 14px; }
 }
 
+@media (max-width: 560px) {
+    .ig-search-bar { padding: 10px 12px; gap: 7px; }
+    .ig-search-body { padding: 14px 12px calc(28px + env(safe-area-inset-bottom, 0px)); }
+    .ig-search-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .ig-sres-title { font-size: 13px; line-height: 1.25; }
+}
+
+
+/* ---------------- Qidiruv: so‘nggi so‘rovlar ---------------- */
+.ig-search-recent {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding: 0 0 16px;
+}
+.ig-search-recent[hidden] { display: none; }
+.ig-recent-chip {
+    min-height: 36px; padding: 7px 13px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--card); color: var(--text);
+    font: inherit; font-size: 13px; cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+}
+.ig-recent-chip:hover, .ig-recent-chip:focus-visible {
+    background: var(--card-2); border-color: var(--accent);
+}
+@media (max-width: 560px) {
+    .ig-search-recent { gap: 7px; padding-bottom: 14px; }
+    .ig-recent-chip { min-height: 38px; font-size: 12.5px; }
+}
+
+/* ---------------- Donat: doimiy, ko'zga tashlanadigan global tugma ---------------- */
+.donate-fab {
+    position: fixed; right: max(22px, env(safe-area-inset-right, 0px));
+    bottom: calc(22px + env(safe-area-inset-bottom, 0px)); z-index: 450;
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+    min-height: 48px; padding: 0 19px 0 15px;
+    border: 1px solid rgba(255,255,255,.2); border-radius: 999px;
+    background: linear-gradient(135deg, #ff6687, #e83b68);
+    box-shadow: 0 10px 30px rgba(232,59,104,.32), 0 3px 10px rgba(0,0,0,.34);
+    color: #fff; font: inherit; font-size: 14px; font-weight: 800;
+    letter-spacing: .15px; cursor: pointer;
+    transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.donate-fab:hover { transform: translateY(-2px); filter: brightness(1.07); box-shadow: 0 13px 34px rgba(232,59,104,.4), 0 4px 12px rgba(0,0,0,.35); }
+.donate-fab:active { transform: translateY(0) scale(.97); }
+.donate-fab-icon { width: 22px; height: 22px; display: grid; place-items: center; }
+.donate-fab-icon .ig-svg { width: 21px; height: 21px; fill: currentColor; stroke: currentColor; }
+.donate-fab:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.donate-dialog { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; padding: 18px; }
+.donate-dialog[hidden] { display: none; }
+.donate-backdrop { position: absolute; inset: 0; background: rgba(4, 6, 11, .78); backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
+.donate-panel {
+    position: relative; width: min(100%, 440px); padding: 30px 26px 22px;
+    border: 1px solid rgba(255, 255, 255, .09); border-radius: 24px;
+    background: radial-gradient(ellipse at 50% -18%, rgba(255, 93, 126, .2), transparent 48%), #171b25;
+    box-shadow: 0 28px 90px rgba(0, 0, 0, .62); text-align: center;
+    animation: donatePop .2s ease-out;
+}
+@keyframes donatePop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+.donate-x {
+    position: absolute; top: 12px; right: 12px; width: 36px; height: 36px;
+    border: 1px solid var(--line); border-radius: 50%; background: rgba(255,255,255,.04);
+    color: var(--text); font-size: 25px; line-height: 1; cursor: pointer;
+}
+.donate-heart { width: 62px; height: 62px; margin: 0 auto 16px; display: grid; place-items: center; border-radius: 19px; background: rgba(255, 101, 133, .13); color: #ff7890; }
+.donate-heart .ig-svg { width: 32px; height: 32px; fill: currentColor; stroke: currentColor; }
+.donate-kicker { color: #ff9caf; font-size: 11px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; }
+.donate-panel h2 { margin-top: 8px; color: #f4f6fb; font-size: 23px; line-height: 1.25; }
+.donate-description { max-width: 340px; margin: 10px auto 20px; color: #aeb7c7; font-size: 14px; line-height: 1.6; }
+.donate-status { display: flex; gap: 11px; align-items: flex-start; padding: 14px; border: 1px solid rgba(255, 176, 32, .19); border-radius: 15px; background: rgba(255, 176, 32, .07); text-align: left; }
+.donate-status-dot { flex: 0 0 9px; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: #ffb020; box-shadow: 0 0 12px rgba(255, 176, 32, .35); }
+.donate-status strong { display: block; color: #ffe1a2; font-size: 13px; }
+.donate-status p { margin-top: 4px; color: #c0b8a7; font-size: 12px; line-height: 1.5; }
+.donate-privacy { margin: 14px 0 16px; color: #8993a5; font-size: 11.5px; line-height: 1.45; }
+.donate-disabled, .donate-dismiss { width: 100%; min-height: 44px; border-radius: 12px; font: inherit; font-size: 13px; font-weight: 700; }
+.donate-disabled { border: 1px solid #363b48; background: #282d38; color: #8d96a6; cursor: not-allowed; }
+.donate-dismiss { margin-top: 9px; border: 0; background: transparent; color: #d7dce6; cursor: pointer; }
+.donate-dismiss:hover { background: rgba(255,255,255,.05); }
+.donate-x:focus-visible, .donate-dismiss:focus-visible, .donate-nav-trigger:focus-visible, .donate-mobar-trigger:focus-visible { outline: 2px solid #ff7890; outline-offset: 2px; }
+body.donate-open { overflow: hidden; }
+@media (max-width: 560px) {
+    .donate-fab { right: 14px; bottom: calc(var(--ig-tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); min-height: 46px; padding: 0 17px 0 14px; }
+    .donate-dialog { align-items: end; padding: 10px; }
+    .donate-panel { width: 100%; padding: 28px 20px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 18px 18px; }
+    .donate-panel h2 { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) { .donate-fab, .donate-panel { animation: none; transition: none; } }

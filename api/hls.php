@@ -169,6 +169,14 @@ if ($key !== '' && $seg !== '') {
     header('Content-Type: video/mp2t');
     header('Cache-Control: public, max-age=31536000, immutable');
     header('Content-Length: ' . (int) filesize(HLS_CACHE_DIR . '/' . $key . '/' . $file));
+    // Nginx production'da segmentni PHP-FPM ichida readfile() bilan
+    // jo'natmaymiz: internal alias faylni Nginx'ning o'zi uzatadi. Bu uzoq
+    // video download paytida PHP workerlarini bo'sh qoldiradi. Apache/XAMPP
+    // va test muhiti uchun eski readfile() yo'li o'zgarishsiz qoladi.
+    if ((string) ($_SERVER['NGINX_INTERNAL_MEDIA'] ?? '') === '1') {
+        header('X-Accel-Redirect: /_internal_hls/' . rawurlencode($key) . '/' . rawurlencode($file));
+        exit;
+    }
     readfile(HLS_CACHE_DIR . '/' . $key . '/' . $file);
     exit;
 }
@@ -299,6 +307,12 @@ $ensureStarted = function () use ($metaFile, $src, $key) {
         if (in_array($status, ['done', 'downloading', 'transcoding'], true)) {
             $needStart = false;
         }
+        // Xato bilan tugagan bo'lsa: 90 soniyadan keyin avtomatik qayta urinamiz.
+        // (Ilgari "error" HLS_TTL=6 soat turib qolardi va video shu vaqt ochilmasdi.
+        // Yuklab olingan source.mp4 qayta ishlatiladi — Telegram'dan qayta tortilmaydi.)
+        if ($status === 'error' && (time() - (int) ($meta['ended'] ?? 0)) > 90) {
+            $needStart = true;
+        }
     }
     if ($needStart) {
         // Yangi ish boshlanmoqda — IP bo'yicha tezlik cheklovi.
@@ -348,7 +362,9 @@ if (is_file($playlist)) {
         }
     }
     header('Content-Type: application/vnd.apple.mpegurl');
-    header('Cache-Control: public, max-age=60'); // qisqa — lekin segmentlar immutable
+    // Tayyor bo'lmaguncha playlist O'SADI (progressive) - keshlanmasin, aks holda yangi
+    // segmentlar ko'rinmay qoladi. Tayyor (done) bo'lsa qisqa kesh.
+    header($status === 'done' ? 'Cache-Control: public, max-age=60' : 'Cache-Control: no-store'); // qisqa — lekin segmentlar immutable
     echo implode("\n", $out);
     exit;
 }

@@ -60,19 +60,6 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES); ?></title>
     <?php require __DIR__ . '/includes/perf-head.php'; ?>
-    <?php
-    // GramJS bundle'ni BO'SH vaqtda oldindan yuklaymiz.
-    //
-    // Nima uchun: foydalanuvchi kartaga bosganda `watch.php` darhol 735 KB
-    // bundle'ni yuklashni kutadi. Bu yerda `prefetch` (past ustuvorlik)
-    // uni kompyuter bo'sh turganda yuklab qo'yadi — o'tish bir zumda.
-    // `as="fetch"` + `crossorigin` — `tg-stream.js` dagi fetch() bilan
-    // bir xil rejim, aks holda brauzer keshni ishlatmaydi.
-    $__bundleBase = rtrim((string) (parse_url(SITE_URL, PHP_URL_PATH) ?: ''), '/');
-    ?>
-    <link rel="prefetch" as="script"
-          href="<?php echo htmlspecialchars($__bundleBase . '/assets/js/tg-client.bundle.js.gz', ENT_QUOTES); ?>?v=<?php echo (int) (@filemtime(__DIR__ . '/assets/js/tg-client.bundle.js.gz') ?: 1); ?>">
-    <?php unset($__bundleBase); ?>
     <meta name="description" content="<?php echo htmlspecialchars($pageDesc, ENT_QUOTES); ?>">
 
     <!-- Telegram Mini App / tarmoqqa chiqarish -->
@@ -131,6 +118,7 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <main>
     <!-- ================================================= Bosh sahifa -->
     <section id="homeView">
+        <h1 class="sr-only">W CINEMA katalogi</h1>
         <!-- Yagona aralash feed: yangi qo'shilganlar birinchi, qolgani
              seed bo'yicha aralashtiriladi. Scroll bilan cheksiz yuklanadi. -->
         <div class="row">
@@ -178,19 +166,21 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 </footer>
 
 <!-- ===================================================== Modal (film/qism) -->
-<div class="modal" id="modal" hidden>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
     <div class="modal-backdrop" data-close></div>
     <div class="modal-box">
         <button class="modal-close" data-close aria-label="Yopish"><?php echo ig_svg('close'); ?></button>
+        <h2 id="modalTitle" class="sr-only">Kontent tafsilotlari</h2>
         <div id="modalBody"></div>
     </div>
 </div>
 
 <!-- ===================================================== Trimmer modal -->
-<div class="modal" id="trimModal" hidden>
+<div class="modal" id="trimModal" role="dialog" aria-modal="true" aria-labelledby="trimModalTitle" hidden>
     <div class="modal-backdrop" data-trim-close></div>
     <div class="modal-box">
         <button class="modal-close" data-trim-close aria-label="Yopish"><?php echo ig_svg('close'); ?></button>
+        <h2 id="trimModalTitle" class="sr-only">Video bo‘lagini tayyorlash</h2>
         <div id="trimBody"></div>
     </div>
 </div>

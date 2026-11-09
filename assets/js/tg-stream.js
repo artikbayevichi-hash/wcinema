@@ -4,25 +4,24 @@
  *
  * VAZIFA
  *   Saytda film bosilganda video shu joyda (modal ichida) ochiladi —
- *   t.me ga o'tib ketmaydi. Video baytlari esa BRAUZER tomonidan
- *   to'g'ridan-to'g'ri Telegram CDN dan olinadi.
+ *   t.me ga o'tib ketmaydi. Telegram media baytlari brauzer tomonidan
+ *   olinadi; Telegram CDN berilsa u ham ishlatilishi mumkin.
  *
- *   SERVERGA VIDEO YUQMAYDI. Sayt serveri faqat HTML/JS beradi
- *   (bir necha yuz KB). Minglab tomoshabin bir vaqtda ko'rsa ham
- *   saytga deyarli umuman yuk tushmaydi.
+ *   SAYT ORIGINIGA MEDIA BAYTLARI RELAY QILINMAYDI. Sayt baribir HTML,
+ *   JavaScript, API, rasmlar va autentifikatsiyani xizmat qiladi. Bu origin
+ *   video trafikini kamaytiradi, ammo nol yuk yoki minglab tomoshabin
+ *   kafolati emas.
  *
  * QANDAY ISHLAYDI (uch qatlam)
  *
- *   1) GramJS (5.3 MB) — brauzerdagi MTProto klient.
- *      Foydalanuvchi bir marta QR skanerlaydi; auth_key shu brauzerning
- *      localStorage'ida qoladi. Server kalitni HECH QACHON ko'rmaydi.
- *      (GramJS og'ir, shuning uchun faqat film birinchi marta
- *      ochilganda yuklanadi va keyin brauzer keshida saqlanadi.)
+ *   1) Teleproto — brauzerga moslab yig'ilgan MTProto klient (~600 KB gzip).
+ *      Mavjud GramJS bundle avtomatik fallback va `?tgengine=gramjs` bilan
+ *      saqlanadi. Sessiya kaliti faqat brauzer localStorage'ida qoladi.
  *
  *   2) tg-cdn-worker.js — Service Worker.
  *      `tgfile/?size=N` so'rovini ushlab, 206 Partial Content qaytaradi.
  *      U Telegram'dan o'zi so'ramaydi: kerakli baytlarni sahifadan
- *      MessageChannel orqali so'raydi. Sababi — GramJS Service Worker
+ *      MessageChannel orqali so'raydi. Sababi — Telegram SDK Service Worker
  *      muhitida ishonchsiz.
  *
  *   3) shu fayl  <video src="tgfile/?size=N">  — odatdagi HTML5 player.
@@ -60,6 +59,17 @@
   }
   function fileUrl()   { return base() + '/tgfile/'; }
 
+  // Joriy hujjat id'si — R2 prefiks keshi uchun (`?doc=`).
+  //
+  // Hujjat hali aniqlanmagan bo'lsa bo'sh satr qaytadi: Service Worker
+  // R2 ni umuman ishlatmaydi va avvalgi yo'l bilan ishlaydi. Ya'ni bu
+  // qo'shimcha hech qanday holatda oqimni buzmaydi.
+  function docQ() {
+    var id = (S.loc && S.loc.id != null) ? S.loc.id
+      : (S.doc && S.doc.id != null) ? S.doc.id : null;
+    return (id == null || id === '') ? '' : '&doc=' + encodeURIComponent(String(id));
+  }
+
   // Probe aniqlagan konteynerdan haqiqiy MIME. Brauzer shu sarlavhani
   // ko'radi: `video/mp4` deb yozib, MKV berilsa, Chrome faylni ochmaydi.
   function mimeOf(probe) {
@@ -70,8 +80,23 @@
     if (n.indexOf('MP4') !== -1 || n.indexOf('ISO') !== -1 || n === '') return 'video/mp4';
     return 'video/mp4';
   }
-  function bundleUrl()  { return base() + '/assets/js/tg-client.bundle.js'; }
-  function bundleGz()   { return bundleUrl() + '.gz'; }
+  // Qaysi bundle ishlatiladi.
+  //
+  // Teleproto bundle hozircha brauzerda yiqiladi ("process is not defined"):
+  // u Node muhiti uchun qurilgan. Shuning uchun STANDART — GramJS
+  // (`tg-client.bundle.js`), u barqaror ishlaydi. Teleproto'ni sinab ko'rish
+  // kerak bo'lsa, URL'ga `?tgengine=teleproto` qo'shiladi.
+  var legacyBundle = true;
+  try { legacyBundle = new URLSearchParams(location.search).get('tgengine') !== 'teleproto'; }
+  catch (e) { legacyBundle = true; }
+  function bundlePath(gz) {
+    var name = legacyBundle ? 'tg-client.bundle.js' : 'teleproto-client.bundle.js';
+    var path = base() + '/assets/js/' + name + (gz ? '.gz' : '');
+    var version = Number(global.__WCBUNDLEV) || 0;
+    return path + (version ? '?v=' + version : '');
+  }
+  function bundleUrl()  { return bundlePath(false); }
+  function bundleGz()   { return bundlePath(true); }
 
   // Brauzer siqilgan faylni o'zida ocha oladimi?
   // (Chrome/Edge 80+, Firefox 113+, Safari 16.4+)
@@ -87,8 +112,8 @@
   // bilan ikki klient ochilsa, ular bir-birining paketlariga aralashadi
   // va Telegram "AUTH_BYTES_INVALID" beradi.
   var S = {
-    client: null,          // GramJS TelegramClient
-    T: null,               // GramJS namespace (window.TgBundle)
+    client: null,          // joriy TelegramClient
+    T: null,               // Teleproto yoki GramJS namespace (window.TgBundle)
     chan: null,            // SW bilan bog'liq MessageChannel
     size: 0,               // joriy fayl hajmi
     doc: null,             // joriy hujjat (FileLocation uchun)
@@ -113,7 +138,10 @@
     onPlayerReady: null,   // mount(onReady) — player o'ynashga tayyor bo'lganda
     readyFired: false,     // onReady bir marta chaqirilishi uchun
     headCache: null,       // { docId: {t, bytes} } — fayl BOSHIDAGI baytlar
-    docSize: null          // { docId: bayt } — butun fayl hajmi
+    docSize: null,         // { docId: bayt } — butun fayl hajmi
+    fast: null,            // minimal MTProto klient (25 KB) — GramJS'siz oqim
+    fastBroken: false,     // tez yo'l ishlamadi → eski (GramJS) yo'lga qaytamiz
+    mountOpts: null        // joriy mount opts (tez yo'l ishlamasa qayta ishga tushirish uchun)
   };
 
   // ------------------------------------------------------------------- yordam
@@ -134,15 +162,593 @@
     return { id: Number(t.apiId) || 0, hash: String(t.apiHash || '') };
   }
 
-  // ============================================================ 1. GramJS
+  // ============================================ 1b. TEZ MTProto klient (minimal)
   //
-  // 5.3 MB. Faqat film birinchi marta ochilganda yuklanadi (sabab: boshqa
-  // foydalanuvchilar uchun bu og'ir). Yuklanish jarayoni foiz bilan
-  // ko'rsatiladi, chunki birinchi ochilish sekin bo'lishi mumkin.
+  // NIMA UCHUN:
+  //   `tg-client.bundle.js` — 5.4 MB (gzip'da 718 KB). Brauzerda parse qilish
+  //   o'lchilgan: ~570 ms (Node), mobil brauzerda ~0.8–1.4 s. U video oqimi
+  //   uchun FAQAT `upload.getFile` (baytlarni olish) ishlatiladi.
+  //
+  //   `assets/js/tg-mtproto.js` — shu vazifani ~25 KB bilan bajaradi
+  //   (teleproto/GramJS kodi asosida, `.work/tools/tg-mtproto.test.mjs` da
+  //   bayt-an-bayt tekshirilgan). Shu bilan 5.4 MB bundle umuman yuklanmaydi.
+  //
+  //   Klient Telegram DC'ga to'g'ridan-to'g'ri WebSocket orqali ulanadi —
+  //   video baytlari sayt serveridan O'TMAYDI.
+  var fastClientPromise = null;
+
+  function fastClient() {
+    if (fastClientPromise !== null) return fastClientPromise;
+    fastClientPromise = (function () {
+      try {
+        if (!global.TgFast || typeof global.TgFast.createClient !== 'function') return null;
+        var saved = loadSession();
+        if (!saved) return null;
+        var a = apiCfg();
+        if (!a.id) return null;
+        return global.TgFast.createClient({
+          apiId: a.id,
+          apiHash: a.hash,
+          session: saved,
+          deviceModel: 'W CINEMA Web',
+          systemVersion: '1.0',
+          appVersion: '1.0'
+        });
+      } catch (e) {
+        return null;
+      }
+    })();
+    return fastClientPromise;
+  }
+
+  // Ulanishni sahifa YO'KLANAYOTGAN paytda boshlaymiz — TLS handshake HTML
+  // parse qilinishi bilan PARALLEL ketadi. Video bosilganda ulanish allaqachon
+  // tayyor bo'ladi (~150–300 ms tejaladi).
+  function warmFast() {
+    var f = fastClient();
+    if (!f) return;
+    try { f.warm().catch(function () {}); } catch (e) {}
+  }
+
+  // ------------------------------------------------------- hujjat metama'lumot
+  //
+  // Hujjat joylashuvi (id / access_hash / file_reference / dc_id) — video
+  // oqimining kaliti. Uni oldindan bilamiz — GramJS bundle'i va `findDoc`
+  // RPC'si umuman kerak bo'lmaydi.
+  var DOC_META_KEY = 'wc_tg_docmeta_v1';
+  var DOC_META_TTL = 30 * 60 * 1000;      // 30 daqiqa (file_reference ~24 soat yashaydi)
+
+  function b64ToU8(b64) {
+    try {
+      var bin = atob(String(b64 || '').replace(/-/g, '+').replace(/_/g, '/'));
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    } catch (e) { return new Uint8Array(0); }
+  }
+  function u8ToB64(u8) {
+    if (!u8 || !u8.length) return '';
+    var bin = '';
+    for (var i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+    try { return btoa(bin); } catch (e) { return ''; }
+  }
+
+  // GramJS `bytes` serializer Buffer yoki string qabul qiladi; Uint8Array
+  // obyektini to'g'ridan-to'g'ri bersak "Bytes or str expected" xatosi chiqadi.
+  function gramJsBytes(value) {
+    var B = global.Buffer;
+    var bytes;
+    if (typeof value === 'string') {
+      if (B && typeof B.from === 'function') return B.from(value, 'binary');
+      return value;
+    }
+    if (value && value.type === 'Buffer' && Array.isArray(value.data)) value = value.data;
+    if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
+      bytes = new Uint8Array(value);
+    } else if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(value)) {
+      bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    } else if (Array.isArray(value)) {
+      bytes = value;
+    } else if (B && typeof B.isBuffer === 'function' && B.isBuffer(value)) {
+      return value;
+    } else {
+      throw new Error('Telegram file_reference baytlari noto\'g\'ri turda');
+    }
+    if (B && typeof B.from === 'function') return B.from(bytes);
+    // GramJS `bytes` maydoni Buffer yoki binary string qabul qiladi.
+    // File reference kichik bo'lgani uchun bir baytli satr xavfsiz zaxira.
+    var out = '';
+    for (var i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
+    return out;
+  }
+
+  function docMetaGet(key) {
+    if (!key) return null;
+    try {
+      var raw = localStorage.getItem(DOC_META_KEY);
+      if (!raw) return null;
+      var all = JSON.parse(raw);
+      var it = all && all[key];
+      // `fr` (file_reference) BO'SH bo'lsa — bu metama'lumot ISHLATILMAYDI:
+      // `upload.getFile` "FILE_REFERENCE_INVALID" bilan rad etiladi va
+      // video umuman ochilmaydi. Bunday yozuvni butunlay tashlab yuboramiz.
+      if (!it || !it.t || !it.id || !it.fr || (Date.now() - it.t) > DOC_META_TTL) return null;
+      return it;
+    } catch (e) { return null; }
+  }
+
+  function docMetaPut(key, doc) {
+    if (!key || !doc) return;
+    var vi = videoInfo(doc);
+    docMetaSave(key, {
+      t: Date.now(),
+      id: String(doc.id),
+      ah: String(doc.accessHash),
+      fr: u8ToB64(doc.fileReference),
+      dc: doc.dcId,
+      size: bytesOf(doc),
+      mime: doc.mime_type || '',
+      fn: vi.filename || '',
+      w: vi.w || 0, h: vi.h || 0, dur: vi.duration || 0
+    });
+  }
+
+  // Metama'lumotni lokal keshga yozamiz (ko'p hujjat — 40 tagacha).
+  function docMetaSave(key, meta) {
+    if (!key || !meta) return;
+    try {
+      var raw = localStorage.getItem(DOC_META_KEY);
+      var all = raw ? (JSON.parse(raw) || {}) : {};
+      all[key] = meta;
+      var keys = Object.keys(all);
+      if (keys.length > 40) {
+        keys.sort(function (a, b) { return (all[a].t || 0) - (all[b].t || 0); });
+        for (var i = 0; i < keys.length - 40; i++) delete all[keys[i]];
+      }
+      localStorage.setItem(DOC_META_KEY, JSON.stringify(all));
+    } catch (e) { /* kvota to'lgan bo'lishi mumkin — jim */ }
+  }
+
+  // Serverdagi keshdan hujjat metama'lumoti. Server uni Telegram orqali
+  // yechib, saqlaydi — brauzer esa faqat tayyor ma'lumotni oladi (taxminan
+  // 10 ms). Bu — birinchi ochilish uchun ham tez yo'lni ochadi.
+  //
+  // `file_reference` haqida (rasmiy hujjat: core.telegram.org/api/file-references):
+  //   • U AKKAUNTGA bog'liq EMAS. Server uni hujjatning JORIY
+  //     `document.file_reference` qiymati bilan solishtiradi; mos kelsa —
+  //     qaysi akkauntdan bo'lsa ham qabul qilinadi.
+  //   • U ESKIRADI (~1 soat). Eskirgan havola bilan `upload.getFile` →
+  //     `FILE_REFERENCE_EXPIRED`. Yechim: xabarni QAYTA olib, yangi
+  //     havolani olish (server buni `fresh=1` bilan qiladi).
+  //
+  // DIQQAT: agar bot olgan havola tomoshabbin akkauntida rad etilsa, bu
+  // yo'l "ishlamaydi" — lekin bu HOLATDA ham video to'g'ri ochiladi, chunki
+  // `gramFallback()` avtomatik eski (GramJS) yo'lga o'tadi va hujjatni
+  // foydalanuvchining O'Z sessiyasi bilan qayta yechadi.
+  var USE_SERVER_DOC_META = true;
+
+  function docMetaFromServer(opts, fresh) {
+    // `api/tg-doc.php` hujjatni BOT sessiyasi bilan yechadi, lekin
+    // `file_reference` akkauntga bog'liq emas — server uni hujjatning joriy
+    // qiymati bilan solishtiradi (core.telegram.org/api/file-references).
+    // Eskirgan bo'lsa `fresh=1` bilan yangisi olinadi.
+    // Agar bot ruxsatnomasi tomoshabbin akkauntida rad etilsa — `gramFallback()`
+    // avtomatik GramJS yo'liga o'tadi, video to'g'ri ochiladi.
+    if (!USE_SERVER_DOC_META) return Promise.resolve(null);
+    if (!opts || !opts.channel || !opts.post) return Promise.resolve(null);
+    var url = base() + '/api/tg-doc.php?ch=' + encodeURIComponent(opts.channel)
+            + '&post=' + encodeURIComponent(opts.post)
+            + (fresh ? '&fresh=1&_=' + Date.now() : '');
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    // 6 s: sovuq keshda server Telegram'dan hujjatni 3–8 s da yechadi.
+    // 3 s da uzib qo'ysak, brauzer 5.4 MB GramJS bundle'iga tushib qolardi —
+    // bu esa ancha SEKIN. Sokin kutish foydaliroq.
+    var timer = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) {} }, fresh ? 12000 : 6000) : null;
+    var init = { credentials: 'same-origin', cache: fresh ? 'no-store' : 'default' };
+    if (ctl) init.signal = ctl.signal;
+    return fetch(url, init)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (timer) clearTimeout(timer);
+        // `fr` bo'sh bo'lsa — server eskirgan/buzilgan keshni bergan
+        // bo'lishi mumkin. Bunday metama'lumotni ishlatmaganimizda eski
+        // (GramJS) yo'l ishlaydi.
+        if (!j || !j.ok || !j.id || !j.fr) return null;
+        return {
+          // Serverdagi kesh vaqti (havola qachon yangilangan) — eskirishni
+          // aniqlash uchun kerak. Yo'q bo'lsa — hozirgi vaqt.
+          t: Number(j.t) || Date.now(),
+          id: String(j.id),
+          ah: String(j.ah),
+          fr: String(j.fr || ''),
+          dc: j.dc,
+          size: j.size,
+          mime: j.mime || '',
+          fn: j.fn || '',
+          w: j.w || 0, h: j.h || 0, dur: j.dur || 0
+        };
+      })
+      .catch(function () {
+        if (timer) clearTimeout(timer);
+        return null;
+      });
+  }
+
+  // ---------------------------------------------------------------------------
+  // KO'PLAB VIDEO METAMA'LUMOTI (bitta server so'rovi)
+  // ---------------------------------------------------------------------------
+  //
+  // Saytga kirganda barcha videolarning hujjat ma'lumotini (id / access_hash /
+  // file_reference / dc_id) OLDINDAN olib qo'yamiz. Keyin foydalanuvchi qaysi
+  // videoni bossa ham — metama'lumoti tayyor, faqat BAYTLAR yuklanadi.
+  // GramJS bundle'i (5.4 MB) umuman kerak bo'lmaydi.
+  //
+  // Server tomonida bitta HTTP so'rovi -> kanal bo'yicha bitta Telegram RPC.
+  //
+  // `list` — [{channel: 'kanal', post: 123}, ...]
+  function prefetchMany(list) {
+    if (!USE_SERVER_DOC_META || !list || !list.length) return Promise.resolve(0);
+
+    // Allaqachon keshlanganlarni qaytarib tashlaymiz (serverga so'rov kam).
+    var need = [];
+    var seen = {};
+    for (var i = 0; i < list.length; i++) {
+      var it = list[i] || {};
+      var ch = it.channel || it.ch;
+      var post = Number(it.post || 0);
+      if (!ch || !post) continue;
+      var key = String(ch) + '/' + post;
+      if (seen[key]) continue;
+      seen[key] = 1;
+      if (docMetaGet(key)) continue;      // brauzer keshida bor
+      need.push({ ch: ch, post: post, key: key });
+    }
+    if (!need.length) return Promise.resolve(0);
+    if (need.length > 120) need = need.slice(0, 120);
+
+    var qs = [];
+    for (var k = 0; k < need.length; k++) {
+      qs.push(encodeURIComponent(need[k].ch) + ':' + need[k].post);
+    }
+    var url = base() + '/api/tg-doc.php?posts=' + qs.join(',');
+
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    // Server sovuq keshda Telegram'dan yechadi (kanal bo'yicha bitta RPC) —
+    // 20 s gacha. Bu fon ishi; bosilgan video o'z vaqtida ochiladi.
+    var timer = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) {} }, 25000) : null;
+    var init = { credentials: 'same-origin' };
+    if (ctl) init.signal = ctl.signal;
+
+    return fetch(url, init)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (timer) clearTimeout(timer);
+        if (!j || !j.ok || !j.items) return 0;
+        var n = 0;
+        for (var key in j.items) {
+          if (!Object.prototype.hasOwnProperty.call(j.items, key)) continue;
+          // Allaqachon bor yozuvni USTMA-UST qo'maymiz: GramJS orqali
+          // olingan (foydalanuvchi akkauntiga tegishli) havola ustun.
+          if (docMetaGet(key)) continue;
+          var m = j.items[key];
+          if (!m || !m.fr || !m.id) continue;
+          docMetaSave(key, {
+            t: Date.now(),
+            id: String(m.id),
+            ah: String(m.ah),
+            fr: String(m.fr),
+            dc: m.dc,
+            size: m.size,
+            mime: m.mime || '',
+            fn: m.fn || '',
+            w: m.w || 0, h: m.h || 0, dur: m.dur || 0
+          });
+          n++;
+        }
+        return n;
+      })
+      .catch(function () {
+        if (timer) clearTimeout(timer);
+        return 0;
+      });
+  }
+
+  // ---------------------------------------------------------------------------
+  // KO'PLAB VIDEO METAMA'LUMOTI — foydalanuvchining O'Z sessiyasi bilan
+  // ---------------------------------------------------------------------------
+  //
+  // Nima uchun GramJS: `file_reference` ni Telegram foydalanuvchining O'Z
+  // akkauntida beradi. Serverdagi bot sessiyasi bergan havola boshqa
+  // akkauntda ishlamaydi (MadelineProto o'z `ReferenceDatabase` ini
+  // qo'yadi — havolа har so'rovda o'zgaradi). GramJS esa Telegram'ning
+  // o'z `file_reference` ini saqlaydi — aynan shu kerak.
+  //
+  // GramJS bundle'i sayt yuklanganda allaqachon yuklanmoqda (`verify()`),
+  // shuning uchun bu bepul: kanal bo'yicha bitta RPC bilan hamma videolarning
+  // metama'lumotini olamiz va lokal keshga yozamiz. Keyin bosilgan video
+  // faqat BAYTLARINI yuklaydi (25 KB minimal klient, GramJS'siz).
+  function prefetchManyGram(list) {
+    if (!list || !list.length) return Promise.resolve(0);
+
+    var need = [];
+    var seen = {};
+    for (var i = 0; i < list.length; i++) {
+      var it = list[i] || {};
+      var ch = String(it.channel || it.ch || '').replace(/^@/, '');
+      var post = Number(it.post || 0);
+      if (!ch || !post) continue;
+      var key = ch + '/' + post;
+      if (seen[key]) continue;
+      seen[key] = 1;
+      if (docMetaGet(key)) continue;      // brauzer keshida bor
+      need.push({ ch: ch, post: post, key: key });
+    }
+    if (!need.length) return Promise.resolve(0);
+
+    return ensureSession(silentView(), { fastPlayback: true }).then(function (client) {
+      if (!client || !client.api || !client.api.channels) return 0;
+
+      // Kanal bo'yicha guruhlaymiz — bitta RPC bilan o'sha kanalning
+      // BARCHA postlari (Telegram flood himoyasi ham saqlanadi).
+      var byCh = {};
+      for (var k = 0; k < need.length; k++) {
+        var g = byCh[need[k].ch] || (byCh[need[k].ch] = []);
+        g.push(need[k]);
+      }
+
+      var saved = 0;
+      var ps = [];
+      Object.keys(byCh).forEach(function (ch) {
+        var group = byCh[ch];
+        var CHUNK = 20;   // bitta so'rovda ko'pi bilan 20 ta post
+        for (var c = 0; c < group.length; c += CHUNK) {
+          (function (chunk) {
+            ps.push(
+              client.api.channels.getMessages({
+                channel: peerOf(ch),
+                id: chunk.map(function (x) { return x.post; })
+              }).then(function (r) {
+                var msgs = (r && r.messages) || [];
+                for (var mi = 0; mi < msgs.length; mi++) {
+                  var msg = msgs[mi];
+                  if (!msg || !msg.id) continue;
+                  var doc = docOf(msg);
+                  if (!doc) continue;
+                  for (var pi = 0; pi < chunk.length; pi++) {
+                    if (Number(chunk[pi].post) === Number(msg.id)) {
+                      docMetaPut(chunk[pi].key, doc);
+                      saved++;
+                      // GramJS hujjatini RAM keshiga ham yozamiz — bosilganda
+                      // `findDoc` RPC'si kerak bo'lmaydi (video darhol ochiladi).
+                      try {
+                        var dsize = bytesOf(doc);
+                        var dloc = new S.T.Api.InputDocumentFileLocation({
+                          id: doc.id,
+                          accessHash: doc.accessHash,
+                          fileReference: doc.fileReference,
+                          thumbSize: ''
+                        });
+                        S.pvCache = S.pvCache || {};
+                        S.pvCache[chunk[pi].key] = {
+                          t: Date.now(), doc: doc, size: dsize, loc: dloc,
+                          probe: quickPlaybackProbe(doc), fromGram: true
+                        };
+                      } catch (x) { /* loc qurish muvaffaqiyatsiz bo'lsa — jim */ }
+                      break;
+                    }
+                  }
+                }
+              }).catch(function () { /* kanal ommaboy emas — jim */ })
+            );
+          })(group.slice(c, c + CHUNK));
+        }
+      });
+      return Promise.all(ps).then(function () { return saved; });
+    }).catch(function () { return 0; });
+  }
+
+  // Keshdagi metama'lumotdan GramJSga o'xshash "hujjat" obyektini yasaydi.
+  function docMetaToDoc(it) {
+    return {
+      id: it.id,
+      accessHash: it.ah,
+      fileReference: b64ToU8(it.fr),
+      dcId: it.dc,
+      size: it.size,
+      mime_type: it.mime || '',
+      attributes: [
+        { className: 'DocumentAttributeFilename', fileName: it.fn || '' },
+        { className: 'DocumentAttributeVideo', w: it.w || 0, h: it.h || 0, duration: it.dur || 0 }
+      ]
+    };
+  }
+
+  // `FILE_REFERENCE_EXPIRED` / `_INVALID` xatosimi?
+  function isFileRefErr(m) {
+    // Telegram xato nomlari: FILE_REFERENCE_EXPIRED / _EMPTY / _INVALID
+    // (ba'zi layerlarda raqamli variantlar ham bor). Kengaytirilgan qidiruv
+    // — nomi o'zgargan bo'lsa ham, bu xatolar eski yo'lga o'tishni
+    // talab qiladi.
+    return /FILE_REFERENCE/.test(String(m || ''));
+  }
+
+  // Eskirgan `file_reference` ni serverdan YANGIDAN oladi.
+  //
+  // Telegram `file_reference` ni abadiy saqlamaydi (~1 soat). Keshda turgan
+  // havola bilan `upload.getFile` chaqirilsa `FILE_REFERENCE_EXPIRED` keladi
+  // va ilgari butun oqim yiqilib, foydalanuvchiga "Qayta urinish" tugmasi
+  // chiqardi. Endi havolani yangilab, o'qishni o'zimiz davom ettiramiz.
+  //
+  // Bir vaqtda bir nechta o'qish so'rovi kelishi mumkin — shuning uchun
+  // hujjat uchun bitta umumiy promise ishlatiladi (Telegram'ga bir marta
+  // murojaat qilinadi).
+  function refreshDocLoc(opts) {
+    if (!opts || !opts.channel || !opts.post) return Promise.resolve(false);
+    var key = String(opts.channel) + '/' + Number(opts.post);
+    S.frRefresh = S.frRefresh || {};
+    if (S.frRefresh[key]) return S.frRefresh[key];
+
+    // Joriy (muvaffaqiyatsiz bo'lgan) havola — yangisi bilan solishtiramiz.
+    var cur = '';
+    try {
+      if (S.loc && S.loc.fileReference) cur = u8ToB64(S.loc.fileReference);
+    } catch (e) {}
+
+    function apply(m) {
+      if (!m || !m.fr) return false;
+      docMetaSave(key, m);
+      var doc = docMetaToDoc(m);
+      var size = bytesOf(doc) || S.size;
+      // Joriy hujjat boshqasi bo'lib qolgan bo'lsa (foydalanuvchi boshqa
+      // videoga o'tgan) — unga tegmadim.
+      if (S.doc && S.doc.id != null && String(S.doc.id) !== String(doc.id)) return false;
+      S.doc = doc;
+      S.loc = {
+        id: doc.id,
+        accessHash: doc.accessHash,
+        fileReference: doc.fileReference,
+        thumbSize: ''
+      };
+      if (size) S.size = size;
+      if (S.pvCache && S.pvCache[key]) {
+        S.pvCache[key].doc = doc;
+        S.pvCache[key].loc = S.loc;
+        S.pvCache[key].t = Date.now();
+      }
+      // Yangi havola bilan tez yo'l yana ishlaydi.
+      S.fastBroken = false;
+      return true;
+    }
+
+    // 1) Avval server KESHIDAN (tez, ~10 ms). Havolasi boshqacha bo'lsa —
+    //    demak eskirgan bo'lib, yangisi tayyor.
+    // 2) Xuddi shu bo'lsa — muammo eskirish emas. Kesh 5+ daqiqa eskirgan
+    //    bo'lsa bir marta `fresh=1` bilan urinib ko'ramiz; aks holda darhol
+    //    GramJS yo'liga o'tamiz (u TO'G'RINI yangilaydi).
+    var p = docMetaFromServer(opts, false).then(function (m) {
+      if (!m || !m.fr) return false;
+      if (m.fr !== cur) return apply(m);
+      var age = (Date.now() - (Number(m.t) || Date.now())) / 1000;
+      if (age < 300) return false;
+      return docMetaFromServer(opts, true).then(function (m2) {
+        if (m2 && m2.fr && m2.fr !== cur) return apply(m2);
+        return false;
+      });
+    }).catch(function () { return false; });
+
+    S.frRefresh[key] = p.then(function (ok) {
+      if (S.frRefresh) delete S.frRefresh[key];
+      return ok;
+    });
+    return S.frRefresh[key];
+  }
+
+  // Tez yo'l ishlamasa (masalan `file_reference` eskirgan bo'lsa) — eski
+  // (GramJS) yo'lga qaytamiz: hujjat qayta yechiladi.
+  //
+  // MUHIM: shu yerda buzilgan metama'lumot yozuvlari TOZALANADI. Aks holda
+  // `mount()` -> `run()` yana xuddi shu buzilgan `S.pvCache` yozuviga
+  // qaytadi va GramJS fallback'iga umuman chiqmaydi — video hech qachon
+  // ochilmaydi (siklik).
+  function fastFallback() {
+    if (S.fastBroken) return;
+    S.fastBroken = true;
+    try {
+      closeFastClient();
+      purgeBrokenDocMeta();
+      purgeCurrentDocMeta();
+      var node = S.mount;
+      var opts = S.mountOpts;
+      if (!node || !opts) return;
+      // `mount()` promise QAYTARMASDI (ichida `run()` ni o'zi boshqaradi),
+      // shuning uchun `.catch()` chaqirish TypeError berardi.
+      mount(node, opts);
+    } catch (e) {}
+  }
+
+  // Tez yo'l ishlamadi — eski (GramJS) yo'lga o'tamiz.
+  //
+  // `FILE_REFERENCE_*` xatolarida `readOnceGram` ESKI havola bilan
+  // ishga tushsa, Telegram uni ham rad etadi. Shuning uchun hujjatni QAYTA
+  // yechish kerak — buni `fastFallback()` qiladi (mount'ni qayta ishga
+  // tushiradi → `findDoc()` foydalanuvchi sessiyasi orqali yangi havola
+  // oladi).
+  function gramFallback(e) {
+    if (!S.fastBroken) fastFallback();
+    throw e;
+  }
+
+  // Joriy hujjatning metama'lumotini (RAM keshi + localStorage) tozalaydi.
+  // Eskirgan `file_reference` bilan yozilgan yozuv qolsa, keyingi ochilishda
+  // yana xuddi shu xato takrorlanadi.
+  function purgeCurrentDocMeta() {
+    try {
+      var o = S.mountOpts;
+      if (!o || !o.channel || !o.post) return;
+      var key = String(o.channel) + '/' + Number(o.post);
+      if (S.pvCache && S.pvCache[key]) delete S.pvCache[key];
+      var raw = localStorage.getItem(DOC_META_KEY);
+      if (!raw) return;
+      var all = JSON.parse(raw) || {};
+      if (!all[key]) return;
+      delete all[key];
+      localStorage.setItem(DOC_META_KEY, JSON.stringify(all));
+    } catch (e) { /* jim */ }
+  }
+
+  // Tez (minimal MTProto) klientni yopadi.
+  //
+  // GramJS klienti bilan bir xil auth_key ustida parallel sessiya ochilsa,
+  // Telegram "AUTH_KEY_DUPLICATED" beradi — sessiya butunlay bekor
+  // qilinadi va foydalanuvchi login sahifasiga tushib qoladi. Shuning uchun
+  // eski yo'liga o'tishda tez klient ALMASH ib qoldiriladi.
+  function closeFastClient() {
+    if (S.fast) { try { S.fast.close(); } catch (e) {} }
+    S.fast = null;
+  }
+
+  // `file_reference` yo'q joylashuv — bunday hujjatni Telegram yuklab
+  // bermaydi (FILE_REFERENCE_INVALID).
+  function hasFileRef(loc) {
+    if (!loc) return false;
+    var fr = loc.fileReference;
+    if (!fr) return false;
+    if (typeof fr.length === 'number') return fr.length > 0;
+    return true;
+  }
+
+  // Buzilgan metama'lumot yozuvlarini (RAM keshi + localStorage) tozalaydi.
+  // Tez yo'ldan kelgan (`fromFast`) yozuvlar ham tozalanadi — ular eski
+  // (GramJS) yo'lga o'tganda qayta ishlatilmasin.
+  function purgeBrokenDocMeta() {
+    try {
+      if (S.pvCache) {
+        Object.keys(S.pvCache).forEach(function (k) {
+          var e = S.pvCache[k];
+          if (!e || e.fromFast || !e.loc || !hasFileRef(e.loc)) delete S.pvCache[k];
+        });
+      }
+      var raw = localStorage.getItem(DOC_META_KEY);
+      if (raw) {
+        var all = JSON.parse(raw) || {};
+        var changed = false;
+        Object.keys(all).forEach(function (k) {
+          if (!all[k] || !all[k].fr) { delete all[k]; changed = true; }
+        });
+        if (changed) localStorage.setItem(DOC_META_KEY, JSON.stringify(all));
+      }
+    } catch (e) { /* jim */ }
+  }
+
+  // ====================================================== 1. Telegram SDK
+  //
+  // Faqat video ochilganda lazy-load qilinadi. Standart — GramJS; xohishga
+  // ko'ra `?tgengine=teleproto` bilan Teleproto denenadi.
   var bundlePromise = null;
 
   function loadBundle(onProgress) {
-    if (global.TgBundle && global.TgBundle.TelegramClient) {
+    if (global.TgBundle && global.TgBundle.TelegramClient
+        && (legacyBundle ? !global.TgBundle.__engine : global.TgBundle.__engine === 'teleproto')) {
       return Promise.resolve(global.TgBundle);
     }
     if (bundlePromise) return bundlePromise;
@@ -151,9 +757,7 @@
       // ------------------------------------------------------------------
       // 1) SIQILGAN NUSXA (afzal yo'l)
       //
-      // 5.3 MB o'rniga 718 KB. Server hech narsa siqmaydi — ochish
-      // brauzerning o'zida bo'ladi. Bu saytni tezlashtiradigan eng katta
-      // qadam, chunki GramJS faqat Telegram filmi ochilganda kerak.
+      // Teleproto gzip bundle brauzerda ochiladi; GramJS eski fallback bo'lib qoladi.
       //
       // DIQQAT: server javobni SIQIB yuborsa Content-Length YO'Q bo'ladi
       // (u siqilgan hajmni ko'rsatadi, biz esa yoyilganini sanaymiz).
@@ -218,6 +822,16 @@
       }
     })();
 
+    // Standart — GramJS. Agar `?tgengine=teleproto` bilan Teleproto tanlangan
+    // bo'lsa-yu u yuklanmasa/yaroqsiz bo'lsa, GramJS'ga avtomatik qaytamiz.
+    bundlePromise = bundlePromise.catch(function (err) {
+      if (legacyBundle) throw err;
+      legacyBundle = true;
+      bundlePromise = null;
+      global.TgBundle = null;
+      return loadBundle(onProgress);
+    });
+
     return bundlePromise;
   }
 
@@ -231,8 +845,11 @@
       s.async = false;
       s.onload = function () {
         if (blob) { try { URL.revokeObjectURL(src); } catch (e) {} }
-        if (global.TgBundle && global.TgBundle.TelegramClient) res(global.TgBundle);
-        else rej(new Error('GramJS yuklandi, lekin topilmadi'));
+        var bundle = global.TgBundle;
+        var matches = bundle && bundle.TelegramClient
+          && (legacyBundle ? !bundle.__engine : bundle.__engine === 'teleproto');
+        if (matches) res(bundle);
+        else rej(new Error('Telegram client bundle kutilgan API bilan yuklanmadi'));
       };
       s.onerror = function () {
         if (blob) { try { URL.revokeObjectURL(src); } catch (e) {} }
@@ -559,6 +1176,12 @@
     opts = opts || {};
     var mode = opts.mode === 'phone' ? 'phone' : 'qr';
     var allowLogin = !!opts.allowLogin;
+    // `saved` FUNKSIYA darajasida turishi SHART: u quyidagi `.then()`
+    // zanjirining bir necha joyida (`.getMe()` bosqichida ham) ishlatiladi.
+    // Ilgari u faqat birinchi `.then(function (T) {...})` ichida e'lon
+    // qilinardi — natijada keyingi `.then()` da "saved is not defined"
+    // ReferenceError chiqib, oddiy (fast bo'lmagan) pleer yo'li yiqilardi.
+    var saved = loadSession();
 
     if (S.client && S.authed) return Promise.resolve(S.client);
     if (S.connecting && S.connectingMode === mode) return S.connecting;
@@ -586,7 +1209,6 @@
     })
       .then(function (T) {
         S.T = T;
-        var saved = loadSession();
 
         // Saqlangan satr buzilgan bo'lishi mumkin (eski format, qo'lda
         // o'zgartirilgan). `StringSession` konstruktori xato tashlasa —
@@ -601,27 +1223,41 @@
           throw badErr;
         }
 
-        S.client = new T.TelegramClient(
-          session,
-          a.id,
-          a.hash,
-          {
-            connectionRetries: 3,
-            // Brauzerda TCP socket yo'q -> GramJS WebSocket transportini
-            // ishlatadi (Telegram Web ham shu yo'l bilan ishlaydi).
-            networkSocket: T.PromisedWebSockets,
-            app: { platform: 'web' }
+        var clientOptions = {
+          connectionRetries: 3,
+          app: { platform: 'web' }
+        };
+        if (T.__engine === 'teleproto') {
+          if (typeof T.createWebSocketTransport !== 'function') {
+            throw new Error('Teleproto uchun WebSocket transport mavjud emas');
           }
-        );
+          clientOptions.transport = T.createWebSocketTransport();
+        } else {
+          // Fallback — eski GramJS brauzer WebSocket adapteri.
+          clientOptions.networkSocket = T.PromisedWebSockets;
+        }
+        // Bitta auth_key bilan IKKI sessiya bir vaqtda ochilmasin.
+        // Tez (minimal MTProto) klient hali ulangan bo'lishi mumkin —
+        // GramJS ulanishidan OLDIN uni yopamiz, aks holda Telegram
+        // "AUTH_KEY_DUPLICATED" beradi va sessiya butunlay bekor qilinadi.
+        closeFastClient();
 
-        // Kalit bor va bu shunchaki TEKSHIRISH (login sahifasidagi qayta
-        // kirish emas): Telegramga jim ulanib, sessiya yaroqli ekanini
-        // tasdiqlaymiz. Yaroqsiz bo'lsa — kalitni tozalab, AUTH_REVOKED
-        // tashlaymiz (chaqiruvchi login sahifasiga yo'naltiradi).
+        S.client = new T.TelegramClient(session, a.id, a.hash, clientOptions);
+
+        // Saqlangan sessiyada login oqimini boshlamaymiz. Odatiy tekshiruv
+        // `getMe()` bilan tasdiqlaydi; video fast path esa ortiqcha RTT'siz
+        // ulanib, birinchi `findDoc()` RPC'da sessiyani tasdiqlaydi.
         if (saved && !allowLogin) {
           return S.client.connect()
-            .then(function () { return S.client.getMe(); })
-            .then(function (me) { saveMe(me); savePhoto(S.client, me); pingLoginAlert(); return S.client; })
+            .then(function () {
+              // Video yo'lida `findDoc()` o'zi sessiyani tekshiradigan
+              // Telegram RPC bo'ladi. Oldindan alohida `getMe()` kutmaymiz.
+              if (opts.fastPlayback) return S.client;
+              return S.client.getMe().then(function (me) {
+                saveMe(me); savePhoto(S.client, me); pingLoginAlert();
+                return S.client;
+              });
+            })
             .catch(function (e) {
               var m = (e && (e.errorMessage || e.message)) || String(e);
               if (isAuthError(m)) {
@@ -695,6 +1331,8 @@
         // Joriy Telegram akkauntini eslab qolamiz — unikal ko'rishni
         // aynan bitta odam bo'yicha sanash uchun. getMe() xato bersa
         // ham davom etamiz (me = null bo'lib qoladi).
+        // Saqlangan sessiyada bu allaqachon yuqorida bajarilgan; qayta so'ramaymiz.
+        if (opts.fastPlayback || (saved && !allowLogin)) return c;
         return c.getMe().then(
           function (me) { saveMe(me); savePhoto(c, me); pingLoginAlert(); return c; },
           function () { return c; }
@@ -709,7 +1347,7 @@
           restartErr.errorMessage = 'AUTH_RESTART';
           throw restartErr;
         }
-        S.authed = true;
+        S.authed = !opts.fastPlayback;
         try { saveSession(c.session.save()); } catch (e) { /* localStorage to'liq */ }
         return c;
       })
@@ -868,6 +1506,25 @@
   // qiymatni so'raymiz.
   function swCtl() { return getSwController(); }
 
+  // Prefiksni R2 ga yuklash mumkinmi?
+  //
+  // Mobil internetda 5 MB yuklash foydalanuvchining trafigini yeydi —
+  // bunday holatda YUBORMAYMIZ (faqat o'qishdan foyda olamiz). Wi-Fi,
+  // ethernet yoki tarmoq turi noma'lum bo'lsa — ruxsat.
+  function canSeed() {
+    try {
+      var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (c && c.saveData) return false;
+      if (!c) return true;
+      var t = String(c.type || '');
+      if (t === 'cellular' || t === 'bluetooth' || t === 'none') return false;
+      if (t === 'wifi' || t === 'ethernet' || t === 'wimax') return true;
+      var et = String(c.effectiveType || '');
+      if (et === 'slow-2g' || et === '2g') return false;
+      return true;
+    } catch (e) { return false; }
+  }
+
   function connect() {
     var ctl = swCtl();
     if (!ctl) return false;
@@ -877,6 +1534,8 @@
       S.chan.port1.onmessage = onRead;
       S.chan.port1.start();
       ctl.postMessage({ type: 'provide', size: S.size }, [S.chan.port2]);
+      // SW R2 keshini to'ldirishi uchun ruxsat (faqat Wi-Fi/ethernet).
+      try { ctl.postMessage({ type: 'seed', ok: canSeed() }); } catch (e) {}
       return true;
     } catch (e) {
       return false;
@@ -1194,6 +1853,10 @@
   // aktiv hujjat (S.loc/S.doc) ishlatiladi. Bu oldindan yuklash (prefetch)
   // uchun kerak: aktiv oqimga tegmasdan BOSHQA hujjatni o'qish imkonini
   // beradi.
+  //
+  // IKKITA YO'L:
+  //   1) TEZ — `tg-mtproto.js` (25 KB). GramJS bundle'i umuman yuklanmaydi.
+  //   2) ESKI — GramJS `S.client.invoke(...)` (fallback).
   function readOnce(offset, length, cap, ctx) {
     var aligned = Math.floor(offset / 4096) * 4096;
     var skip = offset - aligned;
@@ -1211,23 +1874,132 @@
     // bo'yicha kalitlashamiz.
     var hid = headId(ctx);
 
-    return S.client.invoke(new S.T.Api.upload.GetFile({
-      location: loc,
-      offset: aligned,
-      limit: want,
-      precise: true
-    }), dc).then(function (res) {
+    // --- TEZ YO'L: minimal MTProto klient ------------------------------
+    var fast = S.fast;
+    if (fast && !S.fastBroken && loc && loc.id != null) {
+      var rawLoc = {
+        id: loc.id,
+        accessHash: loc.accessHash,
+        fileReference: loc.fileReference,
+        thumbSize: loc.thumbSize || '',
+        dcId: dc
+      };
+      return fast.getFile(rawLoc, aligned, want).then(function (b) {
+        var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
+        return finishRead(u8, skip, length, aligned, hid);
+      }).catch(function (e) {
+        var eMsg = (e && (e.errorMessage || e.message)) || String(e);
+
+        // 1) `FILE_REFERENCE_*` — keshdagi havola eskirgan. Foydalanuvchiga
+        //    xato ko'rsatishdan oldin serverdan yangi havolani olib, shu
+        //    so'rovni BIR marta takrorlaymiz (`frRetried` — qayta urinish
+        //    cheksiz bo'lib qolmasligi uchun).
+        if (isFileRefErr(eMsg) && !(ctx && ctx.frRetried)) {
+          return refreshDocLoc(S.mountOpts).then(function (ok) {
+            if (!ok) return gramFallback(e);
+            var nc = {
+              loc: S.loc,
+              dcId: S.doc ? S.doc.dcId : dc,
+              abort: ctx && ctx.abort,
+              frRetried: true
+            };
+            return readOnce(offset, length, cap, nc).catch(function (e2) {
+              // Yangilash ham yordam bermadi — eski yo'lga o'tamiz.
+              return gramFallback(e2);
+            });
+          });
+        }
+
+        // 2) Yangilash yordam bermadi — mount'ni qayta ishga tushirmaymiz
+        // (u cheksiz halqa berardi), xatoni yuqoriga uzatamiz.
+        // 2) Yangilash yordam bermadi — eski yo'lga o'tamiz. Eskirgan havola
+        //    bilan `readOnceGram` ham rad etiladi, shuning uchun hujjatni
+        //    QAYTA yechish kerak — buni `fastFallback()` qiladi (mount'ni
+        //    qayta ishga tushiradi → `findDoc()` yangi havola oladi).
+        if (isFileRefErr(eMsg)) return gramFallback(e);
+
+        // 3) Tez yo'l ishlamadi — eski yo'lga qaytamiz (u hujjatni qayta
+        // yechishi mumkin). Eski yo'l ham yo'q bo'lsa — butun oqimni
+        // qayta ishga tushiramiz.
+        if (S.fastBroken) throw e;
+        if (!S.client) { fastFallback(); throw e; }
+        S.fastBroken = true;
+        return readOnceGram(offset, length, cap, ctx, loc, dc, skip, aligned, want, hid);
+      });
+    }
+
+    return readOnceGram(offset, length, cap, ctx, loc, dc, skip, aligned, want, hid);
+  }
+
+  // GramJS yo'li (fallback). `upload.GetFile` — to'liq SDK orqali.
+  function readOnceGram(offset, length, cap, ctx, loc, dc, skip, aligned, want, hid) {
+    if (!S.client || !S.T) {
+      // Tez yo'l (tg-mtproto.js) Telegram CDN fayllarini o'qiy olmaydi va GramJS'ga
+      // o'tadi - lekin tez yo'lda GramJS bundle'i umuman yuklanmagan bo'ladi.
+      // Ilgari shu yerda darhol "Telegram SDK yuklanmagan" xatosi chiqib, video
+      // ochilmasdi. Endi SDK'ni shu paytda (bir marta) yuklab, so'rovni takrorlaymiz.
+      var gl = S.gramLoad || (S.gramLoad = ensureSession(silentView(), { fastPlayback: true }).then(
+        function (c) { S.gramLoad = null; return c; },
+        function (e) { S.gramLoad = null; throw e; }
+      ));
+      return gl.then(function () {
+        if (!S.client || !S.T) throw new Error('Telegram SDK yuklanmagan');
+        return readOnceGram(offset, length, cap, ctx, loc, dc, skip, aligned, want, hid);
+      });
+    }
+    function once(l) {
+      var apiLoc = new S.T.Api.InputDocumentFileLocation({
+        id: l.id,
+        accessHash: l.accessHash,
+        fileReference: gramJsBytes(l.fileReference),
+        thumbSize: l.thumbSize || ''
+      });
+      return S.client.invoke(new S.T.Api.upload.GetFile({
+        location: apiLoc,
+        offset: aligned,
+        limit: want,
+        precise: true
+      }), dc);
+    }
+
+    return once(loc).then(function (res) {
       var b = res.bytes || res;
       var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
-      headPut(hid, aligned, u8);
-      // ZATAN olingan baytlarni disk keshiga ham yozib boramiz (qo'shimcha
-      // Telegram so'rovi yo'q). Kichik fayl to'liq yig'ilsa — saqlanadi.
-      docAccPut(hid, aligned, u8);
-      // Telegram kamroq qaytarsa — ortiqcha joyni nol bilan
-      // to'ldirmaymiz, faqat haqiqiy baytlarni qaytaramiz.
-      if (u8.length <= skip) return new Uint8Array(0);
-      return u8.slice(skip, skip + Math.min(length, u8.length - skip));
+      return finishRead(u8, skip, length, aligned, hid);
+    }).catch(function (e) {
+      var gMsg = (e && (e.errorMessage || e.message)) || String(e);
+      // GramJS yo'lida ham havola eskirgan bo'lishi mumkin — yangilab,
+      // aynan shu so'rovni bir marta qayta yuboramiz.
+      if (!isFileRefErr(gMsg) || (ctx && ctx.frRetried)) throw e;
+      return refreshDocLoc(S.mountOpts).then(function (ok) {
+        if (!ok) {
+          // Server orqali yangilash ISHLAMAYDI: `api/tg-doc.php` hujjatni BOT
+          // sessiyasi bilan yechadi va bot ruxsatnomasi tomoshabbin
+          // akkauntida qabul qilinmaydi. Hujjatni foydalanuvchining O'Z
+          // sessiyasi orqali QAYTA yechamiz — buning uchun butun oqimni
+          // qayta ishga tushiramiz (`findDoc` yangi havola oladi).
+          return gramFallback(e);
+        }
+        var nl = (S.loc && S.loc.id != null) ? S.loc : loc;
+        return once(nl).then(function (res2) {
+          var b2 = res2.bytes || res2;
+          var u2 = b2 instanceof Uint8Array ? b2 : new Uint8Array(b2);
+          return finishRead(u2, skip, length, aligned, hid);
+        });
+      });
     });
+  }
+
+  // Olingan baytlarni keshlaydi va so'ralgan oraliqni qaytaradi.
+  function finishRead(u8, skip, length, aligned, hid) {
+    headPut(hid, aligned, u8);
+    // ZATAN olingan baytlarni disk keshiga ham yozib boramiz (qo'shimcha
+    // Telegram so'rovi yo'q). Kichik fayl to'liq yig'ilsa — saqlanadi.
+    docAccPut(hid, aligned, u8);
+    // Telegram kamroq qaytarsa — ortiqcha joyni nol bilan
+    // to'ldirmaymiz, faqat haqiqiy baytlarni qaytaramiz.
+    if (u8.length <= skip) return new Uint8Array(0);
+    return u8.slice(skip, skip + Math.min(length, u8.length - skip));
   }
 
   // To'liq oraliqni o'qish. Avval disk keshi tekshiriladi, topilmasa
@@ -1354,7 +2126,12 @@
   function onRead(ev) {
     var d = ev.data || {};
     if (d.type !== 'read') return;
-    var port = ev.ports && ev.ports[0];
+    serveRead(d, ev.ports && ev.ports[0], 0);
+  }
+
+  // `attempt` — `FILE_REFERENCE_*` uchun qayta urinish hisobi: havola
+  // yangilangach so'rov faqat BIR marta takrorlanadi.
+  function serveRead(d, port, attempt) {
 
     readBytes(d.offset, d.length).then(function (out) {
       if (port) port.postMessage({ type: 'result', id: d.id, bytes: out });
@@ -1370,6 +2147,19 @@
         retryRange(d.offset, d.length);
         return;
       }
+
+      // Eskirgan `file_reference`: havolani yangilab, so'rovni bir marta
+      // takrorlaymiz. Foydalanuvchi "Telegram o'qish xatosi" ko'rmaydi va
+      // pleer uzilib qolmaydi.
+      if (isFileRefErr(m) && attempt < 1) {
+        refreshDocLoc(S.mountOpts).then(function (ok) {
+          if (ok) { serveRead(d, port, attempt + 1); return; }
+          if (port) port.postMessage({ type: 'result', id: d.id, error: m });
+          setStatus('<span class="tgs-err">Telegram o\'qish xatosi: ' + esc(m) + '</span>');
+        });
+        return;
+      }
+
       if (port) port.postMessage({ type: 'result', id: d.id, error: m });
       if (/FLOOD_WAIT/.test(m)) {
         // Telegram vaqtincha tezlikni chekladi. Sabr qilamiz — video
@@ -1386,7 +2176,7 @@
   // keyingi so'rovi kabi ishlaydi va SW uni qayta ishlaydi.
   function retryRange(offset, length) {
     setTimeout(function () {
-      fetch(fileUrl() + '?size=' + S.size + '&t=' + Date.now(), {
+      fetch(fileUrl() + '?size=' + S.size + '&t=' + Date.now() + docQ(), {
         headers: { Range: 'bytes=' + offset + '-' + (offset + length - 1) }
       }).catch(function () { /* javob muhim emas */ });
     }, 90);
@@ -1467,9 +2257,28 @@
 
   // Player o'ynashga tayyor bo'lganda mount(onReady) ni BIR MARTA chaqiradi.
   // Reels shundan keyin pastdagi (keyingi) videoni oldindan yuklaydi.
+  var identityFetch = null;
+  function refreshIdentityAfterPlayback() {
+    var client = S.client;
+    if (!client || S.me || identityFetch) return;
+    try {
+      var storedMe = JSON.parse(localStorage.getItem('wc_tg_me_v1') || 'null');
+      if (storedMe && storedMe.id) { S.me = storedMe; return; }
+    } catch (e) {}
+    identityFetch = client.getMe().then(function (me) {
+      if (client !== S.client) return;
+      saveMe(me);
+      savePhoto(client, me);
+      pingLoginAlert();
+    }).catch(function () {}).then(function () { identityFetch = null; });
+  }
+
   function fireReady() {
     if (S.readyFired) return;
     S.readyFired = true;
+    // Profil so'rovi endi video ochilishining kritik yo'lida emas.
+    // Dastlabki kadr tayyor bo'lgach, yetishmagan akkaunt ma'lumotini olamiz.
+    if (!isPreview()) setTimeout(refreshIdentityAfterPlayback, 1200);
     if (typeof S.onPlayerReady === 'function') {
       try { S.onPlayerReady(); } catch (e) { /* jim */ }
     }
@@ -1520,9 +2329,9 @@
   function renderPreview(node, opts, size, probe) {
     posterBgOff(node);                 // endi `<video poster>` o'zi ko'rsatadi
     var url = fileUrl() + '?size=' + size + '&t=' + Date.now()
-      + '&mime=' + encodeURIComponent(mimeOf(probe));
+      + '&mime=' + encodeURIComponent(mimeOf(probe)) + docQ();
     node.innerHTML = '<video class="tgs-pv" id="playerVideo" muted playsinline loop '
-      + 'preload="auto"'
+      + 'preload="metadata"'
       + (opts.poster ? ' poster="' + esc(opts.poster) + '"' : '')
       + ' src="' + esc(url) + '"></video>';
     var v = document.getElementById('playerVideo');
@@ -1541,10 +2350,20 @@
     if (opts && opts.preview) { mountPreview(node, opts); return; }
     stop();                                  // avvalgi filmni to'xtatamiz
     S.mount = node;
+    S.mountOpts = opts;
+    // "Qayta urinish" tugmalari shu havoladan foydalanadi. Ilgari bu
+    // o'zgaruvchi hech qachon yozilmasdi va xato ekranidagi "Qayta urinish"
+    // tugmasi JIM ishlamasdi.
+    try { global.__wcTgLast = opts; } catch (e) {}
     S.cfg = opts.cfg || {};
     S.onPlayerReady = typeof opts.onReady === 'function' ? opts.onReady : null;
     S.readyFired = false;
     S.job++;
+    // Yangi mount — `file_reference` ni avtomatik tiklash huquqini ham
+    // qaytaramiz. `data-tgs-dead` esa oldingi xato belgisi: u qolib ketsa
+    // yangi oqimdagi xatoni "allaqachon ko'rsatilgan" deb yutib yuborardi.
+    S.frAuto = 0;
+    try { node.removeAttribute('data-tgs-dead'); } catch (e) {}
 
     node.classList.add('tgs');
     // Poster darhol ko'rinib turadi: Telegram'dan kadr kelguncha bo'sh
@@ -1635,45 +2454,188 @@
       if (S.job !== job) return;
       fail(node, e);
     });
+
+    // WATCHDOG: "abadiy Tayyorlanmoqda..." holati.
+    //
+    // Agar 20 soniya ichida na <video>, na xato paydo bo'lsa — odatda
+    // tarmoq/SW muammosi. Foydalanuvchi cheksiz kutib qolmasin: qayta
+    // urinish tugmasini ko'rsatamiz. Sababni o'ylab topmaymiz.
+    setTimeout(function () {
+      if (S.job !== job) return;
+      if (node.querySelector('video') || node.querySelector('.tgs-cta')) return;
+      var st = node.querySelector('.tgs-status');
+      if (!st) return;
+      var txt = (st.textContent || '').replace(/\s+/g, ' ').trim();
+      // Faqat "hali boshlanmadi" holatlarida aralashamiz: yuklash foizi
+      // ko'rinib turganda foydalanuvchini chalg'itmaymiz.
+      if (!/^(Tayyorlanmoqda|Telegram ulagichi tayyorlanmoqda)/.test(txt)) return;
+      st.innerHTML = '<span class="tgs-warn">Pleyer javob bermayapti.</span>'
+        + '<div class="tgs-dim" style="margin-top:8px">Internetni tekshirib, qayta urinib ko\'ring.</div>'
+        + '<button type="button" class="tgs-btn" data-tgs-wd-retry style="margin-top:10px">Qayta urinish</button>';
+      var wb = st.querySelector('[data-tgs-wd-retry]');
+      if (wb) wb.onclick = function () {
+        wb.disabled = true;
+        wb.textContent = 'Ulanmoqda\u2026';
+        mount(node, opts);
+      };
+    }, 20000);
   }
 
   async function run(node, opts, view, job) {
-    // --- 1) SW -------------------------------------------------------
-    if (!swCtl()) {
-      // Hover-preview paytida sahifani QAYTA YUKLAMAYMIZ — shunchaki
-      // jimgina o'tkazib yuboramiz (keyingi hovergacha SW tayyor bo'ladi).
-      if (isPreview()) return;
+    // --- 1) SW tayyorligi + metadata so'rovi PARALLEL -------------------
+    // Service Worker boshqaruvi va serverdagi kichik video metadata so'rovi
+    // bir vaqtda boshlanadi, shuning uchun kutishlar ketma-ket qo'shilmaydi.
+    // Telegram ulanishi init()/warmFast() orqali oldindan qizdiriladi. SW ilk
+    // bor o'rnatilsa, brauzer qoidasi sabab bir marta reload kerak bo'lishi mumkin.
+    // Hover-preview'da SW bo'lmasa, avvalgi kabi ishga tushirmaymiz.
+    if (!hasSession()) { if (!isPreview()) goLogin(); return; }
+    if (!swCtl() && isPreview()) return;
+
+    var cacheKey = (opts.channel && opts.post)
+      ? (String(opts.channel) + '/' + Number(opts.post)) : null;
+    var memoryEntry = cacheKey && S.pvCache && S.pvCache[cacheKey];
+    var memoryEntryFresh = !!(memoryEntry && (Date.now() - memoryEntry.t) < 20 * 60 * 1000);
+    // Yozuvning foydalanishga yaramaydigan holatlarini HEMEN tekshiramiz —
+    // serverga metama'lumot so'rovi shundan keyin qaror qilinadi.
+    if (memoryEntryFresh
+        && (!hasFileRef(memoryEntry.loc) || (S.fastBroken && memoryEntry.fromFast))) {
+      memoryEntryFresh = false;
+      delete S.pvCache[cacheKey];
+    }
+    var pendingPrefetch = cacheKey && S.prefetchKey === cacheKey && S.prefetchPromise;
+    // Serverdan kichik metama'lumot so'rovini SW tayyorlanishi bilan parallel
+    // boshlaymiz; ikkita kutish ketma-ket qo'shilmasin. Faol prefetch bo'lsa,
+    // ortiqcha Telegram metadata so'rovi yubormaymiz.
+    var serverMetaPromise = (!S.fastBroken && cacheKey && !docMetaGet(cacheKey)
+        && !memoryEntryFresh && !pendingPrefetch)
+      ? docMetaFromServer(opts) : null;
+
+    var workerPromise = swCtl() ? Promise.resolve(true) : (function () {
       setStatus('Telegram ulagichi tayyorlanmoqda...');
-      var ok = await ensureWorker();
-      if (!ok) {
-        setStatus('<span class="tgs-warn">Telegram ulagichi tayyor emas. '
-          + 'Sahifani bir marta yangilab, qayta urinib ko\'ring.</span>');
-        return;
+      return ensureWorker();
+    })();
+
+    var workerOk = false;
+    try { workerOk = await workerPromise; } catch (e) { workerOk = false; }
+    if (!workerOk) {
+      setStatus('<span class="tgs-warn">Telegram ulagichi tayyor emas. '
+        + 'Sahifani bir marta yangilab, qayta urinib ko\'ring.</span>');
+      return;
+    }
+
+    // Watch sahifasidagi prefetch hujjatni allaqachon topgan bo'lsa, shu
+    // xotira keshidan foydalanamiz; serverdan qayta metadata so'ramaymiz.
+    //
+    // 2 TA SHART:
+    //   • `file_reference` bo'sh bo'lgan yozuv ISHLATILMAYDI — Telegram
+    //     uni rad etadi (FILE_REFERENCE_INVALID) va video ochilmaydi.
+    //   • Tez yo'l ishlamagan bo'lsa (`S.fastBroken`) — tez yo'ldan kelgan
+    //     yozuv ham ISHLATILMAYDI, aks holda `run()` yana xuddi shu
+    //     buzilgan yozuvga qaytadi va GramJS fallback'iga chiqmaydi.
+    memoryEntry = cacheKey && S.pvCache && S.pvCache[cacheKey];
+    memoryEntryFresh = !!(memoryEntry && (Date.now() - memoryEntry.t) < 20 * 60 * 1000);
+    if (memoryEntryFresh
+        && (!hasFileRef(memoryEntry.loc) || (S.fastBroken && memoryEntry.fromFast))) {
+      memoryEntryFresh = false;
+      delete S.pvCache[cacheKey];
+    }
+    if (memoryEntryFresh && memoryEntry.doc && memoryEntry.size > 0) {
+      S.doc = memoryEntry.doc;
+      S.size = memoryEntry.size;
+      S.totalRead = 0;
+      headSize(memoryEntry.doc.id, memoryEntry.size);
+      S.loc = memoryEntry.loc;
+      S.probe = memoryEntry.probe || quickPlaybackProbe(memoryEntry.doc);
+      connect();
+      if (isPreview()) renderPreview(node, opts, memoryEntry.size, S.probe);
+      else if (S.probe.playable === false) renderAdaptivePlayer(node, opts, memoryEntry.size, S.probe, 'Format tayyorlanmoqda…');
+      else renderPlayer(node, opts, memoryEntry.size, S.probe);
+      return;
+    }
+
+    // --- 1a) TEZ YO'L: GramJS bundle'siz oqim --------------------------
+    //
+    // Hujjat metama'lumoti (id / access_hash / file_reference / dc) oldindan
+    // ma'lum bo'lsa — 5.4 MB GramJS bundle'ini umuman yuklamaymiz. Faqat
+    // 25 KB li minimal MTProto klient (`tg-mtproto.js`) ishlatiladi: video
+    // baytlari Telegram DC'dan to'g'ridan-to'g'ri brauzerga keladi.
+    //
+    // Metama'lumot manbalari (tezdan tez):
+    //   1) brauzerdagi qisqa muddatli kesh (localStorage) — 0 ms
+    //   2) serverdagi kesh (`api/tg-doc.php`) — ~10 ms
+    //   3) eski yo'l (bundle + findDoc) — fallback
+    if (!S.fastBroken && cacheKey) {
+      var meta = docMetaGet(cacheKey);
+      if (!meta) {
+        meta = serverMetaPromise ? await serverMetaPromise : await docMetaFromServer(opts);
+        if (meta) {
+          // Lokal keshga yozamiz — keyingi ochilish butunlay lokal bo'ladi.
+          try {
+            localStorage.setItem(DOC_META_KEY, (function () {
+              var raw = localStorage.getItem(DOC_META_KEY);
+              var all = raw ? (JSON.parse(raw) || {}) : {};
+              all[cacheKey] = meta;
+              return JSON.stringify(all);
+            })());
+          } catch (e) { /* kvota to'lgan bo'lishi mumkin */ }
+        }
+      }
+      // `meta.fr` bo'sh bo'lsa — tez yo'l ishlamaydi (Telegram
+      // FILE_REFERENCE_INVALID beradi). Bunday holatda eski (GramJS)
+      // yo'lga qaytamiz.
+      var fc = (meta && meta.fr) ? fastClient() : null;
+      if (fc && meta) {
+        S.fast = fc;
+        var fdoc = docMetaToDoc(meta);
+        var fsize = bytesOf(fdoc);
+        var fprobe = quickPlaybackProbe(fdoc);
+        if (fsize && fprobe) {
+          S.doc = fdoc;
+          S.size = fsize;
+          S.totalRead = 0;
+          headSize(fdoc.id, fsize);
+          S.loc = {
+            id: fdoc.id,
+            accessHash: fdoc.accessHash,
+            fileReference: fdoc.fileReference,
+            thumbSize: ''
+          };
+          S.probe = fprobe;
+          connect();
+          node.setAttribute('data-size', String(fsize));
+          S.pvCache = S.pvCache || {};
+          S.pvCache[cacheKey] = {
+            t: Date.now(), doc: S.doc, size: fsize, loc: S.loc, probe: fprobe, fromFast: true
+          };
+          if (isPreview()) renderPreview(node, opts, fsize, fprobe);
+          else renderPlayer(node, opts, fsize, fprobe);
+          return;
+        }
       }
     }
 
-    // --- 2) Telegram sessiyasi ---------------------------------------
-    // Sayt eshigi (`tg-guard`) allaqachon login talab qiladi; lekin sessiya
-    // ochilish paytida bekor qilingan bo'lsa ham shu yerga kelamiz.
-    if (!hasSession()) { if (!isPreview()) goLogin(); return; }
-    var client;
-    try {
-      client = await ensureSession(view);
-    } catch (e) {
+    // --- 1b) ESKI YO'L: GramJS bundle + findDoc (fallback) --------------
+    var sessionPromise = ensureSession(view, { fastPlayback: true }).then(
+      function (client) { return { client: client }; },
+      function (error) { return { error: error }; }
+    );
+
+    var sessionResult = await sessionPromise;
+    if (sessionResult.error) {
+      var e = sessionResult.error;
       var em = (e && (e.errorMessage || e.message)) || String(e);
       // Hover-preview: login oqimini boshlamaymiz, jim to'xtaymiz.
       if (isPreview()) return;
       if (em === 'AUTH_REVOKED' || isAuthError(em)) { goLogin(); return; }
       throw new Error('Telegram ulanish: ' + em);
     }
+    var client = sessionResult.client;
     if (S.job !== job) return;
 
     // --- 2b) Hujjat keshi --------------------------------------------
-    // Bir marta topilgan fayl (doc/loc) va format (probe) keshlanadi.
-    // Keyingi mount — hover YOKI oldindan yuklash (prefetch) — bir ZUMDA
-    // ochiladi: qayta findDoc/probe qilinmaydi.
-    var cacheKey = (opts.channel && opts.post)
-      ? (String(opts.channel) + '/' + Number(opts.post)) : null;
+    // Hujjat metama'lumoti keshlanadi. Format probe bo'lsa ishlatiladi;
+    // metadata-only prefetchda non-MP4 probe shu yerda, worker tayyor bo'lgach bajariladi.
+    var cachedDoc = null;
     if (cacheKey) {
       var cHit = S.pvCache && S.pvCache[cacheKey];
       // Shu hujjat uchun prefetch HOZIR yuklanayotgan bo'lsa — uni kutamiz.
@@ -1682,6 +2644,7 @@
       if (!cHit && S.prefetchKey === cacheKey && S.prefetchPromise) {
         try { await S.prefetchPromise; } catch (e) { /* pastda o'zimiz qidiramiz */ }
         if (S.job !== job) return;
+        if (!hasSession()) { goLogin(); return; }
         cHit = S.pvCache && S.pvCache[cacheKey];
       }
       if (cHit && (Date.now() - cHit.t) < 20 * 60 * 1000) {
@@ -1690,26 +2653,44 @@
         S.totalRead = 0;
         headSize(cHit.doc && cHit.doc.id, cHit.size);
         S.loc = cHit.loc;
-        S.probe = cHit.probe;
-        connect();
-        if (cHit.probe && cHit.probe.playable !== false) {
-          if (isPreview()) renderPreview(node, opts, cHit.size, cHit.probe);
-          else renderPlayer(node, opts, cHit.size, cHit.probe);
-        } else {
-          renderAdaptivePlayer(node, opts, cHit.size, cHit.probe, 'Tayyorlanmoqda…');
+        S.probe = cHit.probe || quickPlaybackProbe(cHit.doc);
+        cachedDoc = cHit.doc;
+        if (S.probe) {
+          connect();
+          if (S.probe.playable !== false) {
+            if (isPreview()) renderPreview(node, opts, cHit.size, S.probe);
+            else renderPlayer(node, opts, cHit.size, S.probe);
+          } else {
+            renderAdaptivePlayer(node, opts, cHit.size, S.probe, 'Tayyorlanmoqda…');
+          }
+          return;
         }
-        return;
       }
     }
 
     // --- 3) Xabar va videoni topish ----------------------------------
-    setStatus('Telegram\'dan yuklanmoqda...');
-    var doc = await findDoc(client, opts);
+    var doc = cachedDoc;
+    if (!doc) {
+      setStatus('Telegram\'dan yuklanmoqda...');
+      try {
+        doc = await findDoc(client, opts);
+      } catch (e) {
+        var findErr = (e && (e.errorMessage || e.message)) || String(e);
+        if (isAuthError(findErr)) {
+          clearSession();
+          resetAuth();
+          goLogin();
+          return;
+        }
+        throw e;
+      }
+    }
     if (S.job !== job) return;
+    S.authed = true; // successful message lookup validates the stored session
+    try { saveSession(client.session.save()); } catch (e) {}
 
     var size = bytesOf(doc);
     if (!size) throw new Error('Fayl hajmi olinmadi');
-    var info = videoInfo(doc);
 
     S.doc = doc;
     S.size = size;
@@ -1718,16 +2699,26 @@
     S.loc = new S.T.Api.InputDocumentFileLocation({
       id: doc.id,
       accessHash: doc.accessHash,
-      fileReference: doc.fileReference,
+      fileReference: gramJsBytes(doc.fileReference),
       thumbSize: ''
     });
+
+    // Hujjat metama'lumotini brauzer keshiga yozamiz — keyingi ochilishda
+    // GramJS bundle'ini umuman yuklamasdan tez yo'l ishlaydi.
+    if (cacheKey) docMetaPut(cacheKey, doc);
 
     connect();
     node.setAttribute('data-size', String(size));
 
-    // --- 4) Formatni aniqlash (video URL berilishidan OLDIN) ---------
-    setStatus('Format tekshirilmoqda...');
-    var probe = await probeFormat(size);
+    // --- 4) Playerni format probe'siz tez ishga tushirish --------------
+    // Noma'lum fayl nomi uchun MP4 indeksi yoki oxirgi baytlarni kutmaymiz.
+    // Native player darhol sinab ko'radi; xato bo'lsa onVideoError transportni
+    // tekshiradi va moslashuvchan playerga o'tadi. Hover preview probe kutadi.
+    var probe = quickPlaybackProbe(doc);
+    if (probe.uncertain && isPreview()) {
+      setStatus('Format tekshirilmoqda...');
+      probe = await probeFormat(size);
+    }
     S.probe = probe;                            // probeTransport uchun
     if (S.job !== job) return;
 
@@ -1822,8 +2813,19 @@
   //   * 0 (SW umuman javob bermadi)-> SW sahifani boshqarmadi
   function probeTransport(size) {
     return fetch(fileUrl() + '?size=' + size + '&mime=' + encodeURIComponent(mimeOf(S.probe || {}))
-      + '&probe=1&t=' + Date.now(), { headers: { Range: 'bytes=0-1023' } })
+      + '&probe=1&t=' + Date.now() + docQ(), { headers: { Range: 'bytes=0-1023' } })
       .then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (text) {
+            return {
+              status: res.status,
+              type: res.headers.get('Content-Type') || '',
+              bytes: text.length,
+              magic: '',
+              err: String(text || ('HTTP ' + res.status)).slice(0, 320)
+            };
+          });
+        }
         return res.arrayBuffer().then(function (buf) {
           var head = new Uint8Array(buf.slice(0, 16));
           var magic = '';
@@ -1832,8 +2834,7 @@
             status: res.status,
             type: res.headers.get('Content-Type') || '',
             bytes: buf.byteLength,
-            // 'ftyp' = MP4 konteyneri. Boshqasi (masalan 'yxta' = "Media
-            // is too big") = Telegram bizga video bermagan.
+            // 'ftyp' = MP4 konteyneri; faqat muvaffaqiyatli media javobida tekshiriladi.
             magic: magic
           };
         });
@@ -1875,13 +2876,29 @@
             ? 'Service Worker so‘rovni ushlamadi (404). Sahifa yangilanishi kerak.'
             : 'Telegram javobi ' + d.status + ' — ' + (d.type || 'noma’lum tur');
 
-      renderCta(node, opts, {
-        containerName: probe.containerName,
-        videoCodecs: probe.videoCodecs,
-        reason: 'Video o‘ynab boshlmadi — muammo KODEKDA emas, bog‘lanishda.',
-        sub: why,
-        channel: opts.channel, post: opts.post
-      }, { retry: true });
+      function showCta() {
+        renderCta(node, opts, {
+          containerName: probe.containerName,
+          videoCodecs: probe.videoCodecs,
+          reason: 'Video o‘ynab boshlmadi — muammo KODEKDA emas, bog‘lanishda.',
+          sub: why,
+          channel: opts.channel, post: opts.post
+        }, { retry: true });
+      }
+
+      // Eskirgan `file_reference` — bu vaqtinchalik holat, "kodek" yoki
+      // "bog'lanish" muammosi emas. Havolani yangilab, pleerni AVTOMATIK
+      // bir marta qayta ochamiz; foydalanuvchidan tugma bosishni so'ramaymiz.
+      if (isFileRefErr(d.err || '') && !S.frAuto) {
+        S.frAuto = 1;
+        refreshDocLoc(opts).then(function (ok) {
+          if (ok && S.mount && S.mountOpts) mount(S.mount, S.mountOpts);
+          else showCta();
+        });
+        return;
+      }
+
+      showCta();
     });
   }
 
@@ -1977,12 +2994,14 @@
     // `?mime=` — haqiqiy konteyner turi. SW uni avval `video/mp4` deb
     // qattiq yuborardi; MKV/HEVC faylda bu brauzerni darhol rad etishga
     // majbur qiladi (MIME haqiqiy bo'lishi SHART).
-    var url = fileUrl() + '?size=' + size + '&t=' + Date.now()
-      + '&mime=' + encodeURIComponent(mimeOf(probe));
+    var info = videoInfo(S.doc);
+    var duration = Number(info.duration) || 0;
+    var url = fileUrl() + '?size=' + size + '&dur=' + encodeURIComponent(duration)
+      + '&t=' + Date.now() + '&mime=' + encodeURIComponent(mimeOf(probe)) + docQ();
 
     node.innerHTML =
       '<div class="udp-player" data-udp data-udp-config=\'' + cfg + '\'>'
-      + '<video id="playerVideo" playsinline preload="auto"'
+      + '<video id="playerVideo" playsinline preload="metadata" fetchpriority="high"'
       + (opts.poster ? ' poster="' + esc(opts.poster) + '"' : '')
       + ' src="' + esc(url) + '"></video>'
       + '</div>'
@@ -2081,7 +3100,7 @@
 
     node.innerHTML =
       '<div class="udp-player" data-udp data-udp-config=\'' + cfg + '\'>'
-      + '<video id="playerVideo" playsinline preload="auto"'
+      + '<video id="playerVideo" playsinline preload="metadata" fetchpriority="high"'
       + (opts.poster ? ' poster="' + esc(opts.poster) + '"' : '')
       + '></video>'
       + '</div>'
@@ -2253,8 +3272,8 @@
       sub = 'Sabab: ' + m + ' (serverdan kelgan baytlar to‘g‘ri, muammo formatda)';
     } else {
       reason = 'Videoni tayyorlashda xatolik yuz berdi';
-      sub = 'Sabab: ' + m + '. Serverdan kelgan baytlar to‘g‘ri — bu format xatosi emas, '
-        + 'qayta urinib ko‘ring yoki Telegram ilovasida oching.';
+      sub = 'Sabab: ' + m + '. Bu video formati xatosi ekanini anglatmaydi; Telegram oqimi '
+        + 'yoki ulanishida muammo bo‘lishi mumkin. Qayta urinib ko‘ring yoki Telegram ilovasida oching.';
     }
 
     renderCta(node, opts, {
@@ -2302,22 +3321,29 @@
     var msg = null;
     var link = 'https://t.me/' + peer.replace(/^@/, '') + '/' + id;
 
-    // 1) GramJS'ning tayyor metodi — t.me/kanal/1, t.me/c/123/1, privat
-    //    havola hammasini o'zi to'g'ri ochadi.
-    try { msg = await client.getMessageByLink(link); } catch (e) { /* keyingisi */ }
+    // 1) Odatdagi holat — public/private kanal posti. Bevosita kanal API'si
+    //    getMessageByLink() dan tezroq: helper ichidagi qo'shimcha resolve va
+    //    fallback chaqiriqlarini kutmaymiz.
+    try {
+      var r = await client.api.channels.getMessages({ channel: peerOf(peer), id: [id] });
+      msg = (r && (r.messages || r)[0]) || null;
+    } catch (e) {
+      if (isAuthError((e && (e.errorMessage || e.message)) || '')) throw e;
+    }
     if (!msg || !msg.id) {
-      // 2) Kanal xabarlari uchun channels.getMessages (maydon: `channel`)
-      try {
-        var r = await client.api.channels.getMessages({ channel: peerOf(peer), id: [id] });
-        msg = (r && (r.messages || r)[0]) || null;
-      } catch (e) { /* keyingisi */ }
+      // 2) Link helper — t.me/c/... va ayrim privat havolalar uchun fallback.
+      try { msg = await client.getMessageByLink(link); } catch (e) {
+        if (isAuthError((e && (e.errorMessage || e.message)) || '')) throw e;
+      }
     }
     if (!msg || !msg.id) {
       // 3) Oddiy guruh
       try {
         var r2 = await client.api.messages.getMessages({ peer: peerOf(peer), id: [id] });
         msg = (r2 && r2.messages && r2.messages[0]) || null;
-      } catch (e) { /* keyingisi */ }
+      } catch (e) {
+        if (isAuthError((e && (e.errorMessage || e.message)) || '')) throw e;
+      }
     }
     if (!msg) throw new Error('Xabar topilmadi (kanal ommaboy emasmi?)');
 
@@ -2334,7 +3360,9 @@
         var d2 = docOf(list[k]);
         if (d2) return d2;
       }
-    } catch (e) { /* keyingi */ }
+    } catch (e) {
+      if (isAuthError((e && (e.errorMessage || e.message)) || '')) throw e;
+    }
 
     throw new Error('Bu xabarda video topilmadi');
   }
@@ -2346,7 +3374,7 @@
     return null;
   }
 
-  // `doc.size` GramJS'da big-integer (Long) — oddiy son EMAS.
+  // `doc.size` Telegram SDK'larda big-integer bo'lishi mumkin — oddiy son EMAS.
   function bytesOf(doc) {
     var s = doc && doc.size;
     if (s === undefined || s === null) return 0;
@@ -2369,9 +3397,45 @@
     };
   }
 
+  function nativeMp4Probe(doc) {
+    var filename = String(videoInfo(doc).filename || '').toLowerCase();
+    var mime = String((doc && doc.mime_type) || '').split(';')[0].trim().toLowerCase();
+    if (!/\.mp4$/.test(filename) && !/\.m4v$/.test(filename)
+        && mime !== 'video/mp4' && mime !== 'application/mp4') return null;
+    return {
+      playable: true,
+      containerName: 'MP4',
+      videoCodecs: [],
+      reason: null,
+      fastPath: true
+    };
+  }
+
+  // Noma'lum fayl nomi uchun ham avval native playerga imkon beramiz.
+  // Mos kelmasa, video error handler transportni tekshirib adaptive yo'lga o'tadi.
+  function quickPlaybackProbe(doc) {
+    var known = nativeMp4Probe(doc);
+    if (known) return known;
+    var info = videoInfo(doc);
+    var hint = (String(info.filename || '') + ' ' + String((doc && doc.mime_type) || '')).toLowerCase();
+    var containerName = 'MP4';
+    if (/matroska|\.mkv|video\/x-matroska/.test(hint)) containerName = 'Matroska';
+    else if (/webm/.test(hint)) containerName = 'WEBM';
+    else if (/\.avi|msvideo/.test(hint)) containerName = 'AVI';
+    else if (/\.mov|quicktime/.test(hint)) containerName = 'MP4';
+    return {
+      playable: true,
+      uncertain: true,
+      containerName: containerName,
+      videoCodecs: [],
+      reason: null,
+      fastPath: true
+    };
+  }
+
   // ------------------------------------------------------- format aniqlash
   function fetchRange(start, end) {
-    return fetch(fileUrl() + '?size=' + S.size + '&t=' + Date.now(),
+    return fetch(fileUrl() + '?size=' + S.size + '&t=' + Date.now() + docQ(),
       { headers: { Range: 'bytes=' + start + '-' + end } })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2432,6 +3496,12 @@
   // birinchi ochilganda kutish bo'lmaydi.
   function init() {
     try {
+      // Telegram DC'ga ulanishni OLDINDAN boshlaymiz (TLS handshake sahifa
+      // yuklanishi bilan parallel). Video bosilganda ulanish tayyor bo'ladi —
+      // ~150–300 ms tejaladi.
+      warmFast();
+    } catch (e) {}
+    try {
       if (!('serviceWorker' in navigator)) return;
       // Faqat O'RNATAMIZ — reload qilmaymiz. Foydalanuvchi saytga kirishi
       // bilan sahifasi sakramasligi uchun. To'liq tayyorlash (va kerak bo'lsa
@@ -2454,14 +3524,88 @@
     }).catch(function () { return false; });
   }
 
+  // Tez prefetch: hujjat metama'lumotini lokal keshdan yoki serverdan oladi
+  // (serverda keshlangan bo'lsa ~10 ms) va minimal klent bilan kerakli bosh
+  // baytlarni oldindan yuklaydi. GramJS bundle'iga umuman murojaat qilinmaydi.
+  function fastPrefetch(opts, key) {
+    // Qaytarish qiymati:
+    //   `null`  — tez yo'l umuman ishlatilmaydi (klient/sessiya yo'q);
+    //   `true`  — tez yo'l ishlaydi;
+    //   `false` — tez yo'l bu hujjat uchun ISHLAMADI (masalan Telegram
+    //             `file_reference`ni rad etdi) — eski (GramJS) yo'lga qaytish.
+    var f = fastClient();
+    if (!f) return null;
+    var meta = docMetaGet(key);
+    var p = meta ? Promise.resolve(meta)
+      : docMetaFromServer(opts).then(function (m) {
+          if (m) docMetaSave(key, m);
+          return m;
+        });
+    return p.then(function (m) {
+      // `fr` bo'sh — bu metama'lumot ishlatilmaydi (Telegram uni rad etadi).
+      if (!m || !m.fr) return false;
+      S.fast = f;
+      var doc = docMetaToDoc(m);
+      var size = bytesOf(doc);
+      if (!size) return false;
+      var probe = quickPlaybackProbe(doc);
+      var loc = {
+        id: doc.id,
+        accessHash: doc.accessHash,
+        fileReference: doc.fileReference,
+        thumbSize: ''
+      };
+      headSize(doc.id, size);
+      S.pvCache = S.pvCache || {};
+      S.pvCache[key] = { t: Date.now(), doc: doc, size: size, loc: loc, probe: probe, fromFast: true };
+
+      // Faqat joriy video uchun (ixtiyoriy) bosh baytlarni oldindan olamiz.
+      var warm = Math.min(Number(opts.warmBytes) || 0, 4 * 1024 * 1024);
+      // Telegram `upload.getFile` limiti 1 MB, uzunlik 4096 ga bo'linishi SHART.
+      // Aks holda server "LIMIT_INVALID" beradi va bo'sh ma'lumot qoladi.
+      warm = Math.min(warm, 1024 * 1024);
+      warm = Math.floor(warm / 4096) * 4096;
+      if (!warm) return true;
+      return f.getFile({
+        id: doc.id,
+        accessHash: doc.accessHash,
+        fileReference: doc.fileReference,
+        thumbSize: '',
+        dcId: doc.dcId
+      }, 0, warm).then(function (b) {
+        headPut(doc.id, 0, b instanceof Uint8Array ? b : new Uint8Array(b));
+        return true;
+      }).catch(function (e) {
+        var msg = (e && (e.errorMessage || e.message)) || String(e);
+        // Telegram bu hujjatni rad etdi — tez yo'l BU HUJJAT uchun
+        // ishlamaydi. Yozuvni tozalab, eski (GramJS) yo'lga qaytamiz.
+        if (/FILE_REFERENCE|AUTH_KEY_UNREGISTERED|LIMIT_INVALID/.test(msg)) {
+          try { if (S.pvCache && S.pvCache[key]) delete S.pvCache[key]; } catch (x) {}
+          try {
+            var raw = localStorage.getItem(DOC_META_KEY);
+            if (raw) {
+              var all = JSON.parse(raw) || {};
+              if (all[key]) {
+                delete all[key];
+                localStorage.setItem(DOC_META_KEY, JSON.stringify(all));
+              }
+            }
+          } catch (x) {}
+          return false;
+        }
+        // Vaqtinchalik xato — mount o'zi qayta so'raydi.
+        return true;
+      });
+    }).catch(function () {
+      return false;
+    });
+  }
+
   // ============================================== oldindan yuklash (prefetch)
   //
-  // Keyingi reel/film uchun faqat METAMA'LUMOTNI tayyorlaydi: Telegram'dan
-  // xabarni topib (findDoc) doc/size/loc ni keshlaydi. Video baytlari
-  // o'ynalmaydi — shuning uchun aktiv oqimga xalaqit bermaydi. Foydalanuvchi
-  // o'sha slaydga o'tganda mount keshdan bir zumda ochiladi (qayta findDoc
-  // yo'q). Agar foydalanuvchi slaydni tashlab ketsa — cancelPrefetch()
-  // o'qishni to'xtatadi.
+  // Odatdagi keyingi reel/film uchun faqat METAMA'LUMOTNI tayyorlaydi.
+  // watch.php joriy video uchun warmBytes bersa, so'ralgan bosh qismi qurilma
+  // RAM keshiga olinadi; serverga yozilmaydi. Bekor qilinsa qolgan read to'xtaydi.
   function prefetch(opts) {
     opts = opts || {};
     var key = (opts.channel && opts.post)
@@ -2475,11 +3619,49 @@
     //   * har o'tilgan reel uchun ~1 MB ortiqcha trafik (saytga og'irlik),
     //   * aktiv video bilan BIR klientda parallel `upload.getFile` — natijada
     //     global `tgCap` pasayib, joriy `<video>` oqimi ham "cho'q" qolardi.
-    // Endi faqat METAMA'LUMAT (doc/loc/size/probe) oldindan tayyorlanadi —
-    // bu 1 ta xabar + 64 KB; o'zi ham `probe` paytida kerak bo'ladigan.
+    // Keyingi videolar uchun ortiqcha warm yo'q. Joriy watch sahifasi
+    // `warmBytes` bersagina, o'sha miqdor oldindan olinadi (4 MiB bilan cheklanadi).
     var hit = S.pvCache && S.pvCache[key];
     if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) return Promise.resolve(true);
 
+    // Xuddi shu hujjat allaqachon yuklanmoqda.
+    if (S.prefetchKey === key && S.prefetchPromise) return S.prefetchPromise;
+
+    // --- TEZ YO'L: metama'lumot keshda yoki serverda bo'lsa — GramJS
+    // bundle'ini (5.4 MB) umuman yuklamaymiz. Faqat minimal klient (25 KB).
+    // Bu sahifa yuklanganda eng katta tormoqni olib tashlaydi.
+    if (!S.fastBroken) {
+      var fastP = fastPrefetch(opts, key);
+      if (fastP) {
+        var fastAborted = false;
+        S.prefetchKey = key;
+        S.prefetchAbort = function () { fastAborted = true; };
+        var fp = fastP.then(function (ok) {
+          if (ok || fastAborted) return !!ok;
+          // Tez yo'l bu hujjat uchun ishlamadi (masalan Telegram
+          // `file_reference`ni rad etdi) — eski (GramJS) yo'lga qaytamiz.
+          // Aks holda video umuman ochilmaydi.
+          S.prefetchKey = null;
+          S.prefetchAbort = null;
+          return legacyPrefetch(opts, key);
+        });
+        S.prefetchPromise = fp;
+        fp.catch(function () {}).then(function () {
+          if (S.prefetchPromise === fp) {
+            S.prefetchPromise = null;
+            S.prefetchAbort = null;
+            S.prefetchKey = null;
+          }
+        });
+        return fp;
+      }
+    }
+
+    return legacyPrefetch(opts, key);
+  }
+
+  // Eski (GramJS) yo'l: to'liq SDK orqali hujjatni topadi va keshlaydi.
+  function legacyPrefetch(opts, key) {
     // Xuddi shu hujjat allaqachon yuklanmoqda.
     if (S.prefetchKey === key && S.prefetchPromise) return S.prefetchPromise;
 
@@ -2494,25 +3676,46 @@
 
     var p = (function () {
       try {
-        return ensureSession(silentView()).then(function () {
+        return ensureSession(silentView(), { fastPlayback: true }).then(function () {
           if (aborted) return false;
           return findDoc(S.client, opts);
         }).then(function (doc) {
           if (aborted || !doc) return false;
+          S.authed = true; // successful message lookup validates the session
+          try { saveSession(S.client.session.save()); } catch (e) {}
           var size = bytesOf(doc);
           if (!size) return false;
           var loc = new S.T.Api.InputDocumentFileLocation({
             id: doc.id,
             accessHash: doc.accessHash,
-            fileReference: doc.fileReference,
+            fileReference: gramJsBytes(doc.fileReference),
             thumbSize: ''
           });
           var ctx = { loc: loc, dcId: doc.dcId, abort: function () { return aborted; } };
-          return probeFormat(size, ctx).then(function (probe) {
+          var nativeProbe = nativeMp4Probe(doc);
+          var probePromise = (nativeProbe || opts.metadataOnly)
+            ? Promise.resolve(nativeProbe) : probeFormat(size, ctx);
+          return probePromise.then(function (probe) {
             if (aborted) return false;
+            // Watch sahifasining faqat JORIY videosi uchun (ixtiyoriy)
+            // bosh baytlarni shu qurilmada oldindan o'qiymiz. Serverga
+            // video yuborilmaydi. `headPut()` bu baytlarni RAM'da ushlab,
+            // playerning birinchi Range so'roviga qaytaradi. Keyingi videolar
+            // uchun opts.warmBytes berilmaydi — trafik bilan raqobat yo'q.
+            var warmBytes = Math.min(size, Math.max(0, Math.min(4 * 1024 * 1024,
+              Number(opts.warmBytes) || 0)));
             S.pvCache = S.pvCache || {};
-            S.pvCache[key] = { t: Date.now(), doc: doc, size: size, loc: loc, probe: probe };
-            return true;
+            var cacheEntry = { t: Date.now(), doc: doc, size: size, loc: loc, probe: probe };
+            // Metadata'ni darhol ko'rinadigan qilamiz; player tugallanishini
+            // kutmasdan ochilishi mumkin, warm read esa fon rejimida yakunlanadi.
+            S.pvCache[key] = cacheEntry;
+            var warm = warmBytes ? readBytes(0, warmBytes, ctx).catch(function () { return null; })
+              : Promise.resolve(null);
+            return warm.then(function () {
+              if (aborted) return false;
+              cacheEntry.t = Date.now();
+              return true;
+            });
           });
         });
       } catch (e) {
@@ -2521,7 +3724,13 @@
     })();
 
     S.prefetchPromise = p;
-    p.catch(function () {}).then(function () {
+    p.catch(function (e) {
+      var message = (e && (e.errorMessage || e.message)) || String(e);
+      if (isAuthError(message)) {
+        clearSession();
+        resetAuth();
+      }
+    }).then(function () {
       // Faqat o'zimiz hali ham joriy promise bo'lsak tozalaymiz —
       // aks holda yangi prefetch holatini o'chirib qo'yardik.
       if (S.prefetchPromise === p) {
@@ -2531,6 +3740,15 @@
       }
     });
     return p;
+  }
+
+  // `warmMedia` — hover/prefetch uchun: birinchi ~2 MB (taxminan 15 s) ni
+  // shu qurilmada oldindan o'qib, RAM keshiga qo'yadi. Serverga video yuborilmaydi.
+  function warmMedia(opts) {
+    opts = opts || {};
+    return prefetch(Object.assign({}, opts, {
+      warmBytes: (opts.warmBytes != null) ? opts.warmBytes : (4 * 1024 * 1024)
+    }));
   }
 
   function cancelPrefetch() {
@@ -2553,7 +3771,7 @@
   // ================================================ 9. UMUMIY MTProto KLIENT
   //
   //  Reels izohlari, stiker/GIF yuborish kabi vazifalar uchun ulangan
-  //  GramJS klientini qaytaradi. Bu yerda LOGIN OQIMI YO'Q: agar kalit
+  //  Ulangan Telegram klientini qaytaradi. Bu yerda LOGIN OQIMI YO'Q: agar kalit
   //  bo'lmasa yoki yaroqsiz bo'lsa — reject qilamiz (chaqiruvchi login
   //  sahifasiga yo'naltiradi yoki xabar ko'rsatadi).
   function commentClient() {
@@ -2588,8 +3806,8 @@
   //  katalog va filmlar faqat Telegram orqali ulangan payt ochiladi.
 
   function hasSession() {
-    // DIQQAT: GramJS `StringSession.save()` — bu "1" + base64 satri; unda
-    // "authKey" so'zi YO'Q. Shuning uchun faqat mazmunli uzunlikni
+    // Sessiya stringi formatlari o'zgarishi mumkin; unda "authKey" so'zi
+    // yo'q. Shuning uchun faqat mazmunli uzunlikni
     // tekshiramiz (auth_key ~256 bayt -> base64 ~350 belgi). Kalitning
     // haqiqiy yaroqliligi `verify()` / `start()` da aniqlanadi.
     var s = loadSession();
@@ -2676,7 +3894,7 @@
       }
     });
 
-    // GramJS bilan bir xil ko‘rinish — QR/2FA maydonlari funksiya orqali
+    // SDK almashsa ham bir xil ko‘rinish — QR/2FA maydonlari funksiya orqali
     // qayta topiladi (mount() dagi izoh shu yerda ham amal qiladi).
     var view = {
       qrBox:    function () { return find('.tgs-qr'); },
@@ -2863,6 +4081,13 @@
     warm: warm,
     // Keyingi videoni oldindan tayyorlash (faqat metama'lumot keshlanadi).
     prefetch: prefetch,
+    // Saytga kirganda BARCHA videolarning metama'lumotini bitta server
+    // so'rovi bilan oldindan olish. Keyin bosilgan video darhol ochiladi.
+    prefetchMany: prefetchMany,
+    // Xuddi shu, lekin foydalanuvchining O'Z sessiyasi (GramJS) orqali —
+    // `file_reference` shunda to'g'ri akkauntga tegishli bo'ladi.
+    prefetchManyGram: prefetchManyGram,
+    warmMedia: warmMedia,
     cancelPrefetch: cancelPrefetch,
     // Sahifadan chiqishda: oqim + prefetch + SW kanalini to'xtatish.
     release: release,
@@ -2903,7 +4128,7 @@
     // Ulangan MTProto klient (izohlar, stiker/GIF uchun).
     // Kalit bo'lmasa/yaroqsiz bo'lsa reject bo'ladi (login talab qilinadi).
     client: commentClient,
-    // GramJS bundle (Api, utils) — klient ulangandan keyin mavjud bo'ladi.
+    // Telegram SDK bundle (Api, utils) — klient ulangandan keyin mavjud bo'ladi.
     bundle: function () { return S.T || null; },
     // Telegram ilovasida o'z playerida ochish (ixtiyoriy zaxira).
     tgLink: tgDeepLink,

@@ -71,7 +71,7 @@ $items = $catalog->getContinueWatching($userId, 200);
                    title="<?php echo esc($c['title'] ?? ''); ?>">
                     <div class="sv-media">
                         <?php if (!empty($c['poster'])): ?>
-                            <img loading="lazy" src="<?php echo esc(Catalog::posterSrc($c['poster'] ?? '')); ?>" alt="">
+                            <img loading="lazy" src="<?php echo esc(Catalog::resolvePoster($c['poster'] ?? '', $c['title'] ?? '')); ?>" alt="">
                         <?php else: ?>
                             <div class="sv-ph">🎬</div>
                         <?php endif; ?>

@@ -21,7 +21,9 @@ window.ADM_MODULES.content = function (C) {
 
     function img(u) {
         u = String(u || '');
-        if (/^https?:\/\/(t\.me|telegram\.me)\//i.test(u)) return '';
+        if (/^https?:\/\/(t\.me|telegram\.me)\//i.test(u)) {
+            return C.BASE + '/api/tg-resolve.php?url=' + encodeURIComponent(u) + '&mode=img';
+        }
         if (/^https?:\/\//i.test(u)) return u;
         if (/^uploads\//.test(u)) return C.BASE + '/' + u;
         return '';
@@ -128,24 +130,24 @@ window.ADM_MODULES.content = function (C) {
             return;
         }
         h += '<div class="muted" style="margin-bottom:8px">' + num(d.total) + ' ta yozuv</div>'
-            + '<div class="tbl-wrap"><table class="tbl"><thead><tr>'
+            + '<div class="tbl-wrap"><table class="tbl cx-content-table"><thead><tr>'
             + '<th style="width:30px"><input type="checkbox" id="cxAll"></th><th>Nomi</th><th>Kategoriya</th><th>Qismlar</th><th>Ko‘rish</th><th>Holat</th><th></th></tr></thead><tbody>';
         rows.forEach(function (it) {
             var p = img(it.poster);
             h += '<tr>'
-                + '<td><input type="checkbox" data-sel="' + it.id + '"' + (L.sel[it.id] ? ' checked' : '') + '></td>'
-                + '<td><div class="cx-title">'
+                + '<td class="cx-select"><input type="checkbox" aria-label="' + esc(it.title) + ' ni tanlash" data-sel="' + it.id + '"' + (L.sel[it.id] ? ' checked' : '') + '></td>'
+                + '<td class="cx-name" data-label="Nomi"><div class="cx-title">'
                 + (p ? '<img src="' + esc(p) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' : '<span class="cx-noimg">' + (Number(it.is_series) ? '📺' : '🎬') + '</span>')
                 + '<div><a href="#/edit/' + it.id + '">' + esc(it.title) + '</a>'
                 + '<div class="muted sm">#' + it.id + ' · ' + (Number(it.is_series) ? 'Serial/anime' : 'Kino') + (it.release_year ? ' · ' + it.release_year : '')
                 + (Number(it.rating) ? ' · ★ ' + Number(it.rating).toFixed(1) : '') + '</div></div></div></td>'
-                + '<td class="muted">' + esc(it.category_name || '—') + '</td>'
-                + '<td>' + num(it.episodes_count) + '</td>'
-                + '<td class="muted">' + num(it.views) + '</td>'
-                + '<td><select class="cx-st st-' + esc(it.status) + '" data-qst="' + it.id + '">'
+                + '<td class="muted" data-label="Kategoriya">' + esc(it.category_name || '—') + '</td>'
+                + '<td data-label="Qismlar">' + num(it.episodes_count) + '</td>'
+                + '<td class="muted" data-label="Ko‘rishlar">' + num(it.views) + '</td>'
+                + '<td data-label="Holat"><select class="cx-st st-' + esc(it.status) + '" aria-label="' + esc(it.title) + ' holati" data-qst="' + it.id + '">'
                 + ['published', 'draft', 'archived'].map(function (s) { return '<option value="' + s + '"' + (it.status === s ? ' selected' : '') + '>' + STATUS[s] + '</option>'; }).join('')
                 + '</select></td>'
-                + '<td class="actions"><a class="btn ghost sm" href="#/edit/' + it.id + '">Tahrir</a> '
+                + '<td class="actions" data-label="Amallar"><a class="btn ghost sm" href="#/edit/' + it.id + '">Tahrir</a> '
                 + '<button class="btn ghost sm" data-dup="' + it.id + '" title="Nusxa">⧉</button> '
                 + '<button class="btn bad sm" data-del="' + it.id + '">✕</button></td></tr>';
         });
@@ -245,32 +247,20 @@ window.ADM_MODULES.content = function (C) {
     }
     function mainHtml(isNew) {
         var it = E.item, p = img(it.poster);
-        return '<div class="panel cx-fill"><h2>Avtomatik to‘ldirish</h2>'
-            + '<div class="toolbar"><select id="fsrc" class="btn ghost"><option value="jikan">Anime — MyAnimeList (Jikan)</option>'
-            + '<option value="tmdb-movie">Film — TMDB</option><option value="tmdb-tv">Serial — TMDB</option></select>'
-            + '<input type="search" id="fq" placeholder="Nomini yozing va Enter bosing…" value="' + esc(it.title || '') + '">'
-            + '<button class="btn" id="fgo" type="button">Qidirish</button></div>'
-            + '<div id="fres" class="cx-res"></div></div>'
-            + '<div class="panel"><h2>' + (isNew ? 'Yangi kontent' : esc(it.title)) + '</h2><form id="cform">'
-            + '<div class="cx-grid"><div class="cx-main">'
+        return '<div class="panel"><h2>' + (isNew ? 'Yangi kontent' : esc(it.title)) + '</h2>'
+            + '<p class="hint">Oddiy qo‘shish: kino yoki multfilm uchun Telegram video linkini shu yerga kiriting. Anime/serial qismlari keyingi bo‘limdan qo‘shiladi.</p>'
+            + '<form id="cform"><div class="cx-grid"><div class="cx-main">'
             + '<div class="row2">' + fld('Sarlavha *', 'title', it.title, 'required maxlength="255"')
             + fld('Asl nomi', 'original_title', it.original_title, 'maxlength="255"') + '</div>'
             + '<div class="row3"><div class="field"><label>Kategoriya *</label><select name="category_id">' + opts(CATS, it.category_id, 'id', 'name') + '</select></div>'
-            + '<div class="field"><label>Turi</label><select name="is_series">'
+            + '<div class="field"><label>Turi</label><select name="is_series" id="ctype">'
             + '<option value="0"' + (Number(it.is_series) === 0 ? ' selected' : '') + '>Kino / multfilm</option>'
             + '<option value="1"' + (Number(it.is_series) === 1 ? ' selected' : '') + '>Serial / anime</option></select></div>'
             + '<div class="field"><label>Holat</label><select name="status">'
             + ['published', 'draft', 'archived'].map(function (s) { return '<option value="' + s + '"' + ((it.status || 'published') === s ? ' selected' : '') + '>' + STATUS[s] + '</option>'; }).join('')
             + '</select></div></div>'
-            + '<div class="row3">' + fld('Yil', 'release_year', it.release_year || '', 'type="number" min="1895" max="2100"')
-            + fld('Baho (0–10)', 'rating', it.rating || '', 'type="number" step="0.1" min="0" max="10"')
-            + fld('Davomiylik (daq)', 'duration', it.duration || '', 'type="number" min="0"') + '</div>'
-            + '<div class="row3">' + fld('Jami qismlar', 'total_episodes', it.total_episodes || '', 'type="number" min="0"')
-            + fld('Studiya', 'studio', it.studio, 'maxlength="255"') + fld('Rejissyor', 'director', it.director, 'maxlength="255"') + '</div>'
-            + '<div class="row2">' + fld('Davlat', 'country', it.country, 'maxlength="100"') + fld('Til / dublyaj', 'language', it.language, 'maxlength="50"') + '</div>'
-            + '<div class="field"><label>Janrlar</label><input name="genres" id="gin" value="' + esc(it.genres || '') + '" maxlength="500" placeholder="Vergul bilan: Jangari, Komediya">'
-            + '<div class="cx-genres" id="gchips">' + GENRES.map(function (g) { return '<button type="button" class="cx-g" data-g="' + g + '">' + g + '</button>'; }).join('') + '</div></div>'
-            + fld('Aktyorlar / ovoz aktyorlari', 'actors', it.actors, 'maxlength="2000"')
+            + '<div class="row2">' + fld('Yil', 'release_year', it.release_year || '', 'type="number" min="1895" max="2100"')
+            + fld('Jami qismlar', 'total_episodes', it.total_episodes || '', 'type="number" min="0"') + '</div>'
             + '<div class="field"><label>Tavsif</label><textarea name="description" maxlength="5000" rows="5">' + esc(it.description) + '</textarea></div>'
             + '</div><div class="cx-side">'
             + '<div class="field"><label>Poster</label><div class="cx-drop" id="drop">'
@@ -278,10 +268,7 @@ window.ADM_MODULES.content = function (C) {
             + '<span id="dtxt"' + (p ? ' hidden' : '') + '>Rasmni shu yerga tashlang<br>yoki bosing (JPG/PNG/WEBP, 5 MB)</span>'
             + '<input type="file" id="pfile" accept="image/jpeg,image/png,image/webp" hidden></div>'
             + '<input name="poster" id="pin" value="' + esc(it.poster) + '" maxlength="500" placeholder="https://… yoki t.me/…" style="margin-top:8px"></div>'
-            + fld('Banner havolasi', 'banner_url', it.banner_url, 'maxlength="500" placeholder="https://…"')
-            + fld('Treyler (YouTube)', 'trailer_url', it.trailer_url, 'maxlength="500" placeholder="https://youtube.com/…"')
-            + fld('Slug (bo‘sh = avtomatik)', 'slug', it.slug, 'maxlength="255"')
-            + (isNew ? fld('Telegram havola (1-qism)', 'first_episode_url', '', 'placeholder="https://t.me/kanal/123"') : '')
+            + (isNew ? '<div class="field cx-video-field"><label>Telegram video havolasi <span class="muted">(kino/multfilm uchun)</span></label><input name="first_episode_url" id="firstEpisodeUrl" maxlength="1000" placeholder="https://t.me/kanal/123"><small class="muted">Saqlanganda avtomatik 1-qism bo‘ladi.</small></div>' : '')
             + '</div></div>'
             + '<div class="cx-actions"><button class="btn" type="submit">Saqlash</button> <a class="btn ghost" href="#/content">Bekor qilish</a></div>'
             + '</form></div>';
@@ -300,46 +287,14 @@ window.ADM_MODULES.content = function (C) {
     }
 
     function bindMain(isNew) {
-        /* avtomatik to‘ldirish */
-        var go = function () {
-            var q = $('#fq').value.trim(), src = $('#fsrc').value, box = $('#fres');
-            if (!q) return;
-            box.innerHTML = '<div class="muted">Qidirilmoqda…</div>';
-            var finish = function (list) {
-                if (!list.length) { box.innerHTML = '<div class="muted">Hech narsa topilmadi</div>'; return; }
-                box.innerHTML = list.map(function (o, i) {
-                    return '<button type="button" class="cx-r" data-i="' + i + '">'
-                        + (o.poster ? '<img src="' + esc(o.poster) + '" alt="">' : '<span class="cx-noimg">🎬</span>')
-                        + '<span><b>' + esc(o.title) + '</b><i>' + esc(o.original_title || '') + (o.release_year ? ' · ' + o.release_year : '') + (o.rating ? ' · ★ ' + o.rating : '') + '</i></span></button>';
-                }).join('');
-                $$('#fres [data-i]').forEach(function (b) { b.onclick = function () { applyFill(list[Number(b.getAttribute('data-i'))]); }; });
-            };
-            if (src === 'jikan') {
-                fetch('https://api.jikan.moe/v4/anime?limit=8&q=' + encodeURIComponent(q))
-                    .then(function (r) { return r.json(); })
-                    .then(function (j) { finish((j.data || []).map(fromJikan)); })
-                    .catch(function () { box.innerHTML = '<div class="muted">Jikan javob bermadi. Keyinroq urinib ko‘ring.</div>'; });
-            } else {
-                post(API, { action: 'tmdb_search', q: q, kind: src === 'tmdb-tv' ? 'tv' : 'movie' }).then(function (r) {
-                    if (!r || !r.success) { box.innerHTML = '<div class="muted">' + esc((r && r.message) || 'Xatolik') + '</div>'; return; }
-                    finish(r.results || []);
-                });
-            }
-        };
-        $('#fgo').onclick = go;
-        $('#fq').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
-
-        /* janrlar */
-        $('#gin').addEventListener('input', syncGenres);
-        $$('#gchips [data-g]').forEach(function (b) {
-            b.onclick = function () {
-                var cur = genreArr(), g = b.getAttribute('data-g'), i = cur.indexOf(g);
-                if (i < 0) cur.push(g); else cur.splice(i, 1);
-                $('#gin').value = cur.join(', ');
-                syncGenres();
-            };
-        });
-        syncGenres();
+        var type = $('#ctype'), first = $('#firstEpisodeUrl');
+        function syncType() {
+            if (!first) return;
+            var movie = type.value === '0';
+            first.closest('.cx-video-field').hidden = !movie;
+            if (!movie) first.value = '';
+        }
+        if (type) { type.addEventListener('change', syncType); syncType(); }
 
         /* poster yuklash */
         var drop = $('#drop'), file = $('#pfile');
@@ -358,6 +313,12 @@ window.ADM_MODULES.content = function (C) {
             data.action = isNew ? 'create_content' : 'update_content';
             if (!isNew) data.id = E.id;
             post(API, data).then(function (r) {
+                if (r && r.success && isNew && r.episode_id && data.first_episode_url) {
+                    autoSaveDuration({ id: r.episode_id }, {
+                        season: 1, episode_number: 1, title: '1-qism',
+                        video_type: 'direct', video_url: data.first_episode_url
+                    });
+                }
                 done(r, isNew ? 'Yaratildi' : 'Saqlandi', function (x) {
                     if (isNew) { E.tab = 'main'; location.hash = '#/edit/' + x.id; }
                 });
@@ -404,18 +365,11 @@ window.ADM_MODULES.content = function (C) {
         e = e || {};
         var id = cfg.id;
         return '<form class="cx-eform" data-form="' + id + '">'
-            + '<div class="row3">'
-            + '<div class="field"><label>Fasl</label><input name="season" type="number" min="1" value="' + (e.season || E.season) + '"></div>'
+            + '<input type="hidden" name="season" value="' + (e.season || E.season || 1) + '">'
+            + '<input type="hidden" name="title" value="' + esc(e.id ? e.title : '') + '">'
+            + '<input type="hidden" name="video_type" value="' + esc(e.video_type || 'direct') + '">'
             + '<div class="field"><label>Qism raqami *</label><input name="episode_number" type="number" min="1" required value="' + (e.episode_number || nextNum()) + '"></div>'
-            + '<div class="field"><label>Davomiylik (daq)</label><input name="duration" type="number" min="0" value="' + (e.duration || '') + '"></div></div>'
-            + '<div class="row2"><div class="field"><label>Sarlavha</label><input name="title" maxlength="255" value="' + esc(e.id ? e.title : '') + '" placeholder="Bo‘sh = “Qism N”"></div>'
-            + '<div class="field"><label>Manba turi</label><select name="video_type">' + opts(['direct', 'embed', 'file', 'hls', 'none'], e.video_type || 'direct') + '</select></div></div>'
             + '<div class="field"><label>Video havola *</label><input name="video_url" maxlength="1000" value="' + esc(e.video_url) + '" placeholder="https://t.me/kanal/123 yoki URL"></div>'
-            + '<div class="row2"><div class="field"><label>720p havola</label><input name="video_url_720p" maxlength="1000" value="' + esc(e.video_url_720p) + '"></div>'
-            + '<div class="field"><label>1080p havola</label><input name="video_url_1080p" maxlength="1000" value="' + esc(e.video_url_1080p) + '"></div></div>'
-            + '<div class="row3"><div class="field"><label>Subtitr (.vtt/.srt)</label><input name="subtitle_url" maxlength="500" value="' + esc(e.subtitle_url) + '"></div>'
-            + '<div class="field"><label>Ovoz tili</label><input name="audio_lang" maxlength="30" value="' + esc(e.audio_lang) + '" placeholder="O‘zbek / Yapon"></div>'
-            + '<div class="field"><label>Thumbnail</label><input name="thumbnail" maxlength="500" value="' + esc(e.thumbnail) + '"></div></div>'
             + '<label class="check"><input type="checkbox" name="is_premium" value="1"' + (Number(e.is_premium) ? ' checked' : '') + '> Premium (pullik) qism</label>'
             + '<div class="cx-actions"><button class="btn ok" type="submit">' + cfg.btn + '</button>'
             + (cfg.cancel ? ' <button class="btn ghost" type="button" data-cancel="' + id + '">Bekor</button>' : '') + '</div></form>';
@@ -463,9 +417,8 @@ window.ADM_MODULES.content = function (C) {
             + '<div id="addOne">' + epForm(null, { id: 'new', btn: '+ Qism qo‘shish' }) + '</div>'
             + tgHtml()
             + '<form id="addBulk" hidden>'
-            + '<div class="row3"><div class="field"><label>Fasl</label><input name="season" type="number" min="1" value="' + E.season + '"></div>'
-            + '<div class="field"><label>Boshlanish raqami</label><input name="start" type="number" min="1" value="' + nextNum() + '"></div>'
-            + '<div class="field"><label>Davomiylik (daq)</label><input name="duration" type="number" min="0"></div></div>'
+            + '<div class="row2"><div class="field"><label>Fasl</label><input name="season" type="number" min="1" value="' + E.season + '"></div>'
+            + '<div class="field"><label>Boshlanish raqami</label><input name="start" type="number" min="1" value="' + nextNum() + '"></div></div>'
             + '<div class="field"><label>Havolalar — har qatorda bitta (ixtiyoriy: <code>havola | sarlavha</code>)</label>'
             + '<textarea name="urls" rows="8" placeholder="https://t.me/kanal/101&#10;https://t.me/kanal/102&#10;https://t.me/kanal/103 | Final"></textarea></div>'
             + '<div class="row2"><div class="field"><label>Manba turi</label><select name="video_type">' + opts(['direct', 'embed', 'file', 'hls'], 'direct') + '</select></div>'
@@ -480,6 +433,24 @@ window.ADM_MODULES.content = function (C) {
         new FormData(f).forEach(function (v, k) { d[k] = v; });
         if (!d.is_premium) d.is_premium = '0';
         return d;
+    }
+    function autoSaveDuration(r, d) {
+        var id = r && r.id, url = (r && r.tg && r.tg.video) || d.video_url || '';
+        if (!id || !url || /^https?:\/\/(?:www\.)?t\.me\//i.test(url)) return;
+        var v = document.createElement('video');
+        v.preload = 'metadata';
+        v.onloadedmetadata = function () {
+            var minutes = Math.max(1, Math.round(Number(v.duration || 0) / 60));
+            if (!minutes) return;
+            post(API, {
+                action: 'update_episode', id: id, season: d.season || E.season,
+                episode_number: d.episode_number || 1, title: d.title || '',
+                video_type: d.video_type || 'direct', video_url: d.video_url || url,
+                duration: minutes
+            });
+        };
+        v.onerror = function () {};
+        v.src = url;
     }
     function reload() { viewEdit(String(E.id), true); }
 
@@ -524,6 +495,7 @@ window.ADM_MODULES.content = function (C) {
                 if (id === 'new') { d.action = 'add_episode'; d.content_id = E.id; }
                 else { d.action = 'update_episode'; d.id = id; }
                 post(API, d).then(function (r) {
+                    if (r && r.success) autoSaveDuration(r, d);
                     done(r, id === 'new' ? 'Qism qo‘shildi' : 'Saqlandi', function () { E.season = Number(d.season) || E.season; reload(true); });
                     if (r && r.success && r.tg && r.tg.has_video === false) toast('Diqqat: Telegram postda video topilmadi', 'err');
                 });

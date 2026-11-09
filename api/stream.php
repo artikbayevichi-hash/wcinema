@@ -94,7 +94,13 @@ if (!$uploadsRoot) {
 }
 $full = realpath(__DIR__ . '/../' . $urlPath);
 
-if (!$full || strpos($full, $uploadsRoot) !== 0 || !is_file($full)) {
+$rootPrefix = rtrim($uploadsRoot, '/\\') . DIRECTORY_SEPARATOR;
+$insideUploads = $full !== false && (
+    DIRECTORY_SEPARATOR === '\\'
+        ? strncasecmp($full, $rootPrefix, strlen($rootPrefix)) === 0
+        : strncmp($full, $rootPrefix, strlen($rootPrefix)) === 0
+);
+if (!$insideUploads || !is_file($full)) {
     http_response_code(404);
     exit('Fayl topilmadi');
 }
@@ -102,6 +108,20 @@ if (!$full || strpos($full, $uploadsRoot) !== 0 || !is_file($full)) {
 $size = (int) filesize($full);
 $mtime = (int) filemtime($full);
 $mime = Catalog::mimeFromFile($full);
+
+// Nginx production'da tekshiruv va ruxsat (reel owner/admin/status) PHP'da
+// qoladi, lekin katta MP4 baytlari PHP-FPM workeridan o'tmaydi. Range,
+// If-Range va HEAD'ni Nginx static handleri o'zi xizmat qiladi. Apache/XAMPP
+// uchun mavjud PHP Range implementation'i o'zgarishsiz qoladi.
+if ((string) ($_SERVER['NGINX_INTERNAL_MEDIA'] ?? '') === '1') {
+    $relative = str_replace('\\', '/', substr($full, strlen($rootPrefix)));
+    $encodedPath = implode('/', array_map('rawurlencode', explode('/', $relative)));
+    header('Content-Type: ' . $mime);
+    header('Accept-Ranges: bytes');
+    header('Cache-Control: private, max-age=3600');
+    header('X-Accel-Redirect: /_internal_uploads/' . $encodedPath);
+    exit;
+}
 
 // ETag / Last-Modified
 // ---------------------------------------------------------------------------

@@ -45,3 +45,14 @@ Thumbs.db
 
 # Diagnostika loglari
 /errlog.txt
+
+# Mahalliy vaqtinchalik ish/research va browser bundle build vositalari
+/.work/
+
+# Agent/IDE vositalari (lokal, repo'ga kerak emas)
+/.agents/
+/.worktrees/
+/skills-lock.json
+
+# Tahrirlovchi vaqtinchalik fayllari
+.manus-*.tmp

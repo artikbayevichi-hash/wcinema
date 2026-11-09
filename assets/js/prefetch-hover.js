@@ -88,4 +88,28 @@
         var ctx = ctxFromLink(a);
         if (ctx) load(ctx.key, ctx.c, ctx.e);
     }, { passive: true });
+    // Dastlabki ko'rinadigan 4 ta kartani sahifa ochilishida oldindan tayyorlash
+    // (hover kutmasdan): videoning birinchi ~4 MB (≈30 s) keshlanadi.
+    function autoWarmInitial() {
+        try {
+            var links = document.querySelectorAll('a[href*="watch.php"]');
+            var seenKeys = {};
+            var count = 0;
+            for (var i = 0; i < links.length && count < 4; i++) {
+                var ctx = ctxFromLink(links[i]);
+                if (!ctx || seenKeys[ctx.key]) continue;
+                seenKeys[ctx.key] = true;
+                count++;
+                (function (key, c, e, delay) {
+                    setTimeout(function () { load(key, c, e); }, delay);
+                })(ctx.key, ctx.c, ctx.e, 600 + (count - 1) * 500);
+            }
+        } catch (e) {}
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(autoWarmInitial, 400); }, { once: true });
+    } else {
+        setTimeout(autoWarmInitial, 400);
+    }
+
 })();

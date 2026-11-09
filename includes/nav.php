@@ -26,7 +26,7 @@ $igIsAdmin  = $auth->isAdmin();
 // Admin panel sahifalarida admin KALITI bilan kirgan bo'lsa, Telegram (MTProto)
 // guard'ini o'tkazib yuboramiz — panel kalit bilan ishlaydi. Oddiy sayt
 // sahifalarida esa guard avvalgidek qoladi.
-$igAdminPage = in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), ['admin-content.php', 'admin-reels.php'], true);
+$igAdminPage = in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), ['admin-content.php'], true);
 $igLogged   = (bool) $user;
 $igProfileH = 'profile.php';
 $igCreateH  = 'reels-upload.php';
@@ -116,6 +116,8 @@ function ig_svg($name) {
         'smile'    => '<path d="M12 3.6c3.5 0 6.3 2.7 6.3 6.1 0 3.3-2.8 6.1-6.3 6.1s-6.3-2.8-6.3-6.1c0-3.4 2.8-6.1 6.3-6.1z"/><path style="fill:none" d="M10.9 15.5h2.2l-1.1 2.1z"/><path style="fill:none" d="M12 17.6c0 1.3.5 2.2 1.5 2.9"/><circle style="fill:currentColor;stroke:none" cx="9.8" cy="9" r="1.05"/><circle style="fill:currentColor;stroke:none" cx="14.2" cy="9" r="1.05"/><path style="fill:none" d="M9.7 11.8a3.1 3.1 0 0 0 4.6 0"/>',
         // Seriallar — antenna va "qism" o'ynatish tugmasi bo'lgan retro TV.
         'tv'       => '<rect x="2.9" y="7.5" width="18.2" height="12" rx="2.8"/><path style="fill:none" d="M8.3 3.7 12 7.5l3.7-3.8"/><path style="fill:currentColor;stroke:none" d="M10.6 11v5l4.3-2.5z"/>',
+        // Kuz barog'i (yomg'ir + chaqmoq) — "Kuz rejimi" tugmasi uchun.
+        'leaf'     => '<path d="M20 4C10 4 4.4 8.6 4.4 15.2c0 2 .6 3.6 1.5 4.8 4-6.4 8.3-9.6 11.6-11.4-3.4 2.4-6.6 5.7-9 10.9 1.3.6 2.7.9 4.2.9 5.3 0 9.3-4.2 9.3-16.5Z"/>',
         'globe'    => '<circle cx="12" cy="12" r="8.1"/><path style="fill:none" d="M3.9 12h16.2"/><path style="fill:none" d="M12 3.9c2.35 2.35 2.35 13.85 0 16.2M12 3.9c-2.35 2.35-2.35 13.85 0 16.2"/><path style="fill:none" d="M6 7.2h12M6 16.8h12"/>',
         'tag'      => '<path d="M4.1 4.1h7.4l8.4 8.4-7.4 7.4-8.4-8.4z"/><circle style="fill:currentColor;stroke:none" cx="8.5" cy="8.5" r="1.25"/>',
         'plus'     => '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
@@ -140,7 +142,7 @@ function ig_item($href, $key, $icon, $label, $active, $extra = '') {
     $cls = $active === $key ? ' active' : '';
     return '<a class="ig-item' . $cls . '" href="' . $href . '" title="' . esc($label) . '"' . $extra . '>'
          . '<span class="ig-ico">' . ig_svg($icon) . '</span>'
-         . '<span class="ig-txt">' . $label . '</span></a>';
+         . '<span class="ig-txt">' . esc($label) . '</span></a>';
 }
 ?>
 <?php
@@ -312,17 +314,82 @@ function wc_logo_img($alt = '', $attrs = '') {
     <a href="<?php echo $igProfileH; ?>" class="ig-tab-profile <?php echo $NAV_ACTIVE === 'profile' ? 'active' : ''; ?>" aria-label="Profil"><?php echo $igAvatar; ?></a>
 </nav>
 
+<!-- Doimiy donor tugmasi: umumiy nav kiritilgan barcha sahifalarda ko'rinadi. -->
+<button class="donate-fab" type="button" data-donate-open
+        aria-haspopup="dialog" aria-controls="donateDialog">
+    <span class="donate-fab-icon" aria-hidden="true"><?php echo ig_svg('heart'); ?></span>
+    <span>Donat</span>
+</button>
+
+<!-- To'lov hisob/merchant ma'lumoti berilgach, shu oynaga rasmiy provider ulanadi. -->
+<div class="donate-dialog" id="donateDialog" role="dialog" aria-modal="true"
+     aria-labelledby="donateTitle" aria-describedby="donateDescription" hidden>
+    <div class="donate-backdrop" data-donate-close></div>
+    <section class="donate-panel" tabindex="-1">
+        <button class="donate-x" type="button" data-donate-close-button aria-label="Oynani yopish">&times;</button>
+        <div class="donate-heart" aria-hidden="true"><?php echo ig_svg('heart'); ?></div>
+        <p class="donate-kicker">W CINEMA'ni qo'llab-quvvatlang</p>
+        <h2 id="donateTitle">Donat loyihani rivojlantiradi</h2>
+        <p class="donate-description" id="donateDescription">
+            Sayt sizga yoqsa, keyinroq donat orqali uning rivojiga hissa qo'shishingiz mumkin.
+        </p>
+        <div class="donate-status" role="status">
+            <span class="donate-status-dot" aria-hidden="true"></span>
+            <div>
+                <strong>To'lov hozircha ulanmagan</strong>
+                <p>Click yoki Payme rasmiy tarzda sozlangach, to'lov shu oynadan xavfsiz ochiladi.</p>
+            </div>
+        </div>
+        <p class="donate-privacy">Karta raqami bu saytda so'ralmaydi va saqlanmaydi.</p>
+        <button class="donate-disabled" type="button" disabled>To'lov usuli keyinroq qo'shiladi</button>
+        <button class="donate-dismiss" type="button" data-donate-close-button>Yopish</button>
+    </section>
+</div>
+
 <!-- ============================== Qidiruv oynasi (alohida) ============================== -->
-<div class="ig-search" id="igSearch" hidden>
+<div class="ig-search" id="igSearch" role="dialog" aria-modal="true" aria-label="Saytdan qidirish" hidden>
     <div class="ig-search-bar">
         <span class="ig-search-ico"><?php echo ig_svg('search'); ?></span>
+        <label class="sr-only" for="igSearchInput">Saytdan qidirish</label>
         <input id="igSearchInput" type="search" placeholder="Qidirish" autocomplete="off">
         <button class="ig-search-close" id="igSearchClose" type="button" aria-label="Yopish"><?php echo ig_svg('back'); ?></button>
     </div>
     <div class="ig-search-body">
         <div class="ig-search-hint" id="igSearchHint">Qidirish uchun nom yozing</div>
+        <div class="ig-search-recent" id="igSearchRecent" hidden></div>
         <div class="ig-search-grid" id="igSearchGrid"></div>
     </div>
+</div>
+
+<!-- ============================== TV rejimi: YouTube TV uslubidagi qidiruv ============================== -->
+<!-- YouTube TV'da "Qidiruv" bosilganda to'liq ekranni egallagan qidiruv
+     oynasi ochiladi: yuqorida KATTAGINA maydon (pult klaviaturasi shu
+     yerga ochiladi), pastida esa yozilayotgan so'zga qarab natijalar
+     jonli paydo bo'ladi. Shu oynaga kirsangiz — fokus maydonga tushadi,
+     pastga bosing — natijalar orasida yurursiz. -->
+<div class="tv-search" id="tvSearch" role="dialog" aria-modal="true" aria-label="Qidirish" hidden>
+    <div class="tv-search-bar">
+        <span class="tv-search-ico"><?php echo ig_svg('search'); ?></span>
+        <label class="sr-only" for="tvSearchInput">Saytdan qidirish</label>
+        <input id="tvSearchInput" type="search" placeholder="Qidirish…" autocomplete="off"
+               autocorrect="off" autocapitalize="off" spellcheck="false"
+               readonly inputmode="none" tabindex="-1" data-tv-skip>
+        <button class="tv-search-clear" id="tvSearchClear" type="button" aria-label="Tozalash" hidden>&times;</button>
+        <button class="tv-search-back" id="tvSearchBack" type="button" aria-label="Orqaga">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+        </button>
+    </div>
+    <div class="tv-search-main">
+    <!-- Chap: pult bilan boshqariladigan ekran klaviaturasi (YouTube TV kabi) -->
+    <div class="tv-search-left">
+        <div class="tv-kb" id="tvKb" role="group" aria-label="Klaviatura"></div>
+    </div>
+    <!-- O'ng: jonli natijalar -->
+    <div class="tv-search-body">
+        <div class="tv-search-hint" id="tvSearchHint">Qidirish uchun nom yozing — pultdagi klaviatura shu yerga ochiladi</div>
+        <div class="tv-search-grid" id="tvSearchGrid"></div>
+    </div>
+    </div><!-- /tv-search-main -->
 </div>
 
 <!-- ============================== Sozlamalar oynasi (alohida) ============================== -->
@@ -371,6 +438,11 @@ function wc_logo_img($alt = '', $attrs = '') {
                     <span class="ig-set-ico"><?php echo ig_svg('tv'); ?></span>
                     <span class="ig-set-txt">TV rejimi</span>
                     <span class="ig-set-val" id="setTvVal">O&#8217;chiq</span>
+                </button>
+                <button class="ig-set-row" id="autumnToggleLink" type="button">
+                    <span class="ig-set-ico"><?php echo ig_svg('leaf'); ?></span>
+                    <span class="ig-set-txt">Kuz rejimi</span>
+                    <span class="ig-set-val" id="setAutumnVal">O&#8217;chiq</span>
                 </button>
             </div>
 
@@ -553,6 +625,30 @@ window.addEventListener('DOMContentLoaded', function () {
         } catch (e) { location.reload(); }
     });
 
+    // ---------------- "Kuz rejimi" (yomg'ir + chaqmoq) tugmasi ----------------
+    // Sozlamalar oynasidan yoqish/o'chirish. Holat `localStorage`da saqlanadi
+    // va `includes/tv-head.php` orqali sahifa chizilishidan OLDIN
+    // `body.autumn-off` sinfi sifatida qo'yiladi (FOUC bo'lmaydi).
+    var autumnKey = 'wc_autumn_off';
+    var setAutumnVal = document.getElementById('setAutumnVal');
+    function igAutumnOff() {
+        try { return localStorage.getItem(autumnKey) === '1'; } catch (e) { return false; }
+    }
+    function igAutumnPaint() {
+        if (setAutumnVal) setAutumnVal.textContent = igAutumnOff() ? 'O\u2018chiq' : 'Yoniq';
+    }
+    if (document.body) document.body.classList.toggle('autumn-off', igAutumnOff());
+    igAutumnPaint();
+    var autumnLink = document.getElementById('autumnToggleLink');
+    if (autumnLink) {
+        autumnLink.addEventListener('click', function () {
+            var off = !igAutumnOff();
+            try { localStorage.setItem(autumnKey, off ? '1' : '0'); } catch (e) {}
+            if (document.body) document.body.classList.toggle('autumn-off', off);
+            igAutumnPaint();
+        });
+    }
+
     // ---------------- Kutubxona bo'limi ----------------
     var libBtn = document.getElementById('igLibBtn');
     var libMenu = document.getElementById('igLibMenu');
@@ -580,10 +676,63 @@ window.addEventListener('DOMContentLoaded', function () {
     var searchBox  = document.getElementById('igSearch');
     var searchInp  = document.getElementById('igSearchInput');
     var searchGrid = document.getElementById('igSearchGrid');
+    var searchRecent = document.getElementById('igSearchRecent');
     var searchHint = document.getElementById('igSearchHint');
     var searchX    = document.getElementById('igSearchClose');
     var searchTimer = null;
-    var igSearchSeq = 0;
+    var igSearchKey = 'wc_recent_searches_v1';
+    // So'rov navbatini saqlash uchun token obyekti — har bir oyna o'z
+    // tokeniga ega (sekin javob keyingisini bekor qilmasligi uchun).
+    var igTokenSearch = { n: 0 };
+    var igTokenTv    = { n: 0 };
+
+    // ---------------- TV rejimi: YouTube TV uslubidagi qidiruv ----------------
+    // Pult bilan boshqariladigan to'liq ekranli qidiruv. Fokus avval
+    // maydonga tushadi (pult klaviaturasi shu yerda ochiladi), natijalar
+    // esa yozilayotgan so'zga qarab jonli yangilanadi.
+    var tvSearchBox   = document.getElementById('tvSearch');
+    var tvSearchInp   = document.getElementById('tvSearchInput');
+    var tvSearchGrid  = document.getElementById('tvSearchGrid');
+    var tvSearchHint  = document.getElementById('tvSearchHint');
+    var tvSearchClear = document.getElementById('tvSearchClear');
+    var tvSearchBack  = document.getElementById('tvSearchBack');
+    var tvSearchTimer = null;
+    var tvSearchSeq   = 0;
+    var tvSearchLast  = null;      // natijalar ichidagi oxirgi fokus
+
+    /** TV rejimi faolmi? (`tv-mode.js` `<html>` ga `.tv-mode` qo'yadi.) */
+    function igIsTv() {
+        return !!(document.documentElement && document.documentElement.classList.contains('tv-mode'));
+    }
+
+    function igRecentRead() {
+        try {
+            var a = JSON.parse(localStorage.getItem(igSearchKey) || '[]');
+            return Array.isArray(a) ? a.filter(function (x) { return typeof x === 'string' && x.trim(); }).slice(0, 6) : [];
+        } catch (e) { return []; }
+    }
+    function igRecentSave(q) {
+        q = String(q || '').trim();
+        if (q.length < 2) return;
+        var a = igRecentRead().filter(function (x) { return x.toLowerCase() !== q.toLowerCase(); });
+        a.unshift(q);
+        try { localStorage.setItem(igSearchKey, JSON.stringify(a.slice(0, 6))); } catch (e) {}
+        igRecentRender();
+    }
+    function igRecentRender() {
+        if (!searchRecent) return;
+        var a = igRecentRead();
+        searchRecent.hidden = !a.length;
+        searchRecent.innerHTML = a.map(function (q) {
+            return '<button type="button" class="ig-recent-chip" data-recent="' + igEsc(q) + '">' + igEsc(q) + '</button>';
+        }).join('');
+        searchRecent.querySelectorAll('[data-recent]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                searchInp.value = b.getAttribute('data-recent') || '';
+                igRunSearch();
+            });
+        });
+    }
 
     function igEsc(s) {
         return String(s == null ? '' : s)
@@ -600,9 +749,12 @@ window.addEventListener('DOMContentLoaded', function () {
     }
 
     function igOpenSearch() {
+        // TV rejimida — YouTube TV uslubidagi to'liq ekranli qidiruv.
+        if (igIsTv() && tvSearchBox) { igTvOpenSearch(); return; }
         if (!searchBox) return;
         igCatOpen(false);
         searchBox.hidden = false;
+        igRecentRender();
         document.body.style.overflow = 'hidden';
         if (searchInp) setTimeout(function () { searchInp.focus(); }, 30);
     }
@@ -666,24 +818,31 @@ window.addEventListener('DOMContentLoaded', function () {
         return '<div class="ig-sres-sec"><div class="ig-sres-sec-h">' + title + '</div>' + html + '</div>';
     }
 
-    function igRunSearch() {
-        if (!searchInp || !searchGrid) return;
-        var q = searchInp.value.trim();
+    /**
+     * Qidiruv natijalarini yuklab, berilgan `grid` ichiga chizadi.
+     *
+     * Ikkala oyna — oddiy `.ig-search` (telefon/desktop) va TV `.tv-search` —
+     * ham shu YAGONA funksiyadan foydalanadi: natija va tuzilma bir xil
+     * bo'ladi, farq faqat chizilish uslubida.
+     */
+    function igSearchInto(q, grid, hint, token, onDone) {
+        if (!grid) return;
         if (q.length < 2 && !/^\d+$/.test(q)) {
-            searchGrid.innerHTML = '';
-            if (searchHint) {
-                searchHint.hidden = false;
-                searchHint.textContent = 'Qidirish uchun kamida 2 ta harf yozing';
+            grid.innerHTML = '';
+            if (hint) {
+                hint.hidden = false;
+                hint.textContent = 'Qidirish uchun kamida 2 ta harf yozing';
             }
+            if (typeof onDone === 'function') onDone(0);
             return;
         }
-        if (searchHint) { searchHint.hidden = false; searchHint.textContent = 'Qidirilmoqda…'; }
-        var seq = ++igSearchSeq;
+        if (hint) { hint.hidden = false; hint.textContent = 'Qidirilmoqda…'; }
+        var seq = ++token.n;
         fetch(igSearchBase() + '/api/search.php?limit=12&q=' + encodeURIComponent(q), {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         }).then(function (r) { return r.json(); }).then(function (d) {
-            if (seq !== igSearchSeq) return;
+            if (seq !== token.n) return;
             var profiles = (d && d.profiles) || [];
             var content  = (d && d.content) || [];
             var reels    = (d && d.reels) || [];
@@ -697,19 +856,249 @@ window.addEventListener('DOMContentLoaded', function () {
             if (reels.length) {
                 html += igSection('Reelslar', '<div class="ig-search-cards">' + reels.map(igReelCard).join('') + '</div>');
             }
-            searchGrid.innerHTML = html;
-            if (searchHint) {
-                searchHint.hidden = (profiles.length + content.length + reels.length) > 0;
-                searchHint.textContent = 'Natija topilmadi';
+            grid.innerHTML = html;
+            // TV'da har bir harfda emas, natija tanlanganda saqlanadi.
+            if (token !== igTokenTv) igRecentSave(q);
+            if (hint) {
+                hint.hidden = (profiles.length + content.length + reels.length) > 0;
+                hint.textContent = 'Natija topilmadi';
+            }
+            if (typeof onDone === 'function') {
+                onDone(profiles.length + content.length + reels.length);
             }
         }).catch(function () {
-            if (seq !== igSearchSeq) return;
-            if (searchHint) {
-                searchHint.hidden = false;
-                searchHint.textContent = 'Qidirishda xatolik yuz berdi';
+            if (seq !== token.n) return;
+            if (hint) {
+                hint.hidden = false;
+                hint.textContent = 'Qidirishda xatolik yuz berdi';
             }
         });
     }
+
+    function igRunSearch() {
+        if (!searchInp || !searchGrid) return;
+        igSearchInto(searchInp.value.trim(), searchGrid, searchHint, igTokenSearch);
+    }
+
+    // ================================================================
+    //  TV QIDIRUV — YouTube TV uslubi
+    //  · ochilganda fokus avval KATTA maydonga tushadi (pult klaviaturasi
+    //    shu yerga ochiladi) — xuddi YouTube TV kabi;
+    //  · natijalar yozilayotgan so'zga qarab JONLI yangilanadi;
+    //  · maydondan ↓ bosilsa natijalar orasiga o'tiladi, ↑ orqaga.
+    // ================================================================
+    function igTvOpenSearch() {
+        if (!tvSearchBox) return;
+        igCatOpen(false);
+        tvSearchBox.hidden = false;
+        document.body.style.overflow = 'hidden';
+        if (tvSearchGrid) tvSearchGrid.innerHTML = '';
+        if (tvSearchClear) tvSearchClear.hidden = true;
+        if (tvSearchHint) {
+            tvSearchHint.hidden = false;
+            tvSearchHint.textContent = 'Qidirish uchun nom yozing — pultdagi klaviatura shu yerga ochiladi';
+        }
+        if (tvSearchInp) tvSearchInp.value = '';
+        igTvBuildKb();
+        igTvShowRecent();
+        // Fokus birinchi tugmaga (YouTube TV kabi).
+        setTimeout(function () { igTvFocusKey('.tv-key'); }, 40);
+    }
+
+    function igTvCloseSearch() {
+        if (!tvSearchBox) return;
+        tvSearchBox.hidden = true;
+        document.body.style.overflow = '';
+        // Fokusni "Qidiruv" bandiga qaytaramiz (pult bilan "orqaga" tabiiy).
+        var back = document.querySelector('#igSide [data-nav-search]');
+        if (back) {
+            try { back.focus(); back.classList.add('tv-focus'); } catch (e) {}
+        }
+    }
+
+    function igTvRunSearch() {
+        if (!tvSearchInp) return;
+        var q = tvSearchInp.value.trim();
+        if (tvSearchClear) tvSearchClear.hidden = !q;
+        if (!q) { igTvShowRecent(); return; }
+        var hadFocusInGrid = !!(tvSearchGrid && tvSearchGrid.contains(document.activeElement));
+        igSearchInto(q, tvSearchGrid, tvSearchHint, igTokenTv, function (total) {
+            if (!total) return;
+            // DOM qayta chizildi — fokus natijada bo'lgan bo'lsa uni birinchi
+            // natijaga qaytamiz; aks holda maydonda qolamiz.
+            var first = tvSearchGrid.querySelector('a.ig-sres, a.ig-sprof');
+            if (hadFocusInGrid && first) {
+                try { first.focus(); first.classList.add('tv-focus'); } catch (e) {}
+            } else if (!hadFocusInGrid && (document.activeElement === document.body || !document.activeElement)) {
+                igTvFocusKey('.tv-key');
+            }
+        });
+    }
+
+    // ================================================================
+    //  TV EKRAN KLAVIATURASI (YouTube TV uslubi)
+    //  9 ustunli tugmalar to'ri: a-z + ʻ, 1-9, 0 - [bo'sh joy] [o'chirish] [tozalash].
+    //  Pult strelkalari tugmalar orasida yuradi (tv-mode.js), OK - harf yozadi.
+    //  Oddiy klaviatura ham ishlaydi (kompyuterda sinash uchun).
+    // ================================================================
+    var tvKb = document.getElementById('tvKb');
+
+    function igTvBuildKb() {
+        if (!tvKb || tvKb.childElementCount) return;
+        var h = '';
+        function key(label, val, cls, aria) {
+            return '<button type="button" class="tv-key' + (cls ? ' ' + cls : '') + '" data-k="' + val + '"'
+                 + (aria ? ' aria-label="' + aria + '"' : '') + '>' + label + '</button>';
+        }
+        'abcdefghijklmnopqrstuvwxyz'.split('').forEach(function (c) { h += key(c, c); });
+        h += key('\u02bb', '\u02bb', '', 'Apostrof');
+        '123456789'.split('').forEach(function (c) { h += key(c, c); });
+        h += key('0', '0');
+        h += key('-', '-');
+        h += key('Bo\u2018sh joy', 'space', 'tv-key-space', 'Bo\u2018sh joy');
+        h += key('\u232b', 'back', 'tv-key-wide', 'O\u2018chirish');
+        h += key('\u2715', 'clear', '', 'Tozalash');
+        tvKb.innerHTML = h;
+    }
+
+    function igTvFocusKey(sel) {
+        var k = tvKb && tvKb.querySelector(sel || '.tv-key');
+        if (k) { try { k.focus(); k.classList.add('tv-focus'); } catch (e) {} }
+    }
+
+    function igTvType(k) {
+        if (!tvSearchInp) return;
+        var v = tvSearchInp.value;
+        if (k === 'back')       { v = v.slice(0, -1); }
+        else if (k === 'clear') { v = ''; }
+        else if (k === 'space') { if (!v || /\s$/.test(v)) return; v += ' '; }
+        else { if (v.length >= 60) return; v += k; }
+        tvSearchInp.value = v;
+        if (tvSearchClear) tvSearchClear.hidden = !v;
+        clearTimeout(tvSearchTimer);
+        tvSearchTimer = setTimeout(igTvRunSearch, 280);
+    }
+
+    /** Qidiruv bo'sh bo'lganda: so'nggi qidiruvlar (yoki ko'rsatma). */
+    function igTvShowRecent() {
+        igTokenTv.n++;                       // yo'ldagi eski javobni bekor qilamiz
+        if (!tvSearchGrid) return;
+        var a = igRecentRead();
+        if (!a.length) {
+            tvSearchGrid.innerHTML = '';
+            if (tvSearchHint) {
+                tvSearchHint.hidden = false;
+                tvSearchHint.textContent = 'Qidirish uchun chapdagi klaviaturadan nom yozing';
+            }
+            return;
+        }
+        if (tvSearchHint) tvSearchHint.hidden = true;
+        tvSearchGrid.innerHTML = '<div class="ig-sres-sec"><div class="ig-sres-sec-h">So\u2018nggi qidiruvlar</div>'
+            + '<div class="tv-recent">' + a.map(function (q) {
+                return '<button type="button" class="tv-recent-item" data-recent="' + igEsc(q) + '">' + igEsc(q) + '</button>';
+            }).join('') + '</div></div>';
+    }
+
+    if (tvKb) {
+        igTvBuildKb();
+        tvKb.addEventListener('click', function (e) {
+            var b = e.target.closest ? e.target.closest('[data-k]') : null;
+            if (b) igTvType(b.getAttribute('data-k'));
+        });
+    }
+    if (tvSearchGrid) {
+        tvSearchGrid.addEventListener('click', function (e) {
+            var t = e.target.closest ? e.target : null;
+            if (!t) return;
+            var r = t.closest('[data-recent]');
+            if (r) {
+                if (tvSearchInp) tvSearchInp.value = r.getAttribute('data-recent') || '';
+                clearTimeout(tvSearchTimer);
+                igTvRunSearch();
+                return;
+            }
+            // Natija tanlandi - so'rovni "so'nggi qidiruvlar"ga saqlaymiz.
+            if (t.closest('a.ig-sres, a.ig-sprof') && tvSearchInp) igRecentSave(tvSearchInp.value);
+        });
+    }
+
+    // Oddiy klaviatura (kompyuterda sinash / USB klaviatura): harf yozadi.
+    // `window` + capture — tv-mode.js dagi Space/Enter ishlovidan OLDIN ishlaydi.
+    window.addEventListener('keydown', function (e) {
+        if (!tvSearchBox || tvSearchBox.hidden) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        var k = e.key, t = null;
+        if (k === 'Backspace') {
+            // Bo'sh bo'lsa - qidiruvdan chiqish (pultdagi "orqaga" ham shu).
+            if (tvSearchInp && !tvSearchInp.value) { igTvCloseSearch(); e.preventDefault(); e.stopPropagation(); return; }
+            t = 'back';
+        } else if (k === ' ' || k === 'Spacebar') {
+            t = 'space';
+        } else if (k && k.length === 1) {
+            if (k === "'" || k === '\u2019' || k === '\u2018' || k === '`') t = '\u02bb';
+            else if (/^[\p{L}\p{N}\u02bb\-]$/u.test(k)) t = k.toLowerCase();
+        }
+        if (!t) return;
+        igTvType(t);
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
+    // Bo'sh joy tugmasi fokusdagi tugmani "bosib" yubormasligi uchun.
+    window.addEventListener('keyup', function (e) {
+        if (tvSearchBox && !tvSearchBox.hidden && (e.key === ' ' || e.key === 'Spacebar')) e.preventDefault();
+    }, true);
+
+    if (tvSearchInp) {
+        tvSearchInp.addEventListener('input', function () {
+            clearTimeout(tvSearchTimer);
+            tvSearchTimer = setTimeout(igTvRunSearch, 250);
+        });
+        tvSearchInp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                clearTimeout(tvSearchTimer);
+                igTvRunSearch();
+                e.preventDefault();
+                return;
+            }
+            // ↓ — natijalar orasiga o'tish (YouTube TV kabi).
+            if (e.key === 'ArrowDown') {
+                var first = tvSearchGrid && tvSearchGrid.querySelector('a.ig-sres, a.ig-sprof');
+                if (first) {
+                    try { first.focus(); first.classList.add('tv-focus'); } catch (err) {}
+                    e.preventDefault();
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                igTvCloseSearch();
+                e.preventDefault();
+            }
+        });
+    }
+    if (tvSearchGrid) {
+        tvSearchGrid.addEventListener('keydown', function (e) {
+            // ↑ — maydonga qaytish.
+            if (e.key === 'ArrowUp' && tvSearchInp) {
+                try { tvSearchInp.focus(); tvSearchInp.classList.add('tv-focus'); } catch (err) {}
+                e.preventDefault();
+            }
+        });
+    }
+    if (tvSearchClear) {
+        tvSearchClear.addEventListener('click', function () {
+            if (!tvSearchInp) return;
+            tvSearchInp.value = '';
+            tvSearchClear.hidden = true;
+            igTvRunSearch();
+            igTvFocusKey('.tv-key');
+        });
+    }
+    if (tvSearchBack) {
+        tvSearchBack.addEventListener('click', igTvCloseSearch);
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && tvSearchBox && !tvSearchBox.hidden) igTvCloseSearch();
+    });
 
     if (searchInp) {
         searchInp.addEventListener('input', function () {
@@ -736,4 +1125,5 @@ window.addEventListener('DOMContentLoaded', function () {
 <script src="assets/js/tv-mode.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/tv-mode.js') ?: 1; ?>"></script>
 <script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/notifications.js') ?: 1; ?>"></script>
 <script src="assets/js/dm-badge.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/dm-badge.js') ?: 1; ?>"></script>
+<script src="assets/js/donate.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/donate.js') ?: 1; ?>"></script>
 <?php /* Eski `tv.js` spatial navigatsiyasi `tv-mode.js` ichiga ko'chirildi. */ ?>

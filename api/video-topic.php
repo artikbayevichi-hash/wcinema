@@ -35,6 +35,13 @@ if (!defined('TG_COMMENTS_CHAT') || TG_COMMENTS_CHAT === '') {
     ok(['success' => false, 'disabled' => true, 'topic_id' => null, 'chat' => '', 'url' => null]);
 }
 
+// Mavzu yaratish Telegram API resursidan foydalanadi. O‘qish (GET) anonim
+// qolishi mumkin, ammo yangi topic ochish faqat server tanigan sessiya yoki
+// imzolangan client-session egasiga ruxsat etiladi.
+if ($method === 'POST' && clientUserId() <= 0) {
+    fail('Kommentariya mavzusini yaratish uchun tizimga kiring', 401);
+}
+
 $scope = TgTopics::SCOPE_VIDEO;
 
 // Mavzu nomi: "🎬 Kino nomi" yoki "✨ Anime nomi" + " · 3-qism".

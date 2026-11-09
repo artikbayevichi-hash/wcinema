@@ -79,6 +79,24 @@
     container-type: inline-size;
     container-name: wpl;
 }
+/* Poster foni (YouTube uslubi).
+   Video yuklanmaganda pleer QORA QUTI bo'lib qolmasligi uchun kontent
+   posteri fon qilinadi. Video o'zi paydo bo'lgach u ustini yopadi.
+   `--wposter` `watch.php` tomonidan `style` atributida beriladi. */
+.watch-player::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: var(--wposter, none);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: .9;
+    pointer-events: none;
+}
+/* Telegram oynasi yarim shaffof — poster uning orqasidan ko'rinib tursin. */
+.watch-player .tgs { background: rgba(11, 13, 16, .82); }
+
 /* ichidagi `.player-wrap` ham 100% balandlikda bo'lishi kerak */
 .watch-player .player-wrap {
     width: 100%; height: 100%; border-radius: 0;
@@ -89,6 +107,60 @@
 .watch-player .udp-player { width: 100%; height: 100%; border-radius: 0; }
 .watch-player .udp-player video { width: 100%; height: 100%; }
 .watch-player iframe { width: 100%; height: 100%; border: 0; }
+
+/* --- Pleyer tanlovi (Telegram embed / bizning MTProto pleyer) ----------
+   `.watch-player` 16:9 qutisidan TASHQARIDA turadi, shuning uchun video
+   nisbati o'zgarmaydi. Faqat ommaviy Telegram postida ko'rinadi. */
+.watch-pmode {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 0;
+}
+.watch-pmode[hidden] { display: none; }
+.watch-pmode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 13px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .06);
+    color: var(--text, #e8ecf2);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+}
+.watch-pmode-btn span {
+    color: var(--muted, #93a0b4);
+    font-size: 10.5px;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+.watch-pmode-btn:hover { background: rgba(255, 255, 255, .12); }
+.watch-pmode-btn.on {
+    background: rgba(80, 160, 255, .18);
+    border-color: rgba(80, 160, 255, .55);
+}
+.watch-pmode-btn.on span { color: inherit; opacity: .7; }
+.watch-pmode-btn.off { opacity: .55; }
+.watch-pmode-note {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
+    color: var(--muted, #93a0b4);
+    font-size: 12px;
+    font-style: normal;
+}
+/* Embed o'ynatmaydigan post: sabab RANGLI va alohida qatorda ko'rinadi —
+   aks holda foydalanuvchi "tugma ishlamayapti" deb o'ylaydi. */
+.watch-pmode-note.warn {
+    flex: 1 1 100%;
+    color: #ffc46b;
+    font-weight: 600;
+}
 .watch-player .nv-msg {
     color: var(--muted); font-size: 15px; text-align: center;
     padding: 24px 16px;
@@ -720,8 +792,9 @@ body.share-lock { overflow: hidden; }
 
 .watch-comments-wrap { position: relative; }
 .watch-comments-list {
-    border: 0;
-    border-radius: 13px 13px 0 0;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 13px 13px;
     background: var(--card);
     padding: 4px;
     /* `max-height` OLIB TASHLANDI — izohlar bloki videoning tagini
@@ -748,8 +821,9 @@ body.share-lock { overflow: hidden; }
 }
 .watch-comments-list .reels-c-body a { pointer-events: auto; }
 .watch-comments-wrap .reels-comments-form {
-    border: 1px solid var(--line); border-top: 0;
-    border-radius: 0 0 13px 13px;
+    border: 1px solid var(--line);
+    border-bottom: 0;
+    border-radius: 13px 13px 0 0;
     background: var(--bg-2);
 }
 
@@ -1041,8 +1115,10 @@ body.share-lock { overflow: hidden; }
     .watch-menu { min-width: 200px; }
 }
 @media (max-width: 560px) {
-    .ig-page.watch-page { padding: 10px; }
-    .watch-title { font-size: 17px; }
+    .ig-page.watch-page {
+        padding: 8px 8px calc(18px + env(safe-area-inset-bottom, 0px));
+    }
+    .watch-title { font-size: 17px; letter-spacing: -.01em; }
     /* `.watch-player` burchagi `@media (max-width: 42rem)` qoidasida —
        mobil'da ham 14px yumaloq (foydalanuvchi talabi). */
     .watch-side-head { padding: 10px 12px; }
@@ -1051,6 +1127,13 @@ body.share-lock { overflow: hidden; }
     .watch-rec-thumb { width: 132px; }
     .watch-rec-ttl { font-size: 13.5px; }
     .watch-rec-meta { font-size: 12px; }
+    .watch-channel { gap: 10px; }
+    .watch-channel-av { width: 36px; height: 36px; }
+    .watch-sub { padding-left: 46px; font-size: 12px; }
+    .watch-actions { gap: 5px; margin-inline: -2px; padding-inline: 2px; }
+    .watch-act { min-height: 40px; }
+    .watch-side-eps { border-radius: 14px; }
+    .watch-side-eps .watch-side-list { scroll-snap-type: x mandatory; }
 }
 
 /* ==================================================================
@@ -1272,30 +1355,11 @@ body.share-lock { overflow: hidden; }
      ko'rinishi kerak, shuning uchun har bir selektor `.watch-player` bilan
      boshlanadi. Boshqa sahifalarning playeri umuman tegilmaydi.
 
-   QISM 1 — ∞ ANIMATSIYASIGA BLUR
-     `player.css:74` dagi `.udp-loading-img` — `loading-infinity.gif`
-     (loading.io "Infinity" spinner). Uning filtri faqat OQ rang beradi:
-        brightness(0) invert(1) sepia(1) hue-rotate(170deg) saturate(6)
-     Biz shuni ZARANG yorug'lik (glow) bilan kuchaytiramiz va o'ziga xos
-     BLUR qo'shamiz — boshqaruv paneli kabi "shisha" taassuroti uchun:
-
-        blur(0.6px)  →  kontur biroz yumaloqlanadi, shisha effekti
-        drop-shadow  →  ikki qatlamli yorug'lik halo (ichki va tashqi)
-
-     `blur()` `drop-shadow()` dan OLDIN keladi — shunda soya ham yumaloq
-     konturdan olinadi (aks holda soya aniq chekkada qolardi).
+   QISM 1 — bitta buffering indikatori
+     Player faqat `.udp-spinner` halqasini ko‘rsatadi. Infinity GIF
+     elementi player.js’dan olib tashlangan, shu sabab ikki xil yuklanish
+     animatsiyasi ustma-ust chiqmaydi.
      ================================================================== */
-.watch-player .udp-loading-img {
-    filter: brightness(0) invert(1) sepia(1) hue-rotate(170deg) saturate(6)
-            blur(0.6px)
-            drop-shadow(0 0 6px rgba(111, 200, 242, 0.55))
-            drop-shadow(0 0 18px rgba(42, 171, 238, 0.38));
-}
-/* `loading-infinity.gif` yuklanib bo'lmagan (bekor qilingan) holatda
-   ko'rinadigan oddiy halqa ham xuddi shunday yumaloq bo'lsin. */
-.watch-player .udp-spinner {
-    filter: blur(0.5px) drop-shadow(0 0 6px rgba(111, 200, 242, 0.45));
-}
 
 /* ==================================================================
    QISM 2 — YUKLANISH YOZUVLARI KO'RINMASIN
@@ -1476,30 +1540,6 @@ body.share-lock { overflow: hidden; }
     pointer-events: none !important;
 }
 
-/* Markazda — ∞ animatsiyasi (yuqoridagi kabi BLUR bilan).
-   `.tgs-body` markazga yig'ilgan bo'lgani uchun `::before` orqali
-   qo'shiladi: JS ga tegilmaydi, `tg-stream.js` boshqa sahifalarda
-   o'zgarmay qoladi.
-
-   QR (kirish) yoki 2FA parol maydoni ochilganda bu indicator
-   ko'rinmasin — ularning o'rnini olmasin. */
-.watch-player .tgs-body::before {
-    content: "";
-    flex: 0 0 auto;
-    width: 72px;
-    height: 72px;
-    background: url("../loading-infinity.gif") center / contain no-repeat;
-    filter: brightness(0) invert(1) sepia(1) hue-rotate(170deg) saturate(6)
-            blur(0.6px)
-            drop-shadow(0 0 6px rgba(111, 200, 242, 0.55))
-            drop-shadow(0 0 18px rgba(42, 171, 238, 0.38));
-    pointer-events: none;
-    -webkit-user-select: none;
-    user-select: none;
-}
-.watch-player .tgs-body:has(.tgs-qr:not([hidden]))::before,
-.watch-player .tgs-body:has(.tgs-pwd:not([hidden]))::before { display: none; }
-
 /* QR / 2FA bo'lganda chiziq ham to'xtasin (ortiqcha harakatsizlik kerak emas).
    `.tgs-bar` `.tgs-body` ning AKA-UKASI (sibling) — shuning uchun `:has()`
    `.tgs` (konteyner) da bo'lishi kerak, `.tgs-body` da emas. */
@@ -1541,4 +1581,38 @@ body.share-lock { overflow: hidden; }
 .tv-mode .watch-rec.tv-focus .watch-rec-thumb,
 .tv-mode .watch-rec:focus-visible .watch-rec-thumb {
     box-shadow: 0 0 0 3px var(--accent);
+}
+
+
+/* Final player fill: video oynaning barcha maydonini egallaydi.
+ *
+ * DIQQAT (muhim tuzatish): avval `.watch-player` ham `height: 100% !important`
+ * ro'yxatida edi. Bu pleerning balandligini OTA konteynerga bog'ladi —
+ * natijada pleer ekran to'liq qora quti bo'lib, ostidagi sarlavha,
+ * amallar va izohlar ustiga tushardi ("hamma narsasi ostun ustun").
+ *
+ * Endi: TASHQI `.watch-player` o'z 16:9 nisbatini saqlaydi
+ * (`aspect-ratio: 16/9` + `width: 100%`), faqat ICHKI elementlar
+ * (`.player-wrap`, `.udp-player`, `.tgs`, `.watch-tg`) uning balandligini
+ * to'liq egallaydi.
+ */
+.watch-player {
+    width: 100% !important;
+    min-height: 0 !important;
+}
+.watch-player .player-wrap,
+.watch-player .player-wrap.has-video-container,
+.watch-player .udp-player,
+.watch-player .tgs,
+.watch-player .watch-tg {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+}
+.watch-player .udp-player video,
+.watch-player .player-wrap .udp-player video,
+.watch-player .tgs .udp-player video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
 }

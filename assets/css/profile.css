@@ -558,6 +558,30 @@
     box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35);
     pointer-events: none;
 }
+
+@media (max-width: 560px) {
+    .pf-main { padding: 0; }
+    .pf-card { padding: 16px 12px 12px; }
+    .pf-header { gap: 12px; margin-bottom: 12px; }
+    .pf-avatar { width: 72px; height: 72px; flex-basis: 72px; }
+    .pf-name { font-size: 17px; }
+    .pf-bio { font-size: 13px; }
+    .pf-stats {
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        margin-inline: -4px;
+        padding: 9px 4px;
+    }
+    .pf-stats::-webkit-scrollbar { display: none; }
+    .pf-stat { flex: 0 0 82px; }
+    .pf-stat b { font-size: 16px; }
+    .pf-actions { gap: 6px; }
+    .pf-btn { min-width: 0; min-height: 42px; padding: 9px 11px; }
+    .pf-tabs { top: calc(58px + env(safe-area-inset-top, 0px)); }
+    .pf-tab { flex: 0 0 106px; min-height: 44px; }
+}
 .pf-cell.tall .pf-cell-media::after { border-left-width: 5px; }
 .pf-cell.wide .pf-cell-media::after { border-top-width: 5px; }
 

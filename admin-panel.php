@@ -2,8 +2,8 @@
 // ============================================================================
 // admin-panel.php — YANGI admin panel (SPA, yon menyu + tun/kun mavzusi)
 // ============================================================================
-// Eski sahifalar (admin.php, admin-content.php, admin-users.php,
-// admin-notify.php) ZAXIRA sifatida saqlanib qolgan — pastdagi havola orqali.
+// Eski sahifalar (admin-content.php) moslik uchun saqlangan — u yangi SPA
+// modullariga yo'naltiradi.
 //
 // Kirish: admin-login.php (parol) → 30 kunlik imzolangan cookie.
 // ============================================================================
@@ -25,7 +25,6 @@ if (!$auth->isAdmin()) {
 
 $base = rtrim(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\');
 $cssV = @filemtime(__DIR__ . '/assets/css/admin-panel.css') ?: 1;
-$cssN = @filemtime(__DIR__ . '/assets/css/admin-neon.css') ?: 1;
 $jsV  = @filemtime(__DIR__ . '/assets/js/admin-panel.js') ?: 1;
 $jsC  = @filemtime(__DIR__ . '/assets/js/admin-content.js') ?: 1;
 $logV = @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1;
@@ -37,10 +36,7 @@ $logV = @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1;
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="robots" content="noindex, nofollow">
     <title>Admin — <?php echo htmlspecialchars(SITE_NAME); ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
     <link rel="stylesheet" href="assets/css/admin-panel.css?v=<?php echo $cssV; ?>">
-    <link rel="stylesheet" href="assets/css/admin-neon.css?v=<?php echo $cssN; ?>">
     <script>
         window.ADM = {
             base: <?php echo json_encode($base); ?>,
@@ -73,7 +69,6 @@ $logV = @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1;
 
         <div class="foot">
             <a class="nav-item" href="index.php"><span class="ic">🌐</span> Saytni ochish</a>
-            <a class="nav-item" href="admin.php"><span class="ic">🗂</span> Eski panel</a>
             <a class="nav-item" href="admin-panel.php?logout=1" id="logoutLink"><span class="ic">🚪</span> Chiqish</a>
         </div>
     </aside>
@@ -92,6 +87,14 @@ $logV = @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1;
         <div id="view"><div class="empty">Yuklanmoqda…</div></div>
     </main>
 </div>
+
+<nav class="adm-mobile-nav" aria-label="Admin bo‘limlari">
+    <button type="button" data-view="dashboard"><span>⌂</span><small>Boshqaruv</small></button>
+    <button type="button" data-view="content"><span>▣</span><small>Kontent</small></button>
+    <button type="button" data-view="reels"><span>▶</span><small>Reels</small></button>
+    <button type="button" data-view="users"><span>●</span><small>Users</small></button>
+    <button type="button" data-view="settings"><span>⚙</span><small>Sozlama</small></button>
+</nav>
 
 <script src="assets/js/admin-content.js?v=<?php echo $jsC; ?>"></script>
 <script src="assets/js/admin-panel.js?v=<?php echo $jsV; ?>"></script>

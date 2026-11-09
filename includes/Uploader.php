@@ -13,14 +13,18 @@
 //                       media → Telegram kanalga
 //
 // THUMBNAIL (preview):
-//   ffmpeg yo'q (XAMPP muhitida), shuning uchun poster —
+//   poster —
 //     · rasm postlarda: rasmning o'zidan `getimagesize` orqali nisbat olinadi
 //                       va fayl kanal preview sifatida ishlatiladi;
 //     · videolarda:    BRAUZER `canvas` bilan kadr ajratadi, JPEG sifatida
 //                       yuboradi (`poster` maydoni). Agar kelmasa —
 //                       fayl nomidan generatsiya qilingan placeholder.
+//   MP4 upload: FFmpeg sozlangan bo'lsa Telegram'ga yuborishdan avval
+//               qayta kodlamasdan faststart qilinadi.
 //   `reels.thumb_source`: 'client' | 'auto' | 'manual'
 // ============================================================================
+
+require_once __DIR__ . '/FastStart.php';
 
 class Uploader
 {
@@ -272,22 +276,31 @@ class Uploader
         $description = self::cleanText($opts['description'] ?? '', 500) ?: null;
         $caption = $title . ($description ? "\n\n" . $description : '');
 
-        $ext  = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        // Telegram'ga jo'natishdan oldin MP4'ni faststart qilamiz; FFmpeg
+        // mavjud bo'lmasa helper asl upload yo'lini qaytaradi.
+        $prepared = FastStart::prepare($file['tmp_name'], $file['name']);
+        $sendPath = $prepared['path'];
+        $sendName = $prepared['name'];
+        $ext  = strtolower(pathinfo((string) $sendName, PATHINFO_EXTENSION));
         $mime = self::videoMime($ext);
 
         $tg = new TelegramBot();
         $tg->setTimeout(600);
 
-        $res = $tg->sendVideo(REELS_CHANNEL, new CURLFile($file['tmp_name'], $mime, $file['name']), [
-            'caption'            => $caption,
-            'supports_streaming' => true,
-        ]);
-        if (!$res || empty($res['result']['message_id'])) {
-            $res = $tg->sendDocument(REELS_CHANNEL, new CURLFile($file['tmp_name'], $mime, $file['name']), [
-                'caption' => $caption,
+        try {
+            $res = $tg->sendVideo(REELS_CHANNEL, new CURLFile($sendPath, $mime, $sendName), [
+                'caption'            => $caption,
+                'supports_streaming' => true,
             ]);
+            if (!$res || empty($res['result']['message_id'])) {
+                $res = $tg->sendDocument(REELS_CHANNEL, new CURLFile($sendPath, $mime, $sendName), [
+                    'caption' => $caption,
+                ]);
+            }
+        } finally {
+            FastStart::cleanup($prepared);
+            @unlink($file['tmp_name']);
         }
-        @unlink($file['tmp_name']);
 
         if (!$res || empty($res['result']['message_id'])) {
             $last = $tg->getLastError();

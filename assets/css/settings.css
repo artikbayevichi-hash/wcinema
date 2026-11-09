@@ -284,9 +284,26 @@
 .tv-mode .st-row { padding: 18px 20px; }
 .tv-mode .st-row-t { font-size: 17px; }
 .tv-mode .st-row-s { font-size: 14px; }
-.tv-mode .st-input, .st-mode .st-textarea { font-size: 18px; padding: 14px 16px; }
+.tv-mode .st-input, .tv-mode .st-textarea { font-size: 18px; padding: 14px 16px; }
 .tv-mode .st-switch { width: 62px; height: 36px; }
 .tv-mode .st-switch::after { width: 26px; height: 26px; }
 .tv-mode .st-switch:checked::after { transform: translateX(26px); }
 .tv-mode .st-btn { font-size: 18px; padding: 16px; }
 .tv-mode .st-unblock { font-size: 15px; padding: 10px 16px; }
+
+@media (max-width: 560px) {
+    .st-main { padding: 10px 8px 0; }
+    .st-top { padding: 10px 10px; }
+    .st-title { font-size: 16px; }
+    .st-hero { margin-bottom: 16px; border-radius: 15px; }
+    .st-sec { margin-bottom: 16px; }
+    .st-row { align-items: flex-start; padding: 13px 12px; }
+    .st-row-ico { width: 32px; height: 32px; font-size: 16px; }
+    .st-row-t { font-size: 14px; }
+    .st-row-s { line-height: 1.35; }
+    .st-switch { width: 48px; height: 29px; }
+    .st-form { padding-inline: 12px; }
+    .st-input, .st-textarea { font-size: 16px; }
+    .st-btn { min-height: 44px; }
+    .st-unblock { min-height: 40px; }
+}

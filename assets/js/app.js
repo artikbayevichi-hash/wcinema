@@ -154,7 +154,7 @@
         const imgSrc = realPoster || frame || c.poster || '';
         const isFrame = !realPoster && !!frame;
         const poster = imgSrc
-            ? `<img class="yt-img${isFrame ? ' yt-frame' : ''}" src="${esc(imgSrc)}" alt="${esc(c.title)}" loading="lazy"
+            ? `<img class="yt-img${isFrame ? ' yt-frame' : ''}" src="${esc(imgSrc)}" alt="${esc(c.title)}" loading="lazy" decoding="async"
                    referrerpolicy="no-referrer" onerror="this.remove()">`
             : '';
         const fallback = poster ? '' :
@@ -563,7 +563,11 @@
     // `?cat=` / `?q=` manzil parametrlarini katalog ko'rinishiga qo'llaydi.
     function applyUrlFilter() {
         if (state.category) {
-            const chip = $('#catChips .chip[data-cat="' + String(state.category).replace(/"/g, '\\"') + '"]');
+            const cat = String(state.category);
+            const escaped = window.CSS && typeof window.CSS.escape === 'function'
+                ? window.CSS.escape(cat)
+                : cat.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+            const chip = $('#catChips .chip[data-cat="' + escaped + '"]');
             if (chip) {
                 $$('#catChips .chip').forEach(b => b.classList.remove('active'));
                 chip.classList.add('active');
@@ -1635,7 +1639,7 @@
 
     function requireLogin() {
         if (loggedIn) return true;
-        toast('🔐 Bu amal uchun <a href="login.php">kiring</a>');
+        toast('🔐 Bu amal uchun <a href="1stlogin.php">kiring</a>');
         return false;
     }
 

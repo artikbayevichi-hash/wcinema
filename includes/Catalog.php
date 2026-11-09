@@ -13,6 +13,7 @@
 // ============================================================================
 
 require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/Cache.php';
 
 class Catalog {
 
@@ -20,12 +21,14 @@ class Catalog {
     // Kategoriyalar (Kino / Anime / Multfilm)
     // =========================================================================
     public function getCategories() {
-        return $this->db()->fetchAll(
-            "SELECT c.id, c.name, c.slug,
-                    (SELECT COUNT(*) FROM content ct WHERE ct.category_id = c.id) AS count
-             FROM categories c
-             ORDER BY c.id"
-        );
+        return Cache::get('catalog_categories', 60, function () {
+            return $this->db()->fetchAll(
+                "SELECT c.id, c.name, c.slug,
+                        (SELECT COUNT(*) FROM content ct WHERE ct.category_id = c.id) AS count
+                 FROM categories c
+                 ORDER BY c.id"
+            );
+        });
     }
 
     public function getCategoryBySlug($slug) {
@@ -38,15 +41,18 @@ class Catalog {
     // Janrlar
     // =========================================================================
     public function getGenres($limit = 20) {
-        return $this->db()->fetchAll(
-            "SELECT g.id, g.name, g.slug, COUNT(cg.content_id) AS count
-             FROM genres g
-             LEFT JOIN content_genres cg ON cg.genre_id = g.id
-             GROUP BY g.id, g.name, g.slug
-             HAVING count > 0
-             ORDER BY count DESC, g.name
-             LIMIT ?", [(int) $limit]
-        );
+        $limit = max(1, min(100, (int) $limit));
+        return Cache::get('catalog_genres_' . $limit, 60, function () use ($limit) {
+            return $this->db()->fetchAll(
+                "SELECT g.id, g.name, g.slug, COUNT(cg.content_id) AS count
+                 FROM genres g
+                 LEFT JOIN content_genres cg ON cg.genre_id = g.id
+                 GROUP BY g.id, g.name, g.slug
+                 HAVING count > 0
+                 ORDER BY count DESC, g.name
+                 LIMIT ?", [$limit]
+            );
+        });
     }
 
     public function getContentGenres($contentId) {
@@ -342,14 +348,51 @@ class Catalog {
     }
 
     /**
+     * YAGONA POSTER RESOLVER.
+     *
+     * Barcha oqimlar — katalog, qidiruv, profil, "yoqqanlar", "saqlanganlar",
+     * tarix, reels va watch sahifasi — poster manzilini shu orqali oladi.
+     * Shu sababli posterda muammo bo'lsa, bitta joyda tuzatiladi va
+     * butun sayt bir vaqtda tuziladi.
+     *
+     * Tartib:
+     *   1) Bo'sh / placeholder / xato manzil  → `generatePoster()` (SVG fon).
+     *   2) `data:image/...`                   → o'z holicha.
+     *   3) Lokal fayl (`uploads/...`)         → ilova yo'li bilan
+     *                                            (`/tele_uzdub/uploads/...`),
+     *                                            shuning uchun tunnel o'lganda
+     *                                            ham rasm ko'rinadi.
+     *   4) `t.me` / `telegram.me` post       → `api/tg-resolve.php?...&mode=img`
+     *                                            proksi (og:image ni topadi).
+     *   5) Boshqa absolute manzil             → o'z holicha.
+     *
+     * @param string|null $poster       Xom poster qiymati (DB dan).
+     * @param string      $title        Sarlavha — zaxira fon yaratish uchun.
+     * @param string      $categorySlug Kategoriya slug'i.
+     * @param string      $categoryName Kategoriya nomi.
+     * @return string Doimiy foydalanishga tayyor manzil (bo'sh bo'lmaydi).
+     */
+    public static function resolvePoster($poster, $title = '', $categorySlug = '', $categoryName = '') {
+        $p = trim((string) ($poster ?? ''));
+        if ($p === '' || self::isPlaceholderPoster($p)) {
+            return self::generatePoster($title, $categorySlug, $categoryName);
+        }
+        return self::posterSrc($p);
+    }
+
+    /**
+     * Eski nom — `resolvePoster()` ning alias'i. Kodning eski qismlari
+     * uchun saqlanadi (ham, o'zgartirilmaydi).
+     */
+    public static function autoPoster($poster, $title = '', $categorySlug = '', $categoryName = '') {
+        return self::resolvePoster($poster, $title, $categorySlug, $categoryName);
+    }
+
+    /**
      * Poster bo'sh yoki `placeholder:` prefiksli bo'lsa — sarlavha hashidan
      * gradient + matn + kategoriya emoji bilan SVG data-URI generatsiya qiladi.
      */
-    public static function autoPoster($poster, $title = '', $categorySlug = '', $categoryName = '') {
-        $p = trim((string) ($poster ?? ''));
-        if ($p !== '' && !self::isPlaceholderPoster($p)) {
-            return self::posterSrc($poster);
-        }
+    private static function generatePoster($title = '', $categorySlug = '', $categoryName = '') {
         $title = trim((string) $title);
         if ($title === '') {
             $title = $categoryName !== '' ? $categoryName : 'W CINEMA';
@@ -672,23 +715,19 @@ class Catalog {
             ];
         }
 
-        // --- Telegram post -> NOL YUK arxitekturasi ("Telegram'da ko'rish")
+        // --- Telegram posti uchun player manbasini tanlash
         //
-        // t.me havolasi (masalan https://t.me/Kinolark/9147) HTML sahifa,
-        // <video src> uchun to'g'ridan-to'g'ri ishlatib bo'lmaydi.
-        //
-        // ASOSIY TAMOYIL: video sizning serveringizga umuman tegmaydi.
-        // Tomoshabinning brauzeri videoni to'g'ridan-to'g'ri Telegram
-        // serveridan oladi, sayt esa faqat katalog (bir necha KB HTML) beradi.
-        // Shu sababli minglab bir vaqtda ko'ruvchilar saytga deyarli
-        // umuman yuk tushirmaydi.
+        // t.me havolasi HTML sahifa; uni <video src> ga bevosita berib
+        // bo'lmaydi. Katta public media uchun browser Telegram klienti orqali
+        // bayt-range'larni oladi. Bu sayt originidan media baytlarini o'tkazmaydi,
+        // ammo sayt baribir sahifa, API, rasm va autentifikatsiyani xizmat qiladi.
         //
         // Ketma-ketlik:
-        //   0) admin "preview=1" -> eski jonli relay (faqat tekshirish uchun)
-        //   1) HLS_ENABLED (VPS + ffmpeg bo'lganda)
-        //   2) Telegram ommaviy CDN video URL beradigan post (kichik video)
-        //      -> to'g'ridan-to'g'ri HTML5 player, yana ham nol yuk
-        //   3) Qolgan barcha filmlar (katta hajm) -> "Telegram'da ko'rish"
+        //   0) admin preview -> tekshiruv uchun server relay
+        //   1) production hostda tayyor HLS kesh yoki HLS talab qiladigan manba
+        //   2) ommaviy postda sovuq HLS kesh -> bevosita Telegram oqimi
+        //   3) Telegram video URL bergan kichik post -> HTML5 player
+        //   4) qolgan mos postlar -> Telegram sessiyasi va Service Worker playeri
         if (preg_match('#(^|\.)(t\.me|telegram\.me)$#', $host)
             && preg_match('#^/(?:c/)?[A-Za-z0-9_]+/\d+$#', $path)) {
 
@@ -711,9 +750,34 @@ class Catalog {
                 ];
             }
 
-            // (1) HLS REJIMI (faqat VPS + ffmpeg bo'lganda): filmlar segmentlarga
-            // bo'linadi, har bir segment deterministik URL'da edge'da keshlanadi.
-            if (defined('HLS_ENABLED') && HLS_ENABLED) {
+            // (1) HLS faqat oldindan tayyorlangan kesh mavjud bo'lganda ishlatiladi.
+            // HLS worker avval Telegram'dan manba videoni to'liq yuklab oladi,
+            // shuning uchun yangi 1 GB kontentda bu bir necha daqiqa kutdirishi
+            // va origin serverga katta yuk berishi mumkin.
+            $requestHost = (string) ($_SERVER['HTTP_HOST'] ?? '');
+            $isLocalPlayback = function_exists('is_local_host')
+                && is_local_host($requestHost);
+            $hlsEnabled = defined('HLS_ENABLED') && HLS_ENABLED;
+            $tgRef = self::tgRef($url);
+            $publicTgPost = !empty($tgRef['channel']) && (int) ($tgRef['post'] ?? 0) > 0;
+            $hlsCacheReady = false;
+            if ($hlsEnabled && defined('HLS_CACHE_DIR')) {
+                $hlsDir = rtrim(HLS_CACHE_DIR, '/\\') . DIRECTORY_SEPARATOR
+                    . sha1('hls:' . (string) $url);
+                $hlsMetaPath = $hlsDir . DIRECTORY_SEPARATOR . 'meta.json';
+                $hlsManifest = $hlsDir . DIRECTORY_SEPARATOR . 'index.m3u8';
+                if (is_file($hlsMetaPath) && is_file($hlsManifest)) {
+                    $hlsMeta = json_decode((string) @file_get_contents($hlsMetaPath), true);
+                    $hlsCacheReady = is_array($hlsMeta)
+                        && ($hlsMeta['status'] ?? '') === 'done'
+                        && (int) ($hlsMeta['segments'] ?? 0) > 0
+                        && (int) @filesize($hlsManifest) > 0;
+                }
+            }
+
+            // Tayyor HLS bo'lsa (va production hostda) mavjud edge/CDN yo'lini ishlatamiz.
+            if ($hlsEnabled && !$isLocalPlayback
+                && ($hlsCacheReady || !$publicTgPost)) {
                 return [
                     'type' => 'hls',
                     'url'  => 'api/hls.php?id=' . $cid . '&episode=' . $eid,
@@ -721,6 +785,14 @@ class Catalog {
                     'seek' => true,
                     'warning' => 'Cloudflare edge CDN orqali uzatilmoqda (HLS).',
                 ];
+            }
+
+            // Ommaviy t.me posti uchun HLS keshi tayyor bo'lmasa, serverda to'liq
+            // videoni yuklab worker ishga tushirmaymiz; sahifani tuzishda t.me ga
+            // sinxron so'rov ham yubormaymiz. Brauzer videoni Telegram'dan oladi,
+            // sovuq HLS kutishi va origin trafikining oldi olinadi.
+            if ($hlsEnabled && $publicTgPost) {
+                return $this->playbackTelegram((string) $url, $item['poster'] ?? null, null);
             }
 
             // (2) Postni aniqlash: t.me sahifasi + "?embed=1" widget tahlili
@@ -736,9 +808,9 @@ class Catalog {
             $tgVideo = ($tg && !empty($tg['video'])) ? $tg['video'] : null;
             $tgImage = ($tg && !empty($tg['image'])) ? $tg['image'] : null;
 
-            // (3) Telegram ommaviy CDN video URL beradigan post (kichik video,
-            // qisqa klip) -> to'g'ridan-to'g'ri <video> o'ynatamiz. Bu ham
-            // NOL YUK: brauzer videoni Telegram CDN'dan oladi.
+            // (3) Telegram ommaviy video URL bergan kichik video yoki qisqa
+            // klipni <video> bevosita o'ynatadi; origin media baytlarini relay
+            // qilmaydi, ammo saytning boshqa so'rovlari baribir qoladi.
             if ($tgVideo) {
                 $playUrl = $tgVideo;
                 $worker  = trim((string) env_value('CLOUDFLARE_WORKER_URL', ''));
@@ -925,18 +997,18 @@ class Catalog {
     }
 
     /**
-     * "Telegram'da ko'rish" oqimi - NOL YUK arxitekturasi.
+     * Ommaviy t.me posti uchun bevosita Telegram oqimi.
      *
-     * Nima uchun shu yechim: video sizning serveringizga umuman tegmaydi.
-     * Tomoshabinning brauzeri videoni to'g'ridan-to'g'ri Telegram CDN'dan
-     * oladi (t.me posti yoki tg:// deep link), sayt esa faqat katalog -
-     * bir necha KB HTML - beradi. Shu sababli minglab bir vaqtda ko'ruvchilar
-     * saytga deyarli umuman yuk tushirmaydi.
+     * TgStream brauzerga kanal/post metama'lumotini beradi. Media baytlari
+     * Telegram'dan yoki u video uchun CDN taqdim etsa o'sha CDN'dan olinadi;
+     * sayt origin'i ularni relay qilmaydi. Sayt baribir HTML, JavaScript,
+     * API, rasmlar va autentifikatsiyani xizmat qiladi. Bu "nol yuk" yoki
+     * cheksiz/ma'lum miqdordagi tomoshabin kafolati emas.
      *
-     * Katta filmlarda Telegram ommaviy video URL bermaydi ("Media is too
-     * big") - shuning uchun ular FAQAT Telegram ilovasida o'ynaydi.
-     * Kichik videolarda esa yuqoridagi (3)-branch to'g'ridan-to'g'ri
-     * o'ynatadi - u ham nol yuk.
+     * Ommaviy postdagi katta video ham sayt playerida ochilishi mumkin:
+     * brauzer Telegram foydalanuvchi sessiyasi orqali kerakli baytlarni oladi
+     * va Service Worker ularni progressiv beradi. Sayt serveri video baytlarini
+     * relay qilmaydi. Private kanalga a'zolik va Telegram cheklovlari saqlanadi.
      *
      * @param string $url    t.me post manzili
      * @param string|null $poster  Telegram CDN poster (og:image)
@@ -1008,6 +1080,25 @@ class Catalog {
             return $poster;
         }
         $poster = (string) $poster;
+        // API javoblari index.php, profile.php, watch.php va qidiruvdan
+        // bir xil ishlashi uchun lokal yo‘llarni ham absolute qilamiz.
+        //
+        // DIQQAT: bu yerda `SITE_URL` ishlatilmaydi — u tunnel manzili
+        // bo‘lishi mumkin va tunnel o‘lganda/URL o‘zgarganda butun
+        // saytdagi posterlar (rasmlar) buzilib qoladi. Shuning uchun
+        // ilova yo‘li (`APP_BASE_PATH`, masalan `/tele_uzdub`) ishlatiladi:
+        // `/tele_uzdub/uploads/...` — localhost, tunnel va haqiqiy domenda
+        // bir xil ishlaydi.
+        $base = defined('APP_BASE_PATH') ? rtrim((string) APP_BASE_PATH, '/') : '';
+        if ($base !== '' && preg_match('#^(?:uploads/|assets/)#i', ltrim($poster, '/'))) {
+            return $base . '/' . ltrim($poster, '/');
+        }
+        if ($base !== '' && preg_match('#^api/tg-resolve\.php\?#i', ltrim($poster, '/'))) {
+            return $base . '/' . ltrim($poster, '/');
+        }
+        if (preg_match('#^data:image/#i', $poster)) {
+            return $poster;
+        }
         $host = strtolower((string) parse_url($poster, PHP_URL_HOST));
         if (!preg_match('#(^|\.)(t\.me|telegram\.me)$#', $host)) {
             return $poster;
@@ -1016,7 +1107,8 @@ class Catalog {
         if (!preg_match('#^/(?:c/)?[A-Za-z0-9_]+/\d+$#', $path)) {
             return $poster;
         }
-        return 'api/tg-resolve.php?url=' . rawurlencode($poster) . '&mode=img';
+        $proxy = 'api/tg-resolve.php?url=' . rawurlencode($poster) . '&mode=img';
+        return $base !== '' ? $base . '/' . $proxy : $proxy;
     }
 
     // =========================================================================
@@ -1359,13 +1451,15 @@ class Catalog {
     // Ommaviy ma'lumot
     // =========================================================================
     public function getStats() {
-        $db = $this->db();
-        return [
-            'content'   => (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM content")['n'] ?? 0),
-            'episodes'  => (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM episodes")['n'] ?? 0),
-            'categories'=> (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM categories")['n'] ?? 0),
-            'genres'    => (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM genres")['n'] ?? 0),
-        ];
+        return Cache::get('catalog_stats', 60, function () {
+            $db = $this->db();
+            return [
+                'content'   => (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM content")['n'] ?? 0),
+                'episodes'  => (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM episodes")['n'] ?? 0),
+                'categories'=> (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM categories")['n'] ?? 0),
+                'genres'    => (int) ($db->fetchOne("SELECT COUNT(*) AS n FROM genres")['n'] ?? 0),
+            ];
+        });
     }
 
     /** Ommaviy API uchun xavfsiz kontent ma'lumotlari. */

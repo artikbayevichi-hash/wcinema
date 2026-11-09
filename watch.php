@@ -12,6 +12,9 @@
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
+require_once __DIR__ . '/includes/MediaFlow.php';
+$mediaflowEnabled = MediaFlow::isEnabled();
+
 $user   = $auth->getCurrentUser();
 $userId = $user ? (int) $user['id'] : null;
 
@@ -140,6 +143,21 @@ if ($item) {
     $playback = $selected ? $catalog->getPlayback($catalog->getEpisode((int) $selected['id']))
                           : $catalog->getPlayback($item);
 
+    // Pleer orqasidagi POSTER (YouTube uslubi).
+    // Videо yuklanmaganda pleer qora quti bo'lib qolmasligi uchun kontent
+    // posteri fon qilinadi — video o'zi chiqqanda esa u ustini yopadi.
+    // Bitta `resolvePoster()` orqali olinadi: lokal fayl, t.me proksi yoki
+    // avtomatik SVG fallback — hammasi bir xil ishlaydi.
+    $watchPoster = '';
+    if ($item) {
+        $watchPoster = Catalog::resolvePoster(
+            $item['poster'] ?? '',
+            $item['title'] ?? '',
+            $item['category_slug'] ?? '',
+            $item['category_name'] ?? ''
+        );
+    }
+
     // "Davom etish": qayerda to'xtagan edi (faqat kirgan foydalanuvchilar uchun).
     if ($userId) {
         $p = $catalog->getProgress($userId, $item['id'], $selected ? (int) $selected['id'] : 0);
@@ -198,6 +216,23 @@ $WATCH = [
     'episodes'  => $episodes,
     'selectedId' => $selected ? (int) $selected['id'] : 0,
     'playback'  => $playback,
+    // Telegram'ning RASMIY embed pleyeri uchun ma'lumot.
+    //
+    // `t.me/<kanal>/<post>?embed=1` sahifasi video baytlarini Telegram'ning
+    // o'z CDN'idan beradi — ya'ni Telegram Web'dagi kabi tez, sayt serveri
+    // esa baytlarni umuman ko'rmaydi.
+    //
+    // Faqat OMMAVIY kanal postlari uchun ishlaydi: `t.me/c/<id>/<post>`
+    // (xususiy kanal) da kanal nomi yo'q, shuning uchun `null` qaytaramiz va
+    // `watch.js` avvalgidek o'z MTProto pleyerimizni ishlatadi.
+    'tgEmbed'   => ($playback && ($playback['type'] ?? '') === 'telegram'
+                    && !empty($playback['channel'])
+                    && (int) ($playback['post'] ?? 0) > 0)
+        ? [
+            'channel' => (string) $playback['channel'],
+            'post'    => (int) $playback['post'],
+        ]
+        : null,
     'progress'  => $progress,
     'hasPlaylist' => $hasPlaylist,
     'related'   => $related,
@@ -217,6 +252,11 @@ $NAV_ACTIVE = 'home';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title><?php echo $item ? htmlspecialchars($item['title']) . ' — W CINEMA' : 'Ko‘rish — W CINEMA'; ?></title>
+    <?php /* preconnect + Service Worker'ni erta ro'yxatdan o'tkazish + metrika.
+             Boshqa sahifalarda bu allaqachon bor edi; watch sahifasida
+             yo'q edi — birinchi video ochilishidagi eng katta kechikish
+             shu yerdan kelardi. */ ?>
+    <?php require __DIR__ . '/includes/perf-head.php'; ?>
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
@@ -257,8 +297,10 @@ $NAV_ACTIVE = 'home';
         ular birinchi bo'lib o'tishi kerak, aks holda sahifa ko'rinishi
         kechikadi. Bu sahifaga kirish uchun MTProto kaliti shart
         (`includes/nav.php` dagi guard), ya'ni bundle BEKOR yuklanmaydi. */ ?>
+    <?php if (!$mediaflowEnabled): ?>
     <link rel="preload" as="fetch" crossorigin="anonymous"
           href="<?php echo htmlspecialchars($WATCH['base'], ENT_QUOTES); ?>/assets/js/tg-client.bundle.js.gz">
+    <?php endif; ?>
 </head>
 <body class="ig-shell watch-body">
 
@@ -289,7 +331,14 @@ $NAV_ACTIVE = 'home';
         <div class="watch-main">
 
             <!-- Video -->
-            <div class="watch-player" id="watchPlayer"></div>
+            <div class="watch-player" id="watchPlayer"
+                 style="<?php echo $watchPoster !== '' ? '--wposter:url(&quot;' . esc($watchPoster) . '&quot;)' : ''; ?>"></div>
+
+            <?php /* Pleyer tanlovi: "⚡ Tez" (Telegram rasmiy embed pleyeri —
+                     video baytlari Telegram CDN'dan) va "▶ Bizning pleyer"
+                     (MTProto + Service Worker). Faqat ommaviy Telegram
+                     postida ko'rinadi; ro'yxatni `watch.js` to'ldiradi. */ ?>
+            <div class="watch-pmode" id="watchPMode" hidden></div>
 
             <!-- Sarlavha + YouTube uslubidagi meta qatori
 
@@ -346,29 +395,9 @@ $NAV_ACTIVE = 'home';
                          (`.tg-fmt`, tg-format.css) shu konteynerga bog'lanadi.
                          reels.php da bu rolni `.reels-comments-box` bajaradi. */ ?>
                 <div class="watch-comments-wrap">
-                <div class="reels-comments-list watch-comments-list" id="commentsList"></div>
-
-                <?php /* Telegram vositalari paneli: stiker / emoji / GIF / rasm /
-                         @ belgilash. reels.php bilan BIR XIL tuzilma -
-                         tg-comments.js shu id'larni kutadi. */ ?>
-                <div class="reels-c-picker" id="cPicker" hidden>
-                    <div class="reels-c-picker-tabs" id="cPickerTabs">
-                        <button type="button" class="reels-c-picker-tab on" data-mode="sticker" title="Stiker">Stiker</button>
-                        <button type="button" class="reels-c-picker-tab" data-mode="emoji" title="Emoji">😀</button>
-                        <button type="button" class="reels-c-picker-tab" data-mode="gif" title="GIF">GIF</button>
-                        <button type="button" class="reels-c-picker-tab" data-mode="photo" title="Rasm">Rasm</button>
-                        <button type="button" class="reels-c-picker-tab" data-mode="mention" title="Belgilash">@</button>
-                        <button type="button" class="reels-c-picker-x" id="cPickerX" aria-label="Yopish">&times;</button>
-                    </div>
-                    <div class="reels-c-picker-panel" id="cPickerPanel"></div>
-                </div>
-
-                <div class="reels-c-replybar" id="cReplyBar" hidden>
-                    <span class="reels-c-replybar-av" id="cReplyAv"></span>
-                    <span class="reels-c-replybar-txt" id="cReplyTxt"></span>
-                    <button type="button" class="reels-c-replybar-x" id="cReplyCancel" aria-label="Bekor qilish"><?php echo ig_svg('close'); ?></button>
-                </div>
-
+                <?php /* YouTube uslubida: yozish maydoni izohlar ro'yxatidan
+                         OLDIN turadi, shuning uchun kompyuterda foydalanuvchi
+                         izoh yozish uchun ro'yxat oxirigacha scroll qilmaydi. */ ?>
                 <form class="reels-comments-form" id="commentForm" autocomplete="off">
                     <button type="button" class="reels-c-tool tg-fmt-btn" id="cFmtBtn"
                             aria-label="Matn formatlash" aria-expanded="false" title="Matn formatlash">
@@ -391,6 +420,29 @@ $NAV_ACTIVE = 'home';
                     </button>
                     <input type="file" id="cPhoto" accept="image/*" hidden>
                 </form>
+
+                <?php /* Telegram vositalari paneli: stiker / emoji / GIF / rasm /
+                         @ belgilash. reels.php bilan BIR XIL tuzilma -
+                         tg-comments.js shu id'larni kutadi. */ ?>
+                <div class="reels-c-picker" id="cPicker" hidden>
+                    <div class="reels-c-picker-tabs" id="cPickerTabs">
+                        <button type="button" class="reels-c-picker-tab on" data-mode="sticker" title="Stiker">Stiker</button>
+                        <button type="button" class="reels-c-picker-tab" data-mode="emoji" title="Emoji">😀</button>
+                        <button type="button" class="reels-c-picker-tab" data-mode="gif" title="GIF">GIF</button>
+                        <button type="button" class="reels-c-picker-tab" data-mode="photo" title="Rasm">Rasm</button>
+                        <button type="button" class="reels-c-picker-tab" data-mode="mention" title="Belgilash">@</button>
+                        <button type="button" class="reels-c-picker-x" id="cPickerX" aria-label="Yopish">&times;</button>
+                    </div>
+                    <div class="reels-c-picker-panel" id="cPickerPanel"></div>
+                </div>
+
+                <div class="reels-c-replybar" id="cReplyBar" hidden>
+                    <span class="reels-c-replybar-av" id="cReplyAv"></span>
+                    <span class="reels-c-replybar-txt" id="cReplyTxt"></span>
+                    <button type="button" class="reels-c-replybar-x" id="cReplyCancel" aria-label="Bekor qilish"><?php echo ig_svg('close'); ?></button>
+                </div>
+
+                <div class="reels-comments-list watch-comments-list" id="commentsList"></div>
 
                 <?php /* Telefon rejimi: izohlar qisqartirilgan holda faqat
                          boshidagi 2 TA XABAR ko'rinadi (watch.css). Shu
@@ -483,6 +535,7 @@ $NAV_ACTIVE = 'home';
 <script>
     window.APP = {
         base: <?php echo json_encode($WATCH['base']); ?>,
+        mediaflowEnabled: <?php echo $mediaflowEnabled ? 'true' : 'false'; ?>,
         tg: {
             apiId:   <?php echo (int) TG_API_ID; ?>,
             apiHash: <?php echo json_encode((string) TG_API_HASH); ?>
@@ -500,6 +553,11 @@ $NAV_ACTIVE = 'home';
     window.WATCH = <?php echo json_encode($WATCH, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
 </script>
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
+<?php /* Minimal MTProto klient (25 KB) — 5.4 MB GramJS bundle'ini video oqimi
+         uchun umuman kerak qilmaydi. `tg-stream.js` dan OLDIN yuklanadi:
+         u `window.TgFast` ni ishlatadi va sahifa yuklanayotgan paytda
+         Telegram DC'ga ulanishni (TLS handshake) oldindan boshlaydi. */ ?>
+<script src="assets/js/tg-mtproto.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-mtproto.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script>
 (function(){
@@ -524,28 +582,90 @@ $NAV_ACTIVE = 'home';
     //              birinchi marta video ochilganda `ensureWorker()` sahifani
     //              QAYTA YUKLAYDI (brauzer qoidasi: yangi o'rnatilgan SW o'z
     //              sahifasini keyingi yuklanishdagina boshqaradi).
-    //   verify() — GramJS'ni yuklab, saqlangan kalit bilan Telegram'ga jim
-    //              ulanadi (`getMe`). Login oqimini BOSHLAMAYDI: kalit yo'q
-    //              yoki yaroqsiz bo'lsa shunchaki reject qiladi va uni
-    //              pastda ushlaymiz — haqiqiy kirishni `mount()` o'zi haladi.
+    //   prefetch() — joriy post metama'lumotini topadi va odatiy tarmoqda
+    //                MP4 boshidagi 128 KB ni brauzer RAM'ida qizdiradi.
     //
     // `index.php`, `reels.php` va `chat.php` da bu allaqachon bor edi; videolar
     // alohida `watch.php` sahifasiga ko'chirilgach bu sahifa e'tibordan
     // chiqib qolgan. Uchala chaqiruv ham ichki holatni (`S.reg`,
     // `S.connecting`) bir marta ishlatadi, shuning uchun keyinroq `mount()`
     // ularni takrorlamaydi — tayyor natijani oladi.
-    if (window.TgStream) {
+    if (!window.APP.mediaflowEnabled && window.TgStream) {
         try { window.TgStream.init(); } catch (e) {}
         if (window.TgStream.warm) { try { window.TgStream.warm(); } catch (e) {} }
         if (window.TgStream.hasSession && window.TgStream.hasSession()) {
-            // Kalit bekor qilingan bo'lsa — tizimdan chiqilganda avtomatik
-            // kirish sahifasiga qaytamiz (index.php bilan bir xil mantiq).
-            try {
-                window.TgStream.verify().catch(function () {
-                    if (!window.TgStream.hasSession()) {
-                        location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');
+            var currentPlayback = (window.WATCH && window.WATCH.playback) || {};
+            if (currentPlayback.type === 'telegram' && currentPlayback.channel
+                && currentPlayback.post && typeof window.TgStream.prefetch === 'function') {
+                // Faqat birinchi 128 KB ni RAM keshiga olamiz: kattaroq
+                // warm-up boshlanishni ushlab qolmasin. Qolgan 10 soniyalik
+                // bufer oqim davomida to'ldiriladi. Data Saver/2G da faqat
+                // metama'lumot olinadi.
+                var warmCurrentHead = 128 * 1024;
+                try {
+                    var netInfo = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+                    if (netInfo && (netInfo.saveData || /(^|-)2g$/.test(String(netInfo.effectiveType || '')))) {
+                        warmCurrentHead = 0;
                     }
-                });
+                } catch (e) { warmCurrentHead = 0; }
+                try {
+                    window.TgStream.prefetch({
+                        channel: currentPlayback.channel,
+                        post: currentPlayback.post,
+                        metadataOnly: true,
+                        warmBytes: warmCurrentHead
+                    }).catch(function () {
+                        if (!window.TgStream.hasSession()) {
+                            location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');
+                        }
+                    });
+                } catch (e) {}
+            } else {
+                // Telegram manbasi bo'lmagan sahifalarda avvalgi sessiya
+                // tekshiruvini saqlaymiz.
+                try {
+                    window.TgStream.verify().catch(function () {
+                        if (!window.TgStream.hasSession()) {
+                            location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');
+                        }
+                    });
+                } catch (e) {}
+            }
+
+            // --- JORIY + KEYINGI + OLDINGI qismni oldindan tayyorlash -------------
+            //
+            // Nima uchun: ketma-ket tomosha qilganda keyingi qism darhol,
+            // zaxira sifatida oldingi qism ham tayyor turadi. Butun serialning
+            // 120 qismigacha so'ramaymiz; video baytlari bosilmaguncha kelmaydi.
+            //
+            // Har bir kanal uchun postlar guruhlanadi; bu fon ishi, video
+            // baytlarini esa foydalanuvchi qismni tanlagandagina olamiz.
+            try {
+                var eps = (window.WATCH && window.WATCH.episodes) || [];
+                var batch = [];
+                var currentId = Number((window.WATCH && window.WATCH.selectedId) || 0);
+                var currentIndex = -1;
+                for (var bi = 0; bi < eps.length; bi++) {
+                    if (Number((eps[bi] || {}).id) === currentId) { currentIndex = bi; break; }
+                }
+                if (currentIndex < 0 && eps.length) currentIndex = 0;
+                // Keyingi qism ustuvor; oldingi qism esa zaxira sifatida.
+                var order = [currentIndex, currentIndex + 1, currentIndex - 1];
+                for (var oi = 0; oi < order.length; oi++) {
+                    var be = eps[order[oi]] || {};
+                    if (be.tg_channel && be.tg_post) {
+                        batch.push({ channel: be.tg_channel, post: be.tg_post });
+                    }
+                }
+                if (batch.length && typeof window.TgStream.prefetchMany === 'function') {
+                    window.TgStream.prefetchMany(batch);
+                }
+                // Asosiy yo'l: foydalanuvchining O'Z sessiyasi (GramJS).
+                // `file_reference` shunda to'g'ri akkauntga tegishli bo'ladi
+                // (serverdagi bot havola boshqa akkauntda ishlamaydi).
+                if (batch.length && typeof window.TgStream.prefetchManyGram === 'function') {
+                    window.TgStream.prefetchManyGram(batch);
+                }
             } catch (e) {}
         }
     }

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // ============================================================================
 // reels-upload.php — kontent joylash (Reels · Rasm post · Uzun video)
 // ----------------------------------------------------------------------------
@@ -123,7 +123,7 @@ $limits = [
     </div>
 
     <!-- ============================ FAYL ============================ -->
-    <div class="up-drop" id="upDrop">
+    <div class="up-drop" id="upDrop" role="button" tabindex="0" aria-label="Video yoki rasm faylini tanlash">
         <div class="up-drop-icon">&#128225;</div>
         <div class="up-drop-text">Videoni tanlang yoki shu yerga tashlang</div>
         <div class="up-drop-hint">MP4 &middot; WEBM &middot; MOV &mdash; 50 MB gacha</div>

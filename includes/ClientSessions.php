@@ -119,7 +119,7 @@ class ClientSessions
                    FROM client_sessions cs
                    JOIN users u ON u.id = cs.user_id
                   WHERE cs.token_hash = ? AND cs.expires_at > NOW()
-                    AND u.is_banned = 0 LIMIT 1",
+                    AND (u.is_banned = 0 OR (u.ban_until IS NOT NULL AND u.ban_until <= NOW())) LIMIT 1",
                 [$hash]
             );
         } catch (Throwable $e) {

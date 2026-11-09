@@ -54,6 +54,19 @@
 //   kelganida <video> ning joyida turgan so'rovlarni ham xotim buzardi.
 //   Faqat eski port yopiladi.
 //
+// TEZLIK QATLAMLARI (WebK klientidan olingan, amalda tekshirilgan)
+//   0) `Range: bytes=0-1` "probe" iga DARHOL 2 bayt javob — pleer Telegram
+//      javobini kutmasdan davom etadi (birinchi taassurot: 0 soniya).
+//   1) Disk bo'lak keshi (Cache Storage, 24 soat, 400 MB) — qayta ochish,
+//      orqaga qaytish va sahifa yangilash 0 tarmoq bilan ishlaydi.
+//   2) 20 MB read-ahead — pleer turgan joydan oldinga bo'laklar fonda
+//      yuklanadi, seek deyarli darhol bo'ladi.
+//   3) `esds` tuzatish — Chromium ba'zi Telegram MP4'larini rad etmaydi.
+//   4) R2 prefiksi (ixtiyoriy) — birinchi ~5 MB Cloudflare edge'dan.
+//
+//   Bu qatlamlarning hammasi `?doc=` berilmasa yoki `Save-Data: on` bo'lsa
+//   o'chadi — ya'ni eski xatti-harakat buzilmaydi.
+//
 // ISHLATISH (tg-proof.php ichida):
 //   1. navigator.serviceWorker.register('tg-cdn-worker.js', { scope: './' })
 //   2. navigator.serviceWorker.controller mavjudligini tekshirish
@@ -89,7 +102,698 @@ const MAX_RESPONSE = 8 * 1024 * 1024;
 // Qolganini brauzer o'zi so'raydi.
 const FIRST_CHUNK = 2 * 1024 * 1024;
 
-const STATS = { requests: 0, bytes: 0, seeks: 0, par: 0 };
+// --- MP4 indeksi (moov) oldindan yuklash ------------------------------------
+//
+// NIMA UCHUN:
+//   MP4 faylda indeks (moov qutisi) ko'pincha faylning OXIRIDA turadi.
+//   Brauzer boshidagi oqimni oladi, `moov` ni topa olmaydi va alohida
+//   Range so'rovi bilan faylning oxirini so'raydi. Bu — qo'shimcha RTT
+//   (Telegram DC gacha 150–400 ms) + indeks hajmini ikkinchi marta
+//   yuklash.
+//
+//   Yechim: boshidagi oqimda `moov` topilmasa, faylning OXIRIDAGI qismni
+//   Telegram'dan PARALLEL yuklab qo'yamiz. Brauzer indeksni so'raganda
+//   javob shu zaxiradan (Telegram'ga murojaat qilmasdan) beriladi —
+//   foydalanuvchi bir RTT tez ochadi.
+//
+//   `moov` boshida bo'lsa (faststart) — umuman yuklamaymiz (traffik
+//   behuda emas).
+const TAIL_PREFETCH = 4 * 1024 * 1024;      // faylning oxiridan shuncha bayt
+const TAIL_CACHE = new Map();               // size -> { start, bytes }
+const TAIL_MAX_ENTRIES = 2;                 // RAMni cheklovchi
+
+// `moov` boshdagi baytlarda bormi? MP4 qutilarini (box) boshidan yurib
+// tekshiramiz. `moov` topilsa — indeks allaqachon kelgan, demak.
+function hasMoovInHead(bytes) {
+  if (!bytes || bytes.length < 16) return false;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 0;
+  const limit = Math.min(bytes.length, 128 * 1024);
+  while (off + 8 <= limit) {
+    const t0 = bytes[off + 4], t1 = bytes[off + 5], t2 = bytes[off + 6], t3 = bytes[off + 7];
+    if (t0 === 0x6d && t1 === 0x6f && t2 === 0x6f && t3 === 0x76) return true; // 'moov'
+    let size = dv.getUint32(off, false);
+    if (size === 1) {
+      // 64-bit o'lcham
+      if (off + 16 > bytes.length) return false;
+      const hi = dv.getUint32(off + 8, false), lo = dv.getUint32(off + 12, false);
+      size = hi * 4294967296 + lo;
+    } else if (size === 0) {
+      return false;   // quti fayl oxirigacha
+    }
+    if (size < 8) return false;
+    off += size;
+  }
+  return false;
+}
+
+// ============================================================================
+// CHROMIUM MP4 TUZATISH (esds)  — WebK `_crbug1250841` mantig'i
+// ============================================================================
+//
+// MUAMMO
+//   Telegram ba'zi videolarda MP4 ichidagi `esds` qutisida buzuq AAC
+//   konfiguratsiyasini beradi: `DecoderSpecificInfo` faqat 2 bayt
+//   ([0x13, 0x88]) bo'lib qolgan. Chromium buni rad etadi va faylni
+//   "tushunmaydi" — natijada pleer butun faylni yuklashga o'tadi
+//   (ya'ni video juda sekin ochiladi yoki umuman ochilmaydi).
+//
+// YECHIM
+//   `esds` topilsa, ES_Descriptor -> DecoderConfigDescriptor ->
+//   DecoderSpecificInfo yo'li bilan o'sha 2 baytni tekshiramiz. Aynan
+//   shu buzuq qiymat bo'lsa — butun deskriptorni WebK ishlatadigan
+//   ma'lum yaxshi nusxa bilan joyida almashtiramiz (hajm o'zgarmaydi).
+//
+// XAVFSIZLIK
+//   * Faqat fayl BOSHIDA (1 MB) yoki OXIRIDA (16 MB) skanerlanadi —
+//     `moov` (va u bilan `esds`) faqat shu yerda bo'ladi.
+//   * Har bir hujjat uchun bir marta uriniladi; 12 MB skandan keyin
+//     to'xtaydi (foydasi yo'q).
+//   * Baytlar NUSXADA o'zgartiriladi — keshdagi asl nusxa buzilmaydi.
+// ============================================================================
+const ESDS_TAG = new Uint8Array([0x65, 0x73, 0x64, 0x73]);   // 'esds'
+const MP4A_TAG = new Uint8Array([0x6d, 0x70, 0x34, 0x61]);   // 'mp4a'
+const BROKEN_DSI = [0x13, 0x88];
+// WebK ishlatadigan yaxshi ES_Descriptor (27 bayt, AAC LC).
+const FIXED_ESDS = new Uint8Array([
+  0x03, 0x27, 0x00, 0x01, 0x00, 0x04, 0x19, 0x40, 0x15,
+  0x00, 0x00, 0x00, 0x00, 0x01, 0xf4, 0x00, 0x00, 0x00,
+  0xbb, 0x75, 0x05, 0x07, 0x13, 0x88, 0x56, 0xe5, 0xa5
+]);
+
+const FIX_DONE = new Set();        // tuzatilgan hujjatlar
+const FIX_SKIP = new Set();        // urinish befoyda bo'lgan hujjatlar
+const FIX_TRIED = new Map();       // doc -> skanerlangan bayt
+
+// `hay` ichidan `needle` ni TEPAGA qarab qidiradi (WebK `ya` bilan bir xil).
+function seqIndexBack(hay, needle, end) {
+  const m = needle.length;
+  const n = Math.min(end === undefined ? hay.length : end, hay.length);
+  outer:
+  for (let i = n - m; i >= 0; i--) {
+    if (hay[i] !== needle[0]) continue;
+    for (let j = 1; j < m; j++) {
+      if (hay[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+// MPEG-4 deskriptor uzunligi (1–4 bayt, 7 bitdan).
+function readDescSize(a, i) {
+  let used = 0;
+  let val = 0;
+  for (let k = 0; k < 4; k++) {
+    const b = a[i + k];
+    if (b === undefined) throw new Error('esds: chegara');
+    val = (val << 7) + (b & 0x7f);
+    used++;
+    if (!(b & 0x80)) break;
+  }
+  return [used, val];
+}
+
+function dsiOf(a) {
+  if (a[0] !== 0x05) throw new Error('esds: DSI');
+  const r = readDescSize(a, 1);
+  const n = 1 + r[0];
+  return a.subarray(n, n + r[1]);
+}
+
+function dcdOf(a) {
+  if (a[0] !== 0x04) throw new Error('esds: DCD');
+  const r = readDescSize(a, 1);
+  const n = 1 + r[0] + 13;
+  return dsiOf(a.subarray(n));
+}
+
+function esDescriptorDsi(a) {
+  if (a[0] !== 0x03) throw new Error('esds: ES');
+  const dv = new DataView(a.buffer, a.byteOffset, a.byteLength);
+  const r = readDescSize(a, 1);
+  let i = 1 + r[0] + 2;                 // ES_ID
+  const flags = dv.getUint8(i);
+  i += 1;
+  if (flags & 0x80) i += 2;             // dependsOn_ES_ID
+  if (flags & 0x40) {                   // URL
+    const c = readDescSize(a, i);
+    i += 1 + c[0] + c[1];
+  }
+  return dcdOf(a.subarray(i));
+}
+
+// Buzuq `esds` bo'lsa `u8` NI JOYIDA tuzatadi. true = tuzatildi.
+function patchEsds(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let t = u8.length;
+  let found = null;
+
+  for (;;) {
+    const d = seqIndexBack(u8, ESDS_TAG, t);
+    if (d < 4) break;
+    t = d;
+
+    const boxSize = dv.getUint32(d - 4, false);
+    if (boxSize < 16 || d + boxSize > u8.length) continue;
+
+    // 'mp4a' shu qutidan 100 bayt ichida bo'lishi kerak (sample entry).
+    const b = seqIndexBack(u8, MP4A_TAG, d);
+    if (b === -1 || d - b > 100) continue;
+
+    found = { offset: d + 8, size: boxSize - 12 };
+  }
+
+  if (!found) return false;
+
+  const body = u8.subarray(found.offset, found.offset + found.size);
+  const dsi = esDescriptorDsi(body);
+  if (dsi.length !== BROKEN_DSI.length) return false;
+  if (dsi[0] !== BROKEN_DSI[0] || dsi[1] !== BROKEN_DSI[1]) return false;
+  if (found.size < FIXED_ESDS.length) return false;
+
+  u8.set(FIXED_ESDS, found.offset);
+  return true;
+}
+
+// Javob baytlarini kerak bo'lsa tuzatilgan NUSXA bilan almashtiradi.
+function applyMp4Fix(doc, start, size, u8) {
+  if (!doc || !u8 || !u8.length) return u8;
+  if (FIX_DONE.has(doc) || FIX_SKIP.has(doc)) return u8;
+
+  const atHead = start < 1024 * 1024;
+  const atTail = (start + u8.length) > (size - 16 * 1024 * 1024);
+  if (!atHead && !atTail) return u8;
+
+  const copy = u8.slice();
+  let ok = false;
+  try { ok = patchEsds(copy); } catch (e) { ok = false; }
+
+  if (ok) {
+    FIX_DONE.add(doc);
+    if (FIX_DONE.size > 300) FIX_DONE.clear();
+    say('🔧 MP4 esds tuzatildi (doc ' + doc.slice(0, 12) + '…)');
+    return copy;
+  }
+
+  const tried = (FIX_TRIED.get(doc) || 0) + u8.length;
+  if (tried > 12 * 1024 * 1024) {
+    FIX_SKIP.add(doc);
+    FIX_TRIED.delete(doc);
+    if (FIX_SKIP.size > 300) FIX_SKIP.clear();
+  } else {
+    FIX_TRIED.set(doc, tried);
+    if (FIX_TRIED.size > 300) FIX_TRIED.clear();
+  }
+  return u8;
+}
+
+// Faylning oxirini oldindan yuklab, keshga qo'yamiz.
+// `doc` berilsa u DISK keshiga ham yoziladi — qayta ochishda indeks darhol
+// tayyor bo'ladi (RTT ham, Telegram trafigi ham tejaladi).
+function prefetchTail(size, doc) {
+  if (size <= TAIL_PREFETCH) return;              // kichik faylda muammo yo'q
+  if (TAIL_CACHE.has(size)) return;
+  const start = size - TAIL_PREFETCH;
+  // Kesh kalitini oldindan band qilamiz — ikki marta yuklanmasin.
+  TAIL_CACHE.set(size, null);
+  readRange(start, TAIL_PREFETCH, size, doc).then(function (bytes) {
+    if (bytes && bytes.length) {
+      TAIL_CACHE.set(size, { start: start, bytes: bytes });
+    } else {
+      TAIL_CACHE.delete(size);
+    }
+    while (TAIL_CACHE.size > TAIL_MAX_ENTRIES) {
+      TAIL_CACHE.delete(TAIL_CACHE.keys().next().value);
+    }
+  }).catch(function () {
+    TAIL_CACHE.delete(size);
+  });
+}
+
+// So'ralgan oraliq keshda bormi? (butunlay sig'ishi kerak)
+function tailFromCache(start, want, size) {
+  const c = TAIL_CACHE.get(size);
+  if (!c || !c.bytes) return null;
+  const end = start + want;
+  if (start < c.start || end > c.start + c.bytes.length) return null;
+  const from = start - c.start;
+  return c.bytes.subarray(from, from + want);
+}
+
+function noop() { /* bo'sh */ }
+
+// ============================================================================
+// DISK BO'LAK KESHI (Cache Storage) + 20 MB READ-AHEAD
+// ============================================================================
+//
+// G'OYA (WebK'dan olingan)
+//   Har bir yuklangan 512 KB bo'lak brauzer diskiga (Cache Storage) yoziladi.
+//   Foydalanuvchi videoni qayta ochganda, orqaga qaytganda yoki sahifani
+//   yangilaganda baytlar Telegram'dan EMAS, lokal keshdan keladi. R2
+//   yoqilmagan bo'lsa ham bu "0 ms" effekt beradi.
+//
+// QOIDALAR
+//   * Kalit: `doc/offset/limit`, va `offset` HAR DOIM CHUNK ga tekislangan
+//     (grid). Tekislanmasa bir so'rov yozgan kalitni boshqasi topa olmasdi —
+//     kesh hech qachon "urilmasdi".
+//   * `doc` bo'lmasa (yoki `Save-Data: on`) kesh UMUMAN ishlamaydi —
+//     eski xatti-harakat o'zgarishsiz qoladi.
+//   * Faqat TO'LIQ bo'lak yoziladi; qisqa/uzilgan javob yozilmaydi.
+//   * 24 soatdan eski yozuvlar o'chadi; umumiy hajm 400 MB bilan cheklangan.
+//   * `put` dan oldin baytdan NUSXA olinadi — keyingi esds tuzatish keshdagi
+//     asl nusxani buzmaydi.
+//
+// 20 MB READ-AHEAD
+//   WebK kabi: pleer hozir turgan joydan 20 MB oldinga bo'laklar fonda
+//   yuklanadi va diskka yoziladi. Foydalanuvchi seek qilganda yoki oldinga
+//   o'tsa — baytlar allaqachon tayyor. Yuklash `queue` bo'sh bo'lganda
+//   (ya'ni pleer kutayotganda emas) ketadi, shuning uchun joriy oqimni
+//   sekinlashtirmaydi.
+// ============================================================================
+const CACHE_NAME = 'wctg-chunks-v1';
+const CACHE_TTL = 24 * 60 * 60 * 1000;        // 24 soat
+const CACHE_MAX = 400 * 1024 * 1024;          // 400 MB
+const CACHE_MAX_KEYS = 4096;
+const READAHEAD_BYTES = 20 * 1024 * 1024;     // 20 MB oldindan o'qish
+const INFLIGHT = new Map();                   // kalit -> Promise (ikki marta yuklamaslik)
+const PF = { doc: '', cursor: 0, active: 0 };// read-ahead holati
+
+let CACHE_OK = (typeof caches !== 'undefined');
+let LAST_PRUNE = 0;
+let CACHE_HITS = 0;
+let CACHE_PUTS = 0;
+
+function chunkKey(doc, off, len) {
+  return self.location.origin + '/__wctg/chunk/' + doc + '/' + off + '/' + len;
+}
+
+async function cacheGet(key) {
+  if (!CACHE_OK) return null;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const res = await cache.match(key);
+    if (!res) return null;
+    const at = Number(res.headers.get('X-WC-At')) || 0;
+    if (at && (Date.now() - at) > CACHE_TTL) {
+      cache.delete(key).catch(noop);
+      return null;
+    }
+    const buf = await res.arrayBuffer();
+    if (!buf || !buf.byteLength) return null;
+    CACHE_HITS++;
+    return new Uint8Array(buf);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Diskda joy bormi? (kvota 55% dan oshsa yozmaymiz)
+async function cacheBudgetOk() {
+  try {
+    if (!navigator.storage || !navigator.storage.estimate) return true;
+    const est = await navigator.storage.estimate();
+    if (!est || !est.quota) return true;
+    return (est.usage || 0) < est.quota * 0.55;
+  } catch (e) {
+    return true;
+  }
+}
+
+function cachePut(key, u8) {
+  if (!CACHE_OK || !u8 || !u8.length) return;
+  (async function () {
+    try {
+      if (!(await cacheBudgetOk())) return;
+      const body = new Response(u8.slice(), {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': String(u8.length),
+          'X-WC-At': String(Date.now()),
+          'X-WC-Len': String(u8.length)
+        }
+      });
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(key, body);
+      CACHE_PUTS++;
+      maybePrune();
+    } catch (e) {
+      /* kvota to'ldi yoki boshqa xato — oqimga ta'sir qilmaydi */
+    }
+  })();
+}
+
+function maybePrune() {
+  const now = Date.now();
+  if (now - LAST_PRUNE < 10 * 60 * 1000) return;
+  LAST_PRUNE = now;
+  pruneCache().catch(noop);
+}
+
+// Eskirgan yozuvlarni o'chirish + hajm chegarasini ushlash.
+//
+// NIMA UCHUN SKAN CHEKLANGAN
+//   `cache.keys()` + har bir kalit uchun `match()` — qimmat amal. 4096 kalitni
+//   har 10 daqiqada to'liq skanerlash Service Worker'ni band qilib, oqimni
+//   sekinlashtirishi mumkin. Shuning uchun faqat ro'yxat BOSHIDAN (eng eski
+//   yozuvlardan) `PRUNE_SCAN` tagacha ko'ramiz. `keys()` qo'shilish tartibida
+//   qaytadi, ya'ni eng eski yozuvlar aynan boshida turadi.
+//
+//   Bitta bo'lak eng ko'pi CHUNK (512 KB). 800 ta kalit ≈ 400 MB — bu bizning
+//   to'liq chegaramiz. Ya'ni 800 dan kam kalit bo'lsa, hajm chegarasi baribir
+//   oshmaydi va skanerlashning hojati yo'q.
+const PRUNE_SCAN = 800;
+
+async function pruneCache() {
+  if (!CACHE_OK) return;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const keys = await cache.keys();
+    if (!keys.length) return;
+
+    // Kalitlar kam bo'lsa hammasi skanerlanadi (arzon), ko'p bo'lsa — faqat
+    // eng eski 800 tasi.
+    const now = Date.now();
+    const alive = [];
+    let bytes = 0;
+    const scan = Math.min(keys.length, PRUNE_SCAN);
+
+    for (let k = 0; k < scan; k++) {
+      const req = keys[k];
+      const res = await cache.match(req);
+      if (!res) continue;
+      const at = Number(res.headers.get('X-WC-At')) || 0;
+      const len = Number(res.headers.get('X-WC-Len')) || 0;
+      if (at && (now - at) > CACHE_TTL) {
+        await cache.delete(req);
+        continue;
+      }
+      alive.push({ req: req, len: len });
+      bytes += len;
+    }
+
+    // 1) Umumiy kalit soni chegaradan oshgan — eng eskilaridan o'chiramiz.
+    let i = 0;
+    while (i < alive.length && (keys.length - i) > CACHE_MAX_KEYS) {
+      await cache.delete(alive[i].req);
+      bytes -= alive[i].len;
+      i++;
+    }
+
+    // 2) Skanerlangan (ya'ni eng eski) qism 400 MB dan oshgan — kichraytiramiz.
+    while (i < alive.length && bytes > CACHE_MAX * 0.9) {
+      await cache.delete(alive[i].req);
+      bytes -= alive[i].len;
+      i++;
+    }
+  } catch (e) {
+    /* kesh tozalash hech qachon oqimni buzmasligi kerak */
+  }
+}
+
+// Grid bo'lagini o'qish: avval diskdan, bo'lmasa sahifadan (Telegram).
+// Bir xil bo'lak ikki joydan parallel so'ralsa — `INFLIGHT` birlashtiradi.
+async function readWindow(doc, off, len) {
+  if (!doc || !CACHE_OK) return toU8(await readFromPage(off, len));
+
+  const key = chunkKey(doc, off, len);
+  const hit = await cacheGet(key);
+  if (hit && hit.length === len) return hit;
+  if (hit && hit.length) return hit;                 // qisqa bo'lsa ham ishlatamiz
+
+  let p = INFLIGHT.get(key);
+  if (p) return p;
+
+  p = (async function () {
+    const u8 = toU8(await readFromPage(off, len));
+    if (u8.length === len) cachePut(key, u8);
+    return u8;
+  })();
+
+  INFLIGHT.set(key, p);
+  p.then(function () { if (INFLIGHT.get(key) === p) INFLIGHT.delete(key); },
+         function () { if (INFLIGHT.get(key) === p) INFLIGHT.delete(key); });
+  return p;
+}
+
+// Oldinga qarab bo'laklarni fonda yuklab, diskka yozib qo'yamiz.
+// `off`  — produktor qayerrgacha o'qigan
+// `sent` — pleerga qayerrgacha berilgan
+// Maqsad: `sent + 20 MB` gacha tayyor bo'lsin. Navbat (RAM) to'la bo'lsa
+// produktor baribir kutadi, shuning uchun bu yerda qo'shimcha yuk sezilmaydi.
+function maybePrefetch(doc, size, off, sent) {
+  if (!doc || !CACHE_OK || !size) return;
+  if (PF.active >= 2) return;
+
+  // Bo'lak chegarasiga yuqoriga tekislaymiz.
+  const startW = Math.ceil(off / CHUNK) * CHUNK;
+  const endW = Math.min(size, sent + READAHEAD_BYTES);
+  if (startW >= endW) return;
+
+  if (PF.doc !== doc) { PF.doc = doc; PF.cursor = startW; }
+  if (PF.cursor < startW) PF.cursor = startW;
+  if (PF.cursor >= endW) return;
+
+  const w = PF.cursor;
+  const len = Math.min(CHUNK, size - w);
+  if (len <= 0) return;
+  PF.cursor = w + len;
+
+  const key = chunkKey(doc, w, len);
+  if (INFLIGHT.has(key)) return;
+
+  PF.active++;
+  readWindow(doc, w, len).then(noop, noop).then(function () { PF.active--; });
+}
+
+// ============================================================================
+// R2 PREFIKS KESHI (ixtiyoriy)
+// ============================================================================
+//
+// G'OYA
+//   Har bir videoning birinchi ~5 MB i Cloudflare R2 da turadi. Foydalanuvchi
+//   video ochganda baytlar R2 dan (Toshkent PoP, ~20–60 ms) keladi, Telegram
+//   DC gacha bo'lgan 200–600 ms kutish YO'Q. Qolgan qism avvalgidek Telegram
+//   orqali oqadi — pleer uchun bu AYNAN bir xil fayl, hech qanday manba
+//   almashtirish yo'q.
+//
+// XAVFSIZLIK / BARQARORLIK
+//   - Serverda `R2_ENABLED=0` bo'lsa `api/r2-sign.php?info=1` "enabled:false"
+//     qaytaradi va bu blok UMUMAN ishlamaydi (eski yo'l o'zgarishsiz).
+//   - R2 javob bermasa 60 soniya davomida urinmaymiz (circuit breaker) —
+//     sekin R2 butun saytni sekinlashtirmaydi.
+//   - Prefiks uzunligi HAR DOIM 4096 ga karrali: Telegram davomi shu
+//     chegaradan boshlanadi, aks holda `LIMIT_INVALID` bo'lardi.
+//   - R2 dan kelgan baytlar fayldan katta bo'lsa — ishonmaymiz, tashlaymiz.
+// ============================================================================
+let R2_INFO = null;                  // { enabled, base, prefix, put }
+let R2_INFO_AT = 0;                  // qachon olingan (ms)
+let R2_INFO_P = null;                // parallel so'rovni birlashtirish
+let R2_DEAD_UNTIL = 0;               // shu vaqtgacha R2 ga murojaat yo'q
+let SEED_OK = false;                 // sahifa "yuklash mumkin" dedi (Wi-Fi)
+const R2_INFO_TTL = 5 * 60 * 1000;
+
+function r2ApiUrl(qs) {
+  try {
+    return new URL('api/r2-sign.php' + (qs || ''), self.registration.scope).toString();
+  } catch (e) {
+    return '';
+  }
+}
+
+// Server sozlamasini bir marta so'rab, 5 daqiqa eslab qolamiz.
+function r2Info(force) {
+  const now = Date.now();
+  if (!force && R2_INFO && (now - R2_INFO_AT) < R2_INFO_TTL) {
+    return Promise.resolve(R2_INFO);
+  }
+  if (R2_INFO_P) return R2_INFO_P;
+
+  const url = r2ApiUrl('?info=1');
+  if (!url) return Promise.resolve({ enabled: false });
+
+  R2_INFO_P = (async function () {
+    let info = { enabled: false };
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(function () { ctrl.abort(); }, 1800);
+      const res = await fetch(url, {
+        credentials: 'same-origin',
+        cache: 'default',
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        const j = await res.json();
+        if (j && j.enabled && j.base) {
+          info = {
+            enabled: true,
+            base: String(j.base).replace(/\/+$/, ''),
+            prefix: Math.max(0, Number(j.prefix) || 0),
+            put: !!j.put
+          };
+        }
+      }
+    } catch (e) {
+      info = { enabled: false };
+    }
+    R2_INFO = info;
+    R2_INFO_AT = Date.now();
+    R2_INFO_P = null;
+    return info;
+  })();
+
+  return R2_INFO_P;
+}
+
+function r2ObjUrl(info, doc) {
+  return info.base + '/p/' + encodeURIComponent(String(doc));
+}
+
+// R2 dan prefiksni OQIB, `push` orqali navbatga beradi.
+// Qaytaradi: nechta bayt berildi (4096 ga karrali, 0 = R2 ishlamadi).
+//
+// Diqqat: bu yerda to'liq 5 MB kutib turmaymiz — birinchi bo'lak kelishi
+// bilan navbatga qo'yiladi. Shu sababli birinchi kadr juda tez chiqadi.
+async function r2PrefixInto(doc, size, push) {
+  if (!doc || size < 2 * 1024 * 1024) return 0;
+  if (Date.now() < R2_DEAD_UNTIL) return 0;
+
+  const info = await r2Info(false);
+  if (!info.enabled || !info.prefix) return 0;
+
+  const target = Math.min(info.prefix, size) - (Math.min(info.prefix, size) % 4096);
+  if (target < 4096) return 0;
+
+  const ctrl = new AbortController();
+  let timer = setTimeout(function () { ctrl.abort(); }, 1200);   // birinchi bayt
+  let got = 0;
+  let pending = new Uint8Array(0);
+  let stopped = false;
+
+  function feed(u8) {
+    if (stopped || !u8 || !u8.length) return;
+    const joined = new Uint8Array(pending.length + u8.length);
+    joined.set(pending, 0);
+    joined.set(u8, pending.length);
+    pending = joined;
+
+    let usable = pending.length - (pending.length % 4096);
+    if (usable > target - got) usable = target - got;
+    usable -= usable % 4096;
+    if (usable <= 0) return;
+
+    const out = pending.subarray(0, usable);
+    push(out);
+    got += usable;
+    pending = pending.subarray(usable);
+    if (got >= target) stopped = true;
+  }
+
+  try {
+    const res = await fetch(r2ObjUrl(info, doc), {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'force-cache',
+      signal: ctrl.signal
+    });
+    if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+
+    const len = Number(res.headers.get('Content-Length')) || 0;
+    if (len && (len > size || len > info.prefix + 4096)) {
+      throw new Error('prefiks hajmi mos emas');
+    }
+
+    const reader = res.body.getReader();
+    while (!stopped) {
+      const r = await reader.read();
+      if (r.done) break;
+      clearTimeout(timer);
+      timer = setTimeout(function () { ctrl.abort(); }, 20000);    // oqim to'xtadi
+      feed(r.value);
+    }
+    clearTimeout(timer);
+    try { await reader.cancel(); } catch (e) { /* allaqachon yopilgan */ }
+  } catch (e) {
+    clearTimeout(timer);
+    if (got === 0) {
+      // R2 umuman ishlamadi — bir daqiqa bezovta qilmaymiz.
+      R2_DEAD_UNTIL = Date.now() + 60000;
+      return 0;
+    }
+    // Qisman keldi — shu joydan Telegram davom ettiradi.
+  }
+
+  return got;
+}
+
+// Range so'rovi prefiks ichida bo'lsa — R2 dan aniq oraliqni olamiz.
+async function r2Range(doc, start, end, size) {
+  if (!doc) return null;
+  if (Date.now() < R2_DEAD_UNTIL) return null;
+
+  const info = await r2Info(false);
+  if (!info.enabled || !info.prefix) return null;
+  if (start >= info.prefix || start >= size) return null;
+
+  const last = Math.min(end, size - 1);
+  if (last < start) return null;
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, 2500);
+    const res = await fetch(r2ObjUrl(info, doc), {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'force-cache',
+      headers: { 'Range': 'bytes=' + start + '-' + last },
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const u8 = new Uint8Array(buf);
+    if (!u8.length) return null;
+    return u8;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Telegram'dan o'qilgan prefiksni R2 ga yozish (cache-aside).
+// Faqat sahifa `seed` ruxsatini bergan bo'lsa va foydalanuvchi login
+// qilgan bo'lsa ishlaydi (imzoni server beradi).
+function r2Seed(doc, parts, bytes) {
+  if (!SEED_OK || !doc || !bytes) return;
+  if (bytes < 1024 * 1024) return;                  // juda kichik — foydasi yo'q
+
+  (async function () {
+    try {
+      const signUrl = r2ApiUrl('?doc=' + encodeURIComponent(String(doc)));
+      if (!signUrl) return;
+      const sres = await fetch(signUrl, { credentials: 'same-origin', cache: 'no-store' });
+      if (!sres.ok) return;
+      const j = await sres.json();
+      if (!j || !j.enabled || !j.put) return;
+
+      const body = new Blob(parts, { type: 'video/mp4' });
+      if (body.size < 1024 * 1024) return;
+
+      const pres = await fetch(j.put, {
+        method: 'PUT',
+        body: body,
+        credentials: 'omit',
+        mode: 'cors',
+        headers: { 'Content-Type': 'video/mp4' }
+      });
+      if (pres.ok) say('⬆ R2 prefiks saqlandi (' + (body.size / 1048576).toFixed(1) + ' MB)');
+    } catch (e) {
+      /* jim — bu fon vazifasi, oqimga ta'sir qilmaydi */
+    }
+  })();
+}
+
+const STATS = { requests: 0, bytes: 0, seeks: 0, par: 0, r2: 0 };
 let PROVIDES = 0;                    // sahifa necha marta "ulangan" — diagnostika
 
 // Sahifadagi log oynasiga xabar yuborish (diagnostika)
@@ -109,7 +813,10 @@ function stats(patch) {
     requests: STATS.requests,
     bytes: STATS.bytes,
     seeks: STATS.seeks,
-    par: STATS.par
+    par: STATS.par,
+    r2: STATS.r2,
+    cache: CACHE_HITS,
+    stored: CACHE_PUTS
   }, patch || {});
   self.clients.matchAll()
     .then((list) => {
@@ -129,7 +836,12 @@ function askForProvider() {
 
 // ---------------------------------------------------------------------- lifecycle
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil((async function () {
+  // Yangi versiya faollashganda eskirgan bo'laklarni darhol tozalaymiz.
+  LAST_PRUNE = 0;
+  maybePrune();
+  await self.clients.claim();
+})()));
 
 // ---------------------------------------------------------------------- xabarlar
 self.addEventListener('message', (e) => {
@@ -167,6 +879,16 @@ self.addEventListener('message', (e) => {
     return;
   }
 
+  // --- Sahifa "prefiksni R2 ga yuklash mumkin" dedi -------------------
+  //
+  // Nima uchun sahifa hal qiladi: mobil internetda 5 MB yuklash
+  // foydalanuvchining trafigini yeydi. Sahifa Wi-Fi/ethernet va
+  // `saveData` yo'qligini biladi — shunda `ok:true` yuboradi.
+  if (d.type === 'seed') {
+    SEED_OK = !!d.ok;
+    return;
+  }
+
   // --- So'rov natijasi keldi (sahifadan) -----------------------------
   if (d.type === 'result') {
     const i = waiting.findIndex((j) => j.id === d.id);
@@ -187,7 +909,7 @@ self.addEventListener('message', (e) => {
     say('📊 ' + s);
     if (p) p.postMessage({ type: 'stats', text: s });
   }
-  if (d.type === 'reset') { STATS.requests = 0; STATS.bytes = 0; STATS.seeks = 0; STATS.par = 0; }
+  if (d.type === 'reset') { STATS.requests = 0; STATS.bytes = 0; STATS.seeks = 0; STATS.par = 0; STATS.r2 = 0; }
 });
 
 // ------------------------------------------------------------- sahifadan bayt olish
@@ -423,6 +1145,70 @@ function readRangeSerial(start, goal) {
   })();
 }
 
+// --- Keshli, GRID ga tekislangan o'qish ------------------------------------
+//
+// Nima uchun grid? Disk keshining kaliti `doc/offset/limit`. Agar bir so'rov
+// 128 KB dan, boshqasi 2 MB dan boshlansa — kalitlar hech qachon mos
+// kelmasdi. Shuning uchun o'qishni CHUNK ga (512 KB) tekislangan oynalarga
+// bo'lamiz: qaysi yo'l bilan so'ralmasin, kalit bir xil bo'ladi.
+//
+// Telegram 1 MB blok chegarasini kesib o'tish taqiqlangan — CHUNK (512 KB)
+// va uning karrali oynalar bu chegaraga har doim sig'adi.
+async function readRangeGrid(start, goal, size, doc) {
+  const end = Math.min(size, start + goal);
+  if (end <= start) return new Uint8Array(0);
+
+  const out = new Uint8Array(end - start);
+  let filled = 0;
+  let w = start - (start % CHUNK);
+
+  while (w < end) {
+    // Navbatdagi PARALLEL ta oynani rejalashtiramiz (tartib aniq).
+    const batch = [];
+    let b = w;
+    while (batch.length < PARALLEL && b < end) {
+      const len = Math.min(CHUNK, size - b);
+      if (len <= 0) break;
+      batch.push({ off: b, want: len });
+      b += len;
+    }
+    if (!batch.length) break;
+
+    const res = await Promise.all(batch.map(async function (j) {
+      try { return { u8: await readWindow(doc, j.off, j.want) }; }
+      catch (err) { return { err: err }; }
+    }));
+    STATS.par += batch.length;
+
+    for (let k = 0; k < res.length; k++) {
+      if (res[k].err) {
+        const e = res[k].err;
+        if (isSizeRejected(e)) throw e;
+        if (filled > 0) return out.subarray(0, filled);
+        throw e;
+      }
+      const u8 = res[k].u8;
+      if (!u8 || !u8.length) {
+        if (filled > 0) return out.subarray(0, filled);
+        throw new Error('Telegram hech narsa bermadi');
+      }
+
+      const from = Math.max(start, batch[k].off);
+      const to = Math.min(end, batch[k].off + u8.length);
+      if (to > from) {
+        out.set(u8.subarray(from - batch[k].off, to - batch[k].off), from - start);
+        filled = to - start;
+      }
+      if (u8.length < batch[k].want) return out.subarray(0, filled);  // fayl tugadi
+    }
+
+    const last = batch[batch.length - 1];
+    w = last.off + last.want;
+  }
+
+  return filled === out.length ? out : out.subarray(0, filled);
+}
+
 // --- Umumiy kirish nuqtasi -------------------------------------------------
 //
 // Avval tez (parallel) yo'lni sinaymiz. Muvaffaqiyatsiz bo'lsa - sababiga
@@ -430,9 +1216,23 @@ function readRangeSerial(start, goal) {
 //   * Telegram hajmini rad etgan  -> CHUNK ni kichiklashtirib, parallel
 //                                    yo'lni qayta sinab ko'ramiz.
 //   * Boshqa xato                  -> ishonchli ketma-ket yo'lga o'tamiz.
-async function readRange(start, want, size) {
+//
+// `doc` berilgan bo'lsa avval KESHLI grid yo'lini sinaymiz (disk cache +
+// Telegram). U ishlamasa — quyidagi tekshirilgan eski yo'llar o'zgarishsiz
+// ishlatiladi.
+async function readRange(start, want, size, doc) {
   const goal = Math.min(want, size - start);
   if (goal <= 0) return new Uint8Array(0);
+
+  if (doc && CACHE_OK) {
+    try {
+      return await readRangeGrid(start, goal, size, doc);
+    } catch (err) {
+      const msg = String((err && err.message) || err);
+      if (msg === 'NO_PROVIDER') throw err;
+      say('! keshli o\'qish ishlamadi (' + msg + ') - oddiy yo\'lga o\'taman');
+    }
+  }
 
   try {
     return await readRangeParallel(start, goal);
@@ -551,11 +1351,31 @@ const REST_PULL = 2 * 1024 * 1024;   // 2-bosqich: katta bo'lak, tez
 // yuborilishi bilan qolgani darhol oqadi. Tartib saqlanadi (avval 0 dan
 // o'qilgan 512 KB, keyin davomi), chunki `off` ketma-ket o'sadi.
 const REST_DELAY = 0;                // ms — qolgani shundan keyin yuklanadi
-const QUEUE_MAX = 3;                 // navbatda nechta bo'lak (3 x 2 MB = 6 MB)
+const START_BUFFER_SECONDS = 10;     // o'rtacha bitrate asosida taxminan 10 soniya zaxira
+const QUEUE_MIN = 1;                 // kamida bitta keyingi bo'lak
+const QUEUE_MAX_CAP = 6;             // yuqori chegara: 12 MB (brauzer xotirasini asraydi)
 
-async function progressiveResponse(size, mime, baseHeaders, t0) {
+// Fayl hajmi / davomiylik orqali 10 soniyaning taxminiy bayt miqdorini olamiz.
+// Oqimning birinchi 128 KB paketi kechiktirilmaydi; bu limit faqat qolgan
+// bo'laklar navbatini cheklaydi. Davomiylik noma'lum bo'lsa 2 MB olamiz.
+function targetBufferBytesFor(size, duration) {
+  const seconds = Number(duration) || 0;
+  if (!Number.isFinite(seconds) || seconds <= 0) return Math.min(size, REST_PULL);
+  return Math.min(size, Math.ceil(size * Math.min(START_BUFFER_SECONDS / seconds, 1)));
+}
+
+function queueLimitFor(size, duration) {
+  const remaining = Math.max(0, targetBufferBytesFor(size, duration) - FIRST_PULL);
+  const parts = Math.ceil(remaining / REST_PULL);
+  return Math.max(QUEUE_MIN, Math.min(QUEUE_MAX_CAP, parts));
+}
+
+async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId, cacheDoc) {
   const born = (t0 || Date.now());
-  let off = 0;                       // Telegram'dan o'qilgan bayt soni
+  const targetBufferBytes = targetBufferBytesFor(size, duration);
+  const queueLimit = queueLimitFor(size, duration);
+  let off = 0;                       // produktor o'qigan bayt soni (R2 + Telegram)
+  let sent = 0;                      // pleerga BERILGAN bayt soni (read-ahead uchun)
   let dead = false;                  // brauzer bekor qilgan (yopilgan/seek)
   let done = false;                  // fayl to'liq o'qib bo'ldi
   let err = null;                    // oxirgi xato
@@ -576,27 +1396,121 @@ async function progressiveResponse(size, mime, baseHeaders, t0) {
     return new Promise(function (r) { setTimeout(r, ms); });
   }
 
+  // --- MP4 indeksini (moov) tekshirish uchun bosh baytlar ----------------
+  // R2 dan ham, Telegram'dan ham birinchi 256 KB shu yerga yig'iladi.
+  let headParts = [];
+  let headLen = 0;
+  let moovChecked = false;
+  function addHead(u8) {
+    if (moovChecked || !u8 || !u8.length) return;
+    const room = 256 * 1024 - headLen;
+    if (room <= 0) return;
+    const take = u8.length <= room ? u8 : u8.subarray(0, room);
+    headParts.push(take);
+    headLen += take.length;
+  }
+  function checkMoov() {
+    if (moovChecked) return;
+    if (headLen < 64 * 1024 && off < size) return;   // hali erta
+    moovChecked = true;
+    const h = headParts.length === 1 ? headParts[0] : concat(headParts, headLen);
+    headParts = [];
+    if (!hasMoovInHead(h)) {
+      prefetchTail(size, cacheDoc);
+    }
+  }
+
+  // --- R2 ga yuklash uchun prefiks baytlarini yig'ish -------------------
+  // Faqat R2 bo'sh bo'lganda (Telegram'dan o'qilganda) va sahifa ruxsat
+  // bergan bo'lsa. 5 MB xotira — faqat birinchi o'qish paytida.
+  let seedTarget = 0;
+  let seedParts = [];
+  let seedBytes = 0;
+  let seedSent = false;
+  function collectSeed(u8) {
+    if (!seedTarget || seedSent || !u8 || !u8.length) return;
+    const room = seedTarget - seedBytes;
+    if (room <= 0) return;
+    const take = u8.length <= room ? u8 : u8.subarray(0, room);
+    seedParts.push(take);
+    seedBytes += take.length;
+    if (seedBytes >= seedTarget) {
+      seedSent = true;
+      const parts = seedParts;
+      const total = seedBytes;
+      seedParts = [];
+      seedBytes = 0;
+      r2Seed(docId, parts, total);
+    }
+  }
+
   // --- FON ISHLOVCHI -------------------------------------------------------
   async function produce() {
     try {
-      // ---- 1-BOSQICH: darhol bitta kichik bo'lak --------------------------
-      const first = await readRange(0, Math.min(FIRST_PULL, size), size);
+      let usedR2 = 0;
+
+      // ---- 0-BOSQICH: R2 prefiksi (bo'lsa) ------------------------------
+      // Bu eng katta yutuq: birinchi bayt Telegram DC dan emas, Cloudflare
+      // edge'dan keladi. R2 ishlamasa — pastdagi eski yo'l o'zgarishsiz.
+      if (docId) {
+        const info = await r2Info(false);
+        if (info && info.enabled && info.prefix) {
+          seedTarget = (info.put && size > info.prefix) ? Math.min(info.prefix, size) : 0;
+        }
+        if (info && info.enabled) {
+          usedR2 = await r2PrefixInto(docId, size, function (u8) {
+            // R2 dan kelgan birinchi bo'laklarda ham `esds` tuzatiladi
+            // (faststart MP4'da `moov` fayl boshida bo'ladi).
+            const part = applyMp4Fix(docId, off, size, u8);
+            off += part.length;
+            STATS.bytes += part.length;
+            queue.push(part);
+            addHead(part);
+            notify();
+          });
+        }
+      }
+
       if (dead) return;
-      if (first && first.length) {
-        off += first.length;
+
+      if (usedR2 > 0) {
+        STATS.r2++;
         STATS.requests++;
-        STATS.bytes += first.length;
-        queue.push(first);
-        say('~ oqim #1 ' + (first.length / 1024).toFixed(0) + ' KB - darhol');
-        // Birinchi bayt qancha vaqtda keldi? Bu - TTFB. Sahifa uni
-        // `window.__wcPerf` da ko'radi (QA uchun).
+        say('⚡ R2 prefiks ' + (usedR2 / 1048576).toFixed(1) + ' MB — Telegram kutishisiz');
         stats({
           ttfb: Date.now() - born,
-          first: first.length,
+          first: usedR2,
+          r2: true,
           progressive: true,
           size: size
         });
-        notify();
+        checkMoov();
+      } else {
+        // ---- 1-BOSQICH: darhol bitta kichik bo'lak ----------------------
+        const firstRaw = await readRange(0, Math.min(FIRST_PULL, size), size, cacheDoc);
+        if (dead) return;
+        // Chromium ba'zi Telegram MP4'larini (buzuq `esds`) o'qimaydi —
+        // shu yerda tuzatamiz, aks holda pleer butun faylni tortadi.
+        const first = applyMp4Fix(docId, 0, size, firstRaw);
+        if (first && first.length) {
+          off += first.length;
+          STATS.requests++;
+          STATS.bytes += first.length;
+          queue.push(first);
+          addHead(first);
+          collectSeed(first);
+          maybePrefetch(cacheDoc, size, off, sent);
+          say('~ oqim #1 ' + (first.length / 1024).toFixed(0) + ' KB - darhol');
+          // Birinchi bayt qancha vaqtda keldi? Bu - TTFB. Sahifa uni
+          // `window.__wcPerf` da ko'radi (QA uchun).
+          stats({
+            ttfb: Date.now() - born,
+            first: first.length,
+            progressive: true,
+            size: size
+          });
+          notify();
+        }
       }
       part++;                              // keyingi bo'lak "#2" bo'lib hisoblanadi
 
@@ -613,19 +1527,29 @@ async function progressiveResponse(size, mime, baseHeaders, t0) {
       }
       if (dead) return;
 
+      // Moov hali aniqlanmagan bo'lsa (kichik prefiks) — hozir tekshiramiz.
+      checkMoov();
+
       // ---- fayl oxirigacha (navbat to'lmasdan oldin to'xtaydi) -----------
       while (!dead && !err && off < size) {
         // Navbat to'lgan — bu BACKPRESSURE: brauzer o'z tezligida ko'rayapti,
         // biz esa ortiqcha yuklamaymiz. Bo'sh joy bo'lganda `notify` uyg'otadi.
-        while (!dead && !err && queue.length >= QUEUE_MAX) await waitTick();
+        while (!dead && !err && queue.length >= queueLimit) await waitTick();
 
-        const want = Math.min(REST_PULL, size - off);
-        const u8 = await readRange(off, want, size);
+        const toTarget = Math.max(0, targetBufferBytes - off);
+        const want = Math.min(REST_PULL, size - off, toTarget > 0 ? toTarget : REST_PULL);
+        const chunkStart = off;
+        const u8 = applyMp4Fix(docId, chunkStart, size,
+          await readRange(chunkStart, want, size, cacheDoc));
         if (!u8 || !u8.length) break;      // Telegram kamroq berdi / fayl tugadi
         off += u8.length;
         STATS.requests++;
         STATS.bytes += u8.length;
         queue.push(u8);
+        addHead(u8);
+        collectSeed(u8);
+        // 20 MB read-ahead: pleer hozir turgan joydan oldinga diskka yozamiz.
+        maybePrefetch(cacheDoc, size, off, sent);
         if (part <= 2 || part % 20 === 0) {
           say('~ oqim #' + part + ' ' + (off / 1048576).toFixed(1) + ' / '
             + (size / 1048576).toFixed(1) + ' MB'
@@ -634,6 +1558,7 @@ async function progressiveResponse(size, mime, baseHeaders, t0) {
         part++;
         notify();
       }
+      checkMoov();
     } catch (e) {
       if (!dead) {
         err = e;
@@ -661,8 +1586,11 @@ async function progressiveResponse(size, mime, baseHeaders, t0) {
       if (!queue.length) { controller.close(); return; }
 
       const u8 = queue.shift();
+      sent += u8.length;
       notify();                            // bo'sh joy bo'ldi — produce davom etsin
       controller.enqueue(u8);
+      // Pleer oldinga surildi — read-ahead oynasini yangilaymiz.
+      maybePrefetch(cacheDoc, size, off, sent);
     },
     cancel() {
       // Brauzer to'xtadi — Telegram'dan yana o'qimaymiz.
@@ -699,6 +1627,22 @@ self.addEventListener('fetch', (e) => {
 
   e.respondWith((async () => {
     const size = Number(url.searchParams.get('size')) || 0;
+    const rawDuration = Number(url.searchParams.get('dur'));
+    const duration = Number.isFinite(rawDuration) ? Math.max(0, Math.min(86400, rawDuration)) : 0;
+
+    // Hujjat id'si — R2 prefiks kaliti. Sahifa buni `?doc=` bilan yuboradi.
+    // Yo'q bo'lsa R2 bloki umuman ishlamaydi (eski xatti-harakat).
+    //
+    // MUHIM: 64-bitli id'ni `Number()` ga o'girmaymiz — JS 2^53 dan keyin
+    // aniqlikni yo'qotadi va turli foydalanuvchilar turli kalit hisoblab
+    // qolardi (kesh hech qachon "urilmasdi").
+    const docRaw = String(url.searchParams.get('doc') || '');
+    const docId = /^[0-9]{1,20}$/.test(docRaw) ? docRaw : '';
+
+    // Disk keshining kaliti. `Save-Data: on` (foydalanuvchi trafikni
+    // tejashni so'ragan) bo'lsa kesh va read-ahead o'chadi — hurmat qilamiz.
+    const saveData = String(e.request.headers.get('Save-Data') || '').toLowerCase() === 'on';
+    const cacheDoc = saveData ? '' : docId;
 
     // Konteyner turi. Sahifa buni `?mime=` orqali yuboradi (probe aniqlagan
     // haqiqiy tur). MKV/HEVC fayllar uchun `video/mp4` deb yuborish brauzerni
@@ -722,6 +1666,22 @@ self.addEventListener('fetch', (e) => {
 
     const rg = parseRange(e.request.headers.get('Range'), size);
 
+    // --- 0–1 BAYT "PROBE" JAVOBI (WebK hiylasi) --------------------------
+    //
+    // Pleer ishga tushganda `Range: bytes=0-1` yuborib "server range'ni
+    // qo'llaydimi?" deb tekshiradi. WebK bunga Telegram'ga umuman bormasdan
+    // darhol 2 bayt qaytaradi — shuning uchun video "bir zumda" ochiladi.
+    // Bu javob KESHLANMAYDI va hech qanday bayt o'qimaydi.
+    if (rg && !rg.open && rg.start === 0 && rg.end === 1 && size >= 2) {
+      return new Response(new Uint8Array(2), { status: 206, headers: {
+        ...headers,
+        'Content-Range': 'bytes 0-1/' + size,
+        'Content-Length': '2',
+        'X-WC-Served-By': 'tg-cdn-worker',
+        'X-WC-Probe': '1',
+      }});
+    }
+
     // --- Range YO'Q bo'lsa: TO'G'RI HTTP javobi ---------------------------
     //
     // Nima uchun? RFC 9110 §15.5.7 bo'yicha `206 Partial Content` faqat
@@ -739,7 +1699,7 @@ self.addEventListener('fetch', (e) => {
     // ko'rish davomida oqib keladi. Ilgari bu holatda faqat 2 MB berilib,
     // brauzer qayta-qayta so'rardi — birinchi kadr kechikardi.
     if (!rg || (rg.open && rg.start === 0)) {
-      return progressiveResponse(size, mime, headers, t0);
+      return progressiveResponse(size, mime, headers, t0, duration, docId, cacheDoc);
     }
 
     const start = rg.start;
@@ -777,8 +1737,52 @@ self.addEventListener('fetch', (e) => {
     }
 
     let bytes;
+    // MP4 indeksi (moov) oldindan yuklangan bo'lishi mumkin — Telegram'ga
+    // murojaat qilmasdan, shu zaxiradan qaytaramiz (1 RTT tejaladi).
+    const cached = tailFromCache(start, want, size);
+    if (cached && cached.length) {
+      STATS.requests++;
+      STATS.bytes += cached.length;
+      say('→ #' + STATS.requests + ' bayt ' + start + '…' + (start + cached.length - 1)
+        + ' (keshdan — MP4 indeksi)');
+      const cttfb = Date.now() - t0;
+      stats({ ttfb: cttfb, range: start + '-' + (start + cached.length - 1), size: size, cached: true });
+      // `moov` shu yerda — Chromium uchun `esds` ni tuzatib yuboramiz.
+      const fixed = applyMp4Fix(docId, start, size, cached);
+      return new Response(fixed, { status: 206, headers: {
+        ...headers,
+        'Content-Range': 'bytes ' + start + '-' + (start + fixed.length - 1) + '/' + size,
+        'Content-Length': String(fixed.length),
+        'X-WC-Served-By': 'tg-cdn-worker',
+        'X-WC-TTFB': String(cttfb),
+        'X-WC-Cached': 'tail',
+      }});
+    }
+    // R2 prefiksi ichidagi so'rov (odatda seek yoki `probe`) — Telegram'ga
+    // bormasdan, edge'dan darhol javob beramiz.
+    if (docId) {
+      const r2want = Math.min(want, size - start);
+      const r2u8 = await r2Range(docId, start, start + r2want - 1, size);
+      if (r2u8 && r2u8.length) {
+        STATS.requests++;
+        STATS.bytes += r2u8.length;
+        STATS.r2++;
+        const rt = Date.now() - t0;
+        stats({ ttfb: rt, range: start + '-' + (start + r2u8.length - 1), size: size, r2: true });
+        const fixed = applyMp4Fix(docId, start, size, r2u8);
+        return new Response(fixed, { status: 206, headers: {
+          ...headers,
+          'Content-Range': 'bytes ' + start + '-' + (start + fixed.length - 1) + '/' + size,
+          'Content-Length': String(fixed.length),
+          'X-WC-Served-By': 'tg-cdn-worker',
+          'X-WC-TTFB': String(rt),
+          'X-WC-R2': '1',
+        }});
+      }
+    }
+
     try {
-      bytes = await readRange(start, want, size);
+      bytes = await readRange(start, want, size, cacheDoc);
     } catch (err) {
       say('✗ ' + start + '+' + want + ': ' + err.message);
       return new Response('Telegram CDN dan oqib bo\'lmadi: ' + err.message, {
@@ -786,7 +1790,8 @@ self.addEventListener('fetch', (e) => {
       });
     }
 
-    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const u8 = applyMp4Fix(docId, start, size, raw);
 
     // Telegram kamroq bayt qaytarsa (internet uzilib qolsa) - faqat olinganini
     // qaytaramiz, zero to'ldirilgan "soxta" baytlarni YUBORMAYMIZ.

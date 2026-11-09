@@ -425,7 +425,14 @@
     }
 
     // ------------------------------------------------------- fayl tanlash
-    if (drop) drop.addEventListener('click', function () { fileEl.click(); });
+    if (drop) {
+        drop.addEventListener('click', function () { fileEl.click(); });
+        drop.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Enter' && ev.key !== ' ') return;
+            ev.preventDefault();
+            fileEl.click();
+        });
+    }
     if (fileEl) fileEl.addEventListener('change', function () {
         setFiles(this.files, true);
         // Input'ni bo'shatamiz — keyingi safar AYNI faylni qayta tanlash

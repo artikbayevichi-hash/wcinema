@@ -30,6 +30,7 @@ ini_set('memory_limit', '-1');
 
 require __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/TgPull.php';
+require_once __DIR__ . '/hls-progressive.php';
 
 $url = $argv[1] ?? '';
 $key = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($argv[2] ?? ''));
@@ -80,6 +81,7 @@ function hlsMetaSet($metaF, $patch) {
 hlsMetaSet($metaF, [
     'status'     => 'downloading',
     'started'    => time(),
+    'progressive' => false,
     'progress'   => 0,
     'downloaded' => 0,
     'error'      => null,
@@ -110,6 +112,9 @@ try {
     $attempts = 3;
     $lastErr  = null;
     $total    = 0;
+    // "Avval boshi": yuklanish bilan PARALLEL segmentlar chiqariladi (hls-progressive.php)
+    $pg       = hlsProgNew($hlsDir, $source, $ff, HLS_SEG_SEC);
+    $progOk   = false;
 
     for ($i = 0; $i < $attempts; $i++) {
         $api = TgPull::openBotSession();
@@ -134,13 +139,20 @@ try {
                 break;
             }
 
-            $cb = function ($progress, $speed, $time) use ($metaF, $total) {
-                hlsMetaSet($metaF, [
+            $cb = function ($progress, $speed, $time) use ($metaF, $total, &$pg) {
+                $patch = [
                     'progress'    => (int) round((float) $progress),
                     'downloaded'  => (int) round($total * (float) $progress / 100),
                     'speed'       => (float) ($speed ?? 0),
                     'worker_tick' => time(),
-                ]);
+                ];
+                // Uzluksiz boshini ffmpeg'ga uzatamiz; birinchi segmentlar chiqsa,
+                // api/hls.php playlist'ni DARHOL beradi (film hali yuklanayotgan bo'lsa ham).
+                hlsProgPump($pg);
+                if ($pg['proc'] && !$pg['failed'] && is_file($pg['dir'] . '/index.m3u8')) {
+                    $patch['progressive'] = true;
+                }
+                hlsMetaSet($metaF, $patch);
             };
 
             $api->downloadToFile($info['doc'], $source, $cb);
@@ -171,25 +183,70 @@ try {
         'worker_tick'=> time(),
     ]);
 
+    // "Avval boshi" rejimi: parallel ishlayotgan ffmpeg ni yakunlaymiz.
+    if ($pg['started'] || $pg['wm'] > 0) {
+        hlsProgPump($pg, true);                 // qolgan baytlarni ham ko'chiramiz
+        $progOk = hlsProgFinish($pg, 300);
+        if ($progOk) {
+            hlsProgCleanup($pg);
+        } else {
+            hlsProgAbort($pg);                  // chala natijani tozalab, eski usulga o'tamiz
+            hlsMetaSet($metaF, ['progressive' => false]);
+        }
+    }
+
     // --- ffmpeg: HLS transkod (copy — tez, sifat o'zgarmaydi) --------------
-    $cmd = [
-        escapeshellarg($ff),
+    //
+    // DIQQAT (Windows/XAMPP): escapeshellarg() Windows'da "%" belgisini BO'SH
+    // JOYGA almashtiradi: "seg_%05d.ts" -> "seg_ 05d.ts" bo'lib, ffmpeg
+    // "Invalid segment filename template" bilan yiqilardi va video HECH QACHON
+    // ochilmasdi (film to'liq yuklangandan keyin ham). Shuning uchun buyruq
+    // MASSIV ko'rinishida proc_open'ga beriladi (shell ishtirok etmaydi, hech
+    // narsa o'zgarmaydi) va ffmpeg papka ichida, NISBIY nomlar bilan ishlaydi.
+    if (!$progOk) {
+    $ffArgs = [
+        $ff,
         '-hide_banner', '-loglevel', 'error', '-y',
-        '-i', escapeshellarg($source),
+        '-i', $source,
         '-c', 'copy',                    // qayta kodlashsiz — tez, sifat saqlanadi
         '-f', 'hls',
         '-hls_time', (string) HLS_SEG_SEC,
         '-hls_list_size', '0',           // barcha segmentlar shartli ro'yxatda
-        '-hls_segment_filename', escapeshellarg($hlsDir . '/seg_%05d.ts'),
-        escapeshellarg($hlsDir . '/index.m3u8'),
+        '-hls_segment_filename', 'seg_%05d.ts',
+        'index.m3u8',
     ];
-    $out = [];
-    $code = 0;
-    exec(implode(' ', $cmd) . ' 2>&1', $out, $code);
+    $out  = [];
+    $code = 1;
+    if (PHP_VERSION_ID >= 70400) {
+        $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+        $proc = @proc_open($ffArgs, $desc, $pipes, $hlsDir);
+        if (is_resource($proc)) {
+            fclose($pipes[0]);
+            $errTxt = (string) stream_get_contents($pipes[2]);
+            stream_get_contents($pipes[1]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            $code = proc_close($proc);
+            $out  = ($errTxt !== '') ? explode("\n", trim($errTxt)) : [];
+        } else {
+            $out = ['proc_open ishga tushmadi (php.ini disable_functions?)'];
+        }
+    } else {
+        // Eski PHP: papkaga o'tib, "%" li nomni tirnoqsiz beramiz.
+        $prevCwd = getcwd();
+        @chdir($hlsDir);
+        exec(escapeshellarg($ff) . ' -hide_banner -loglevel error -y -i ' . escapeshellarg($source)
+            . ' -c copy -f hls -hls_time ' . (int) HLS_SEG_SEC . ' -hls_list_size 0'
+            . ' -hls_segment_filename seg_%05d.ts index.m3u8 2>&1', $out, $code);
+        if ($prevCwd !== false) {
+            @chdir($prevCwd);
+        }
+    }
 
     if ($code !== 0 || !is_file($hlsDir . '/index.m3u8')) {
         throw new \RuntimeException('ffmpeg xato: ' . implode(' | ', array_slice($out, -6)));
     }
+    } // /!$progOk (eski usul: to'liq yuklab, keyin bo'laklash)
 
     $segs = glob($hlsDir . '/seg_*.ts');
     $segCount = $segs ? count($segs) : 0;
@@ -199,6 +256,8 @@ try {
     }
     // Disk tejash: endi HLS segmentlar yetarli
     @unlink($source);
+    @unlink($hlsDir . '/head.mp4');
+    @unlink($hlsDir . '/ffmpeg.log');
 
     hlsMetaSet($metaF, [
         'status'   => 'done',
@@ -210,6 +269,9 @@ try {
     fwrite(STDOUT, "HLS tayyor: {$key} ({$segCount} segment, " . round($sizeB / 1048576, 1) . "MB)\n");
     exit(0);
 } catch (\Throwable $e) {
+    if (isset($pg) && is_array($pg)) {
+        hlsProgAbort($pg);                       // yetim ffmpeg qolib ketmasin
+    }
     $msg = trim((string) $e->getMessage());
     hlsMetaSet($metaF, [
         'status' => 'error',

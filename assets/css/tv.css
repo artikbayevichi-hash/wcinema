@@ -195,6 +195,224 @@
 .tv-mode .modal-card { max-width: 1100px; }
 .tv-mode .modal-btn { font-size: 18px; padding: 13px 26px; }
 
+/* ------------------------------------------------ 7b) TV QIDIRUV (YouTube TV)
+   To'liq ekranni egallagan qidiruv oynasi:
+     · yuqorida KATTAGINA maydon — pult klaviaturasi shu yerga ochiladi;
+     · pastida natijalar (yozilayotgan so'zga qarab jonli yangilanadi);
+     · ↑/↓ bilan maydon ↔ natijalar orasida yuriladi.
+   ------------------------------------------------------------------------- */
+.tv-search {
+    position: fixed;
+    inset: 0;
+    z-index: 340;
+    background: #080a0f;
+    display: flex;
+    flex-direction: column;
+}
+.tv-search[hidden] { display: none; }
+
+.tv-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 34px 60px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, .09);
+    flex: 0 0 auto;
+}
+.tv-search-ico { color: #fff; opacity: .65; display: flex; flex: 0 0 auto; }
+.tv-search-ico .ig-svg { width: 32px; height: 32px; }
+
+.tv-search-bar input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid rgba(255, 255, 255, .28);
+    border-radius: 0;
+    padding: 8px 6px 12px;
+    color: #fff;
+    font-size: 30px;
+    font-family: inherit;
+    font-weight: 500;
+    outline: none;
+    transition: border-color .18s ease;
+}
+.tv-search-bar input::placeholder { color: rgba(255, 255, 255, .38); }
+.tv-search-bar input:focus { border-bottom-color: var(--accent); }
+/* Brauzerning o'z "tozalash" tugmasi — bizniki bilan bir xil chiqmasligi uchun. */
+.tv-search-bar input::-webkit-search-cancel-button,
+.tv-search-bar input::-webkit-search-decoration,
+.tv-search-bar input::-webkit-search-results-button,
+.tv-search-bar input::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+}
+
+.tv-search-clear,
+.tv-search-back {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: rgba(255, 255, 255, .08);
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .16s ease, transform .16s ease;
+}
+.tv-search-clear[hidden] { display: none; }
+.tv-search-back svg { width: 26px; height: 26px; }
+.tv-search-clear:hover,
+.tv-search-back:hover { background: rgba(255, 255, 255, .18); }
+.tv-search-clear:focus-visible,
+.tv-search-back:focus-visible,
+.tv-search-clear.tv-focus,
+.tv-search-back.tv-focus {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+    transform: scale(1.06);
+}
+
+.tv-search-body {
+    flex: 1;
+    overflow: auto;
+    padding: 28px 60px 80px;
+}
+.tv-search-hint {
+    color: rgba(255, 255, 255, .55);
+    text-align: center;
+    padding: 60px 12px;
+    font-size: 20px;
+}
+.tv-search-hint[hidden] { display: none; }
+.tv-search-grid { display: block; }
+
+/* Natijalar — kattaroq kartalar (10-foot UI) */
+.tv-search-grid .ig-sres-sec { margin-bottom: 34px; }
+.tv-search-grid .ig-sres-sec-h {
+    font-size: 15px;
+    color: rgba(255, 255, 255, .62);
+    margin-bottom: 14px;
+}
+.tv-search-grid .ig-search-cards {
+    display: grid;
+    gap: 24px 22px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.tv-search-grid .ig-sres-thumb { border-radius: 12px; }
+.tv-search-grid .ig-sres-title { font-size: 17px; margin-top: 11px; }
+.tv-search-grid .ig-sres-sub { font-size: 14px; }
+.tv-search-grid .ig-sprof { padding: 12px 8px; }
+.tv-search-grid .ig-sprof-info b { font-size: 16px; }
+.tv-search-grid .ig-sprof-info span { font-size: 14px; }
+.tv-search-grid .ig-sprof-av { width: 54px; height: 54px; }
+
+/* Fokus halgasi natijalarda */
+.tv-search-grid .ig-sres.tv-focus .ig-sres-thumb,
+.tv-search-grid .ig-sres:focus .ig-sres-thumb {
+    box-shadow: 0 0 0 4px var(--accent), 0 18px 46px rgba(0, 0, 0, .6);
+}
+.tv-search-grid .ig-sres.tv-focus { transform: scale(1.04); }
+.tv-search-grid .ig-sprof.tv-focus,
+.tv-search-grid .ig-sprof:focus { background: rgba(255, 255, 255, .07); }
+
+/* ---- Ekran klaviaturasi (YouTube TV): chapda tugmalar, o'ngda natijalar ---- */
+.tv-search-main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+.tv-search-left {
+    flex: 0 0 700px;
+    box-sizing: border-box;
+    padding: 30px 28px 30px 60px;
+    border-right: 1px solid rgba(255, 255, 255, .09);
+    overflow: hidden;
+}
+.tv-search-main .tv-search-body { min-width: 0; }
+.tv-search-main .tv-search-hint { padding: 40px 12px; }
+
+.tv-kb {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 10px;
+}
+.tv-key {
+    height: 62px;
+    min-width: 0;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .09);
+    color: #fff;
+    font-family: inherit;
+    font-size: 26px;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background .12s ease, color .12s ease, transform .12s ease;
+}
+.tv-key-space { grid-column: span 4; font-size: 19px; text-transform: none; font-weight: 500; }
+.tv-key-wide  { grid-column: span 2; font-size: 28px; }
+.tv-key:hover { background: rgba(255, 255, 255, .2); }
+/* Fokus: oq plitka (YouTube TV'dagi kabi) */
+.tv-mode .tv-key:focus,
+.tv-mode .tv-key:focus-visible,
+.tv-mode .tv-key.tv-focus {
+    background: #fff;
+    color: #0b0d12;
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+    transform: scale(1.1);
+    position: relative;
+    z-index: 2;
+}
+
+/* So'nggi qidiruvlar */
+.tv-recent { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.tv-recent-item {
+    padding: 14px 24px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .08);
+    color: #fff;
+    font-family: inherit;
+    font-size: 22px;
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tv-recent-item:hover { background: rgba(255, 255, 255, .16); }
+.tv-mode .tv-recent-item:focus,
+.tv-mode .tv-recent-item.tv-focus {
+    background: #fff;
+    color: #0b0d12;
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+}
+/* O'ng ustun torroq - kartalar ham mos kichrayadi */
+.tv-search-main .tv-search-grid .ig-search-cards {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+
+@media (max-width: 999px) {
+    .tv-search-main { flex-direction: column; overflow: auto; }
+    .tv-search-left { flex: 0 0 auto; padding: 14px 20px; border-right: none; border-bottom: 1px solid rgba(255, 255, 255, .09); }
+    .tv-key { height: 46px; font-size: 20px; }
+    .tv-search-bar { padding: 18px 20px 14px; gap: 12px; }
+    .tv-search-bar input { font-size: 22px; }
+    .tv-search-body { padding: 18px 20px 60px; }
+    .tv-search-grid .ig-search-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+    .tv-search-hint { font-size: 16px; padding: 40px 12px; }
+}
+
 /* --------------------------------- 8) kichik ekran (telefon / kichik TV)
    TV uslublari o'chiriladi, telefondagi oddiy ko'rinish qoladi. */
 @media (max-width: 999px) {

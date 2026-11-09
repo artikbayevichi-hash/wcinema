@@ -163,6 +163,28 @@
         tray.innerHTML = '<div class="tv-tray-scroll" id="tvTrayScroll"></div>';
         doc.body.appendChild(tray);
         tray.addEventListener('click', function (e) {
+            var action = e.target && e.target.closest ? e.target.closest('[data-tv-action]') : null;
+            if (action) {
+                e.preventDefault();
+                var kind = action.getAttribute('data-tv-action');
+                if (kind === 'comments') { openComments(player()); return; }
+                if (kind === 'like') {
+                    var like = doc.getElementById('actLike');
+                    if (like) like.click();
+                } else if (kind === 'save') {
+                    var save = doc.getElementById('actWatchlist');
+                    if (save) {
+                        save.click();
+                        setTimeout(function () {
+                            var item = doc.querySelector('#actSaveMenu [data-go="save"]');
+                            if (item) item.click();
+                            setTimeout(function () { renderTray(true); }, 120);
+                        }, 30);
+                    }
+                }
+                setTimeout(function () { renderTray(true); }, 120);
+                return;
+            }
             var c = e.target && e.target.closest ? e.target.closest('.tv-card') : null;
             if (!c) return;
             if (c.hasAttribute('data-ep')) {
@@ -236,16 +258,42 @@
         var ae = doc.activeElement;
         var focusKey = null;
         if (keepFocus !== false && ae && box.contains(ae)) {
-            focusKey = ae.getAttribute('data-ep') ? 'ep:' + ae.getAttribute('data-ep') : 'href:' + (ae.getAttribute('href') || '');
+            focusKey = ae.getAttribute('data-tv-action') ? 'act:' + ae.getAttribute('data-tv-action')
+                : ae.getAttribute('data-ep') ? 'ep:' + ae.getAttribute('data-ep')
+                : 'href:' + (ae.getAttribute('href') || '');
         }
-        var htmlOut = episodesRowHtml();
+        var like = doc.getElementById('actLike');
+    var save = doc.getElementById('actWatchlist');
+    var likeCount = doc.getElementById('actLikeN');
+    var liked = !!(like && like.classList.contains('on'));
+    var saved = !!(save && save.classList.contains('on'));
+    var commentsCount = doc.getElementById('commentsCount');
+    var commentsLabel = commentsCount && commentsCount.textContent.trim()
+        ? 'Izohlar: ' + commentsCount.textContent.trim()
+        : 'Izohlarni ko‘rish yoki yozish';
+    var _legacyActionsRow = '<section class="tv-row tv-actions-row"><h3>Ushbu video</h3>'
+        + '<div class="tv-row-track tv-action-track">'
+            + '<button type="button" class="tv-card tv-action-card' + (liked ? ' on' : '') + '" data-tv-action="like" aria-pressed="' + (liked ? 'true' : 'false') + '">'
+            + '<span class="tv-action-icon" aria-hidden="true">👍</span><span class="tv-card-ttl">Yoqdi</span>'
+            + '<span class="tv-card-meta">' + esc(likeCount ? likeCount.textContent : 'Yoqdi') + '</span></button>'
+        + '<button type="button" class="tv-card tv-action-card' + (saved ? ' on' : '') + '" data-tv-action="save" aria-pressed="' + (saved ? 'true' : 'false') + '">'
+        + '<span class="tv-action-icon" aria-hidden="true">🔖</span><span class="tv-card-ttl">Keyinroq ko‘rish</span>'
+        + '<span class="tv-card-meta">' + (saved ? 'Saqlanganlar ichida' : 'Saqlanganlarga qo‘shish') + '</span></button>'
+        + '<button type="button" class="tv-card tv-action-card" data-tv-action="comments">'
+        + '<span class="tv-action-icon" aria-hidden="true">💬</span><span class="tv-card-ttl">Izohlar</span>'
+        + '<span class="tv-card-meta">' + esc(commentsLabel) + '</span></button>'
+            + '</div></section>' + episodesRowHtml();
+        // Amallar (Yoqdi, Saqlash...) endi pleyer panelida; bu yerda qismlar va kutubxona qatorlari.
+        var htmlOut = episodesRowHtml() + libRowsHtml();
         for (var i = 0; i < ROWS.length; i++) htmlOut += itemsRowHtml(ROWS[i]);
         if (!htmlOut) htmlOut = '<div class="tv-row-note">Hozircha hech narsa topilmadi</div>';
         box.innerHTML = htmlOut;
         if (focusKey) {
-            var sel = focusKey.indexOf('ep:') === 0
-                ? '[data-ep="' + focusKey.slice(3) + '"]'
-                : '[href="' + focusKey.slice(5) + '"]';
+            var sel = focusKey.indexOf('act:') === 0
+                ? '[data-tv-action="' + focusKey.slice(4) + '"]'
+                : focusKey.indexOf('ep:') === 0
+                    ? '[data-ep="' + focusKey.slice(3) + '"]'
+                    : '[href="' + focusKey.slice(5) + '"]';
             var again = box.querySelector(sel);
             if (again) focusEl(again);
         }
@@ -253,7 +301,7 @@
 
     function trayRows() {
         var out = [];
-        var tracks = doc.querySelectorAll('#tvTrayScroll .tv-row-track');
+        var tracks = doc.querySelectorAll('#tvTrayScroll .tv-action-track, #tvTrayScroll .tv-row-track');
         for (var i = 0; i < tracks.length; i++) {
             var cards = tracks[i].querySelectorAll('.tv-card');
             if (cards.length) out.push(Array.prototype.slice.call(cards));
@@ -273,6 +321,7 @@
     function openTray(p) {
         ensureTray();
         loadRows();
+        loadSaved();
         renderTray(false);
         if (ctl() && p) ctl().hide(p);
         doc.body.classList.add('tv-tray-open');
@@ -296,6 +345,47 @@
             var bs = barButtons(p);
             if (bs.length) focusEl(bs[0]);
         }
+    }
+
+    function commentsOpen() { return doc.body.classList.contains('tv-comments-open'); }
+
+    function openComments(p) {
+        if (trayOpen()) closeTray(p, true);
+        if (p && ctl()) ctl().hide(p);
+        doc.body.classList.add('tv-comments-open');
+        setTimeout(function () {
+            var input = doc.getElementById('commentInput');
+            var first = input || doc.querySelector('.watch-comments-wrap button:not([hidden])');
+            if (first && global.TvSpatial) global.TvSpatial.focus(first);
+        }, 80);
+    }
+
+    function closeComments(p) {
+        doc.body.classList.remove('tv-comments-open');
+        if (p && ctl()) {
+            ctl().show(p);
+            setTimeout(function () {
+                var buttons = barButtons(p);
+                if (buttons.length) focusEl(buttons[0]);
+            }, 40);
+        }
+    }
+
+    function commentsKey(a, p) {
+        if (a === 'back') { closeComments(p); return true; }
+        if (a === 'playpause' || a === 'play' || a === 'pause' || a === 'ff' || a === 'rw') return playerKey(a, p);
+        if (a === 'left' || a === 'right' || a === 'up' || a === 'down') {
+            if (global.TvSpatial) global.TvSpatial.move(a);
+            return true;
+        }
+        if (a === 'ok') {
+            var active = doc.activeElement;
+            if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return true;
+            if (active && active.click) active.click();
+            return true;
+        }
+        if (a === 'next' || a === 'prev') return true;
+        return false;
     }
 
     function trayKey(a, p) {
@@ -336,6 +426,213 @@
         }
         if (target) { focusEl(target); reveal(target); }
         return true;
+    }
+
+    // ---------------------------------------------------------------- Yordamchilar
+    function cont() { return (global.WATCH && global.WATCH.content) ? global.WATCH.content : null; }
+
+    function fmtN(n) {
+        n = Number(n) || 0;
+        if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.0', '') + ' mln';
+        if (n >= 1e3) return (n / 1e3).toFixed(1).replace('.0', '') + ' ming';
+        return String(n);
+    }
+
+    var tvToastTimer = null;
+    function tvToast(msg) {
+        var t = doc.getElementById('tvToast');
+        if (!t) {
+            t = doc.createElement('div');
+            t.id = 'tvToast';
+            t.className = 'tv-toast';
+            t.setAttribute('role', 'status');
+            doc.body.appendChild(t);
+        }
+        t.textContent = msg;
+        t.classList.add('on');
+        clearTimeout(tvToastTimer);
+        tvToastTimer = setTimeout(function () { t.classList.remove('on'); }, 2600);
+    }
+
+    // ---------------------------------------------------------------- PLEYER PANELIDAGI AMALLAR
+    // YouTube TV tartibi: sarlavha / vaqt chizig'i / tugmalar qatori
+    //   [play] [-10] [+10]   [Yoqdi] [Yoqmadi] [Izohlar] [Saqlash] [Keyinroq]      [tezlik] [sifat] [ovoz]
+    var BAR_ICONS = {
+        like: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>',
+        dislike: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>',
+        comments: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>',
+        save: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>',
+        later: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>'
+    };
+    var BAR_ACTS = [
+        { k: 'like',     label: 'Yoqdi' },
+        { k: 'dislike',  label: 'Yoqmadi' },
+        { k: 'comments', label: 'Izohlar' },
+        { k: 'save',     label: 'Saqlanganlar' },
+        { k: 'later',    label: 'Keyinroq ko\u2018rish' }
+    ];
+
+    function hasLater() {
+        var c = cont();
+        return !!(c && global.WCLib && global.WCLib.has('later', c.id));
+    }
+
+    function ensureBarActions() {
+        if (!isTv()) return;
+        var p = player();
+        if (!p || !p.root) return;
+        var bar = p.root.querySelector('.uzp-bar');
+        var rowL = p.root.querySelector('.uzp-row-l');
+        if (!bar || !rowL) return;
+
+        if (!bar.querySelector('.tv-bar-title')) {
+            var t = doc.createElement('div');
+            t.className = 'tv-bar-title';
+            t.innerHTML = '<span class="tv-bar-ttl" id="tvBarTtl"></span><span class="tv-bar-sub" id="tvBarSub"></span>';
+            bar.insertBefore(t, bar.firstChild);
+        }
+
+        if (!bar.querySelector('[data-tv-bar]')) {
+            var anchor = rowL.querySelector('[data-act="fwd"]');
+            var ref = anchor ? anchor.nextSibling : null;
+            BAR_ACTS.forEach(function (a) {
+                var b = doc.createElement('button');
+                b.type = 'button';
+                b.className = 'uzp-btn tv-bar-act';
+                b.setAttribute('data-tv-bar', a.k);
+                b.setAttribute('aria-label', a.label);
+                b.innerHTML = BAR_ICONS[a.k] + '<span class="tv-bar-n"></span>';
+                b.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    barAct(a.k);
+                });
+                rowL.insertBefore(b, ref);
+            });
+        }
+        refreshBarActs();
+    }
+
+    function refreshBarActs() {
+        var p = player();
+        var c = cont();
+        if (!p || !p.root || !c) return;
+
+        function set(k, on, txt) {
+            var b = p.root.querySelector('[data-tv-bar="' + k + '"]');
+            if (!b) return;
+            b.classList.toggle('on', !!on);
+            if (k !== 'comments') b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            var n = b.querySelector('.tv-bar-n');
+            if (n && n.textContent !== (txt || '')) n.textContent = txt || '';
+            b.classList.toggle('has-n', !!txt);
+        }
+
+        var lk = Number(c.likes) || 0;
+        set('like', c.has_liked, lk > 0 ? fmtN(lk) : '');
+        set('dislike', c.has_disliked, '');
+        var cc = doc.getElementById('commentsCount');
+        var cn = cc ? Number(String(cc.textContent).replace(/[^\d]/g, '')) : 0;
+        set('comments', false, cn > 0 ? fmtN(cn) : '');
+        set('save', !!c.in_watchlist, '');
+        set('later', hasLater(), '');
+
+        var ttl = doc.getElementById('tvBarTtl');
+        var sub = doc.getElementById('tvBarSub');
+        if (ttl && ttl.textContent !== (c.title || '')) ttl.textContent = c.title || '';
+        if (sub) {
+            var ep = doc.querySelector('#watchSideList .watch-ep.on .watch-ep-num');
+            var bits = [];
+            if (ep && ep.textContent.trim()) bits.push(ep.textContent.trim() + '-qism');
+            if (c.year) bits.push(c.year);
+            var s = bits.join(' \u00b7 ');
+            if (sub.textContent !== s) sub.textContent = s;
+        }
+    }
+
+    function barAct(k) {
+        var p = player();
+        var T = global.Watch && global.Watch.tv;
+        var c = cont();
+        if (k === 'like') {
+            var l = doc.getElementById('actLike');
+            if (l) l.click();
+            setTimeout(function () { if (c) tvToast(c.has_liked ? 'Yoqdi \uD83D\uDC4D' : 'Baho olib tashlandi'); }, 500);
+        } else if (k === 'dislike') {
+            var d = doc.getElementById('actDislike');
+            if (d) d.click();
+            setTimeout(function () { if (c) tvToast(c.has_disliked ? 'Yoqmadi deb belgilandi' : 'Baho olib tashlandi'); }, 500);
+        } else if (k === 'comments') {
+            openComments(p);
+            return;
+        } else if (k === 'save') {
+            if (!T) return;
+            T.toggleSaved().then(function (on) {
+                tvToast(on ? 'Saqlanganlarga qo\u2018shildi' : 'Saqlanganlardan olib tashlandi');
+                loadSaved();
+            }).catch(function () { tvToast('Saqlab bo\u2018lmadi'); });
+        } else if (k === 'later') {
+            if (!T) return;
+            var on = T.toggleLater();
+            tvToast(on ? 'Keyinroq ko\u2018rishga qo\u2018shildi' : 'Keyinroq ko\u2018rishdan olib tashlandi');
+        }
+        if (p && ctl()) ctl().show(p);
+        setTimeout(refreshBarActs, 350);
+        setTimeout(refreshBarActs, 1200);
+    }
+
+    // ---------------------------------------------------------------- KUTUBXONA QATORLARI (tray)
+    var savedServer = null;          // api/watchlist.php dan olingan ro'yxat
+
+    function loadSaved() {
+        var me = '';
+        try { me = global.localStorage.getItem('wc_tg_me_v1') || ''; } catch (e) {}
+        var url = 'api/watchlist.php' + (me ? '?tg_me=' + encodeURIComponent(me) : '');
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (j) { savedServer = j ? apiItems(j) : null; })
+            .catch(function () { savedServer = null; })
+            .then(function () { if (tray && trayOpen()) renderTray(true); });
+    }
+
+    function libItems(kind) {
+        var out = [], seen = {};
+        function add(c) {
+            if (!c || c.id == null) return;
+            var k = String(c.id);
+            if (seen[k]) return;
+            seen[k] = 1;
+            out.push(c);
+        }
+        if (kind === 'saved' && savedServer) savedServer.forEach(add);
+        if (global.WCLib) { try { global.WCLib.list(kind).forEach(add); } catch (e) {} }
+        return out;
+    }
+
+    function libRowHtml(kind, title) {
+        var items = libItems(kind);
+        var head = '<section class="tv-row" data-row="lib-' + kind + '"><h3>' + esc(title) + '</h3>';
+        if (!items.length) return head + '<div class="tv-row-note">Hozircha bo\u2018sh</div></section>';
+        var cards = '';
+        for (var i = 0; i < items.length && i < 30; i++) {
+            var c = items[i];
+            var meta = [];
+            if (c.year) meta.push(c.year);
+            if (Number(c.rating) > 0) meta.push('\u2605 ' + Number(c.rating).toFixed(1));
+            else if (c.category) meta.push(c.category);
+            cards += '<a class="tv-card tv-item" href="watch.php?c=' + esc(c.id) + '">'
+                + cardThumb(c.poster, c.category_slug || '', 0)
+                + '<span class="tv-card-ttl">' + esc(c.title) + '</span>'
+                + '<span class="tv-card-meta">' + esc(meta.join(' \u00b7 ')) + '</span>'
+                + '</a>';
+        }
+        return head + '<div class="tv-row-track">' + cards + '</div></section>';
+    }
+
+    function libRowsHtml() {
+        return libRowHtml('liked', 'Yoqqanlar')
+             + libRowHtml('saved', 'Saqlanganlar')
+             + libRowHtml('later', 'Keyinroq ko\u2018rish');
     }
 
     // Keyingi / oldingi qism
@@ -417,6 +714,7 @@
         var vis = C.isShown(p);
         var ae = doc.activeElement;
         var inBar = !!(ae && root.contains(ae) && ae.closest && ae.closest('.uzp-bar'));
+        var onSeek = !!(ae && ae.classList && ae.classList.contains('uzp-seek'));
 
         switch (a) {
             case 'playpause': C.toggle(p); C.show(p); return true;
@@ -433,7 +731,7 @@
 
             case 'left':
             case 'right':
-                if (vis && inBar) {
+                if (vis && inBar && !onSeek) {
                     var btns = barButtons(p);
                     var bi = btns.indexOf(ae.closest('.uzp-btn') || ae);
                     if (bi < 0) focusEl(btns[0]);
@@ -451,10 +749,20 @@
                     var bu = barButtons(p); if (bu.length) focusEl(bu[0]);
                     return true;
                 }
+                if (inBar && !onSeek) {        // tugmalar qatoridan vaqt chizig'iga (YouTube TV kabi)
+                    var sk = root.querySelector('.uzp-seek');
+                    if (sk) { focusEl(sk); C.show(p); return true; }
+                }
                 C.hide(p); blurBar(p);
                 return true;
 
             case 'down':
+                if (onSeek) {                  // vaqt chizig'idan tugmalar qatoriga
+                    var bb = barButtons(p);
+                    if (bb.length) focusEl(bb[0]);
+                    C.show(p);
+                    return true;
+                }
                 // 1-bosish: boshqaruv paneli; 2-bosish (5 s ichida yoki panel ko'rinib turganda): qatorlar
                 if (vis || (Date.now() - lastDownAt) < DOUBLE_DOWN_MS) {
                     lastDownAt = 0;
@@ -466,7 +774,7 @@
                 return true;
 
             case 'ok':
-                if (vis && inBar) { try { ae.click(); } catch (e) {} C.show(p); return true; }
+                if (vis && inBar && !onSeek) { try { ae.click(); } catch (e) {} C.show(p); return true; }
                 C.toggle(p); C.show(p);
                 return true;
         }
@@ -486,6 +794,11 @@
         if (!p || !ctl()) return;                    // player yo'q — tv-mode.js o'zi boshqaradi
 
         if (typing(e.target)) {                      // izoh yozilmoqda
+            if (commentsOpen() && (a === 'up' || a === 'down') && global.TvSpatial) {
+                global.TvSpatial.move(a);
+                e.preventDefault(); e.stopImmediatePropagation();
+                return;
+            }
             if (a === 'back' && e.key !== 'Backspace') {
                 try { e.target.blur(); } catch (err) {}
                 e.preventDefault(); e.stopImmediatePropagation();
@@ -494,7 +807,8 @@
         }
 
         var done;
-        if (trayOpen()) done = trayKey(a, p);
+        if (commentsOpen()) done = commentsKey(a, p);
+        else if (trayOpen()) done = trayKey(a, p);
         else if (p.menuOpen) done = menuKey(a, p);
         else done = playerKey(a, p);
 
@@ -522,6 +836,14 @@
     }
 
     function init() {
+        doc.addEventListener('wc:watchVote', function () { if (trayOpen()) renderTray(true); });
+        doc.addEventListener('wc:watchSave', function () { if (trayOpen()) renderTray(true); });
+        if (isTv()) {
+            // Pleyer panelidagi amal tugmalari (Yoqdi / Izohlar / Saqlash...) YouTube TV kabi.
+            doc.addEventListener('wc:watchState', function () { refreshBarActs(); if (trayOpen()) renderTray(true); });
+            setInterval(ensureBarActions, 1000);
+            setTimeout(ensureBarActions, 300);
+        }
         global.addEventListener('keydown', onKey, true);
         // Media hodisalari "ko'tarilmaydi", shuning uchun ushlash (capture) bosqichida eshitamiz.
         doc.addEventListener('loadedmetadata', function (e) {

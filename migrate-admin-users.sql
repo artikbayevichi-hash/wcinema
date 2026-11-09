@@ -9,7 +9,9 @@
 ALTER TABLE users
     ADD COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0,
     ADD COLUMN ban_reason VARCHAR(255) NULL,
-    ADD COLUMN banned_at DATETIME NULL;
+    ADD COLUMN banned_at DATETIME NULL,
+    ADD COLUMN ban_until DATETIME NULL,
+    ADD COLUMN premium_until DATETIME NULL;
 
 CREATE INDEX idx_users_banned ON users (is_banned);
 CREATE INDEX idx_users_premium ON users (is_premium);

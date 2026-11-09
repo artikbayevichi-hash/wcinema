@@ -21,6 +21,8 @@
 //   Kutubxona: composer require danog/madelineproto  (vendor/ da).
 // ============================================================================
 
+require_once __DIR__ . '/FastStart.php';
+
 class TgPull {
 
     private $sessionDir;
@@ -239,6 +241,106 @@ class TgPull {
     }
 
     /**
+     * Bir nechta (kanal, post) juftligini Telegram'dan yechadi.
+     *
+     * Nima uchun: saytga kirganda barcha videolarning metama'lumotini
+     * oldindan olish kerak. Bitta HTTP so'rovi + har kanal uchun bitta
+     * `channels.getMessages` RPC — N ta alohida so'rovga qaraganda tez.
+     *
+     * @param mixed  $api   MadelineProto API obyekti
+     * @param array  $items [['ch' => 'kanal', 'post' => 123], ...]
+     * @return array<string,array> "ch/post" => ['doc' => array] | ['err' => string]
+     */
+    public static function fetchDocInfos($api, array $items) {
+        $out     = [];
+        $byCh    = [];
+        foreach ($items as $it) {
+            $ch   = (string) ($it['ch'] ?? '');
+            $post = (int) ($it['post'] ?? 0);
+            if ($ch === '' || $post <= 0) {
+                continue;
+            }
+            $key = $ch . '/' . $post;
+            if (!array_key_exists($key, $out)) {
+                $out[$key] = null;
+                $byCh[$ch][] = $post;
+            }
+        }
+        if (!$byCh) {
+            return $out;
+        }
+
+        foreach ($byCh as $ch => $posts) {
+            $numeric = $ch;
+            try {
+                $info    = $api->getPwrChat($ch, true);
+                $numeric = $info['chat_id'] ?? $info['id'] ?? $ch;
+            } catch (\Throwable $e) {
+                // username bilan urinamiz (ochiq kanal)
+            }
+
+            $msgs = null;
+            try {
+                $msgs = $api->channels->getMessages(channel: $numeric, id: $posts);
+            } catch (\Throwable $e) {
+                try {
+                    $msgs = $api->channels->getMessages(channel: $ch, id: $posts);
+                } catch (\Throwable $e2) {
+                    $msgs = null;
+                }
+            }
+
+            $list   = is_array($msgs) ? ($msgs['messages'] ?? null) : null;
+            $byPost = [];
+            if (is_array($list)) {
+                foreach ($list as $m) {
+                    if (is_array($m) && (int) ($m['id'] ?? 0) > 0) {
+                        $byPost[(int) $m['id']] = $m;
+                    }
+                }
+            }
+
+            foreach ($posts as $post) {
+                $key = $ch . '/' . $post;
+                $msg = $byPost[$post] ?? null;
+                if (!$msg) {
+                    $out[$key] = ['err' => 'Post topilmadi'];
+                    continue;
+                }
+                $res = self::docFromMessage($msg);
+                if (!$res) {
+                    $out[$key] = ['err' => 'Postda video hujjati yo\'q'];
+                    continue;
+                }
+                $out[$key] = ['doc' => $res];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Xabardan video `document` qismini ajratib beradi (yoki null).
+     */
+    private static function docFromMessage($msg) {
+        if (!is_array($msg)) {
+            return null;
+        }
+        $kind = (string) ($msg['_'] ?? '');
+        if ($kind === 'messageEmpty' || $kind === 'messageService') {
+            return null;
+        }
+        $media = $msg['media'] ?? null;
+        if (!is_array($media)) {
+            return null;
+        }
+        $doc = $media['document'] ?? null;
+        if (!is_array($doc) || empty($doc['id'])) {
+            return null;
+        }
+        return $doc;
+    }
+
+    /**
      * Bitta t.me havoladagi videoni Telegram'dan uploads/videos/ga tushiradi.
      *
      * @param string   $url     t.me/kanal/postid
@@ -404,11 +506,17 @@ class TgPull {
             return ['ok' => false, 'error' => 'Yuklangan fayl juda kichik yoki to\'liq emas — qayta urinib ko\'ring.'];
         }
 
+        // Import qilingan mahalliy MP4 birinchi stream so'rovidanoq
+        // progressiv o'ynashi uchun uni katalogga qaytarishdan oldin tayyorlaymiz.
+        $faststart = FastStart::optimizeInPlace($target);
+
         return [
             'ok' => true, 'already' => false, 'path' => 'uploads/videos/' . $name,
             'size' => (int) filesize($target), 'mime' => $mime, 'duration' => $duration,
             'file_name' => $fileName ?: $name,
-            'message' => 'Video yuklab olindi: ' . $this->fmtSize((int) filesize($target)),
+            'faststart' => $faststart,
+            'message' => 'Video yuklab olindi: ' . $this->fmtSize((int) filesize($target))
+                . ($faststart ? ' (MP4 faststart tayyor)' : ''),
         ];
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $this->friendly($e, 'Kutilmagan xato')];

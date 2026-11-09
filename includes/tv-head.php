@@ -46,5 +46,19 @@
             }
         }
     } catch (e) {}
+
+    // ---- KUZ REJIMI (yomg'ir + chaqmoq) -----------------------------------
+    // Foydalanuvchi "Kuz rejimi"ni o'chirgan bo'lsa, sinf sahifa chizilishidan
+    // OLDIN qo'yiladi (FOUC bo'lmasligi uchun). `body.ig-shell.autumn-off`
+    // uslublar yomg'ir/chaqmoq qatlamlarini o'chiradi.
+    try {
+        if (localStorage.getItem('wc_autumn_off') === '1') {
+            d.addEventListener('DOMContentLoaded', function () {
+                d.body.classList.add('autumn-off');
+            });
+            // `<body>` allaqachon tayyor bo'lsa (tez sahifalar) — darhol.
+            if (d.body) d.body.classList.add('autumn-off');
+        }
+    } catch (e) {}
 })();
 </script>

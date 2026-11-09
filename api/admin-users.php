@@ -32,8 +32,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
                 'username'    => (string) ($r['username'] ?? ''),
                 'avatar'      => (string) ($r['avatar'] ?? ''),
                 'premium'     => (int) $r['is_premium'] === 1,
+                'premium_until'=> (string) ($r['premium_until'] ?? ''),
                 'banned'      => (int) $r['is_banned'] === 1,
                 'ban_reason'  => (string) ($r['ban_reason'] ?? ''),
+                'ban_until'   => (string) ($r['ban_until'] ?? ''),
                 'created_at'  => (string) ($r['created_at'] ?? ''),
                 'last_active' => (string) ($r['last_activity'] ?? ''),
             ];
@@ -57,16 +59,24 @@ if (!$u) {
 
 if ($action === 'premium') {
     $on = inputInt('on', 0) === 1;
-    $au->setPremium($id, $on);
-    AdminLog::add('user.premium', ['id' => $id, 'on' => $on]);
-    ok(['premium' => $on]);
+    $days = max(0, min(3650, inputInt('days', 0)));
+    if ($on && $days <= 0) {
+        fail('Premium muddati (kun) kerak', 400);
+    }
+    $au->setPremium($id, $on, $days);
+    AdminLog::add('user.premium', ['id' => $id, 'on' => $on, 'days' => $days]);
+    ok(['premium' => $on, 'days' => $days]);
 }
 
 if ($action === 'ban') {
     $reason = (string) input('reason', '', 255);
-    $au->setBanned($id, true, $reason);
-    AdminLog::add('user.ban', ['id' => $id, 'reason' => $reason]);
-    ok(['banned' => true]);
+    $days = max(0, min(3650, inputInt('days', 0)));
+    if ($days <= 0) {
+        fail('Ban muddati (kun) kerak', 400);
+    }
+    $au->setBanned($id, true, $reason, $days);
+    AdminLog::add('user.ban', ['id' => $id, 'reason' => $reason, 'days' => $days]);
+    ok(['banned' => true, 'days' => $days]);
 }
 
 if ($action === 'unban') {

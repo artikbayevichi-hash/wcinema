@@ -145,7 +145,12 @@ if ($tab !== '') {
                 'type'     => 'content',
                 'id'       => (int) $c['id'],
                 'title'    => $c['title'] ?? '',
-                'poster'   => Catalog::posterSrc($c['poster'] ?? ''),
+                'poster'   => Catalog::resolvePoster(
+                    $c['poster'] ?? '',
+                    $c['title'] ?? '',
+                    $c['category_slug'] ?? '',
+                    $c['category_name'] ?? ''
+                ),
                 'category' => $c['category_name'] ?? '',
                 'added_at' => $c['added_at'] ?? '',
             ];

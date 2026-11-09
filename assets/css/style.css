@@ -32,9 +32,79 @@ html, body {
 
 body { padding-bottom: calc(48px + var(--safe-bot)); }
 
+/* Kuzgi atmosfera: tarmoqdan video yuklamaydigan yengil CSS qatlam.
+ *
+ * DIQQAT (muhim): bu qatlamlar KONTENT OSTIDA qolishi uchun manfiy
+ * z-index ishlatiladi. Eski yechim `body.ig-shell > * { position: relative;
+ * z-index: 1 }` edi — lekin u selector'ining SPECIFIKATIYASI (0,1,1)
+ * `.ig-side` / `.ig-mobar` / `.ig-tabbar` / `.modal` kabi
+ * `position: fixed` qoidalaridan (0,1,0) KATTAROQ edi. Natijada barcha
+ * qatlam elementlari `position: relative`ga aylanib, normal oqimga
+ * tushirdi va saytni "ostun ustun" qilib qoldirdi.
+ *
+ * Endi: body's o'z foni shaffof, fon qatlamlari z-index:-1 (kontent ostida),
+ * qatlam elementlari o'z `position: fixed` qoidasini saqlaydi.
+ */
+body.ig-shell { background: transparent; }
+body.ig-shell::before,
+body.ig-shell::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    z-index: -1; opacity: .34; transition: opacity .25s ease;
+}
+body.ig-shell::before {
+    background-image:
+        /* 1) Kuzgi osmon yorug'ligi — yuqorida binafsha, chapda amber */
+        radial-gradient(ellipse at 76% -6%, rgba(150, 96, 220, .34), transparent 44%),
+        radial-gradient(ellipse at 10% 2%, rgba(201, 132, 56, .17), transparent 40%),
+        /* 2) Yomg'ir chiziqlari (ikki qatlam, turli tezlikda) */
+        repeating-linear-gradient(112deg, transparent 0 16px, rgba(171, 151, 214, .16) 17px, transparent 18px 34px),
+        repeating-linear-gradient(105deg, transparent 0 29px, rgba(255, 255, 255, .10) 30px, transparent 31px 58px);
+    background-size: auto, auto, 170px 230px, 250px 320px;
+    animation: wcRain 1.25s linear infinite;
+    mix-blend-mode: screen;
+}
+/* Chaqmoq: yuqoridan tushadigan yorqin chiziq + butun osmonni yoritish.
+   Uch marta qisqa chaqish (tabiiy chaqmoq effekti). */
+body.ig-shell::after {
+    background:
+        radial-gradient(ellipse at 74% 0%, rgba(206, 172, 255, .55), transparent 0 22%),
+        linear-gradient(121deg, transparent 0 58%, rgba(250, 244, 255, .95) 59%,
+                        rgba(198, 170, 255, .50) 60.4%, transparent 61.4%);
+    opacity: 0; animation: wcLightning 13s steps(1, end) infinite;
+}
+
+body.ig-shell.autumn-off::before,
+body.ig-shell.autumn-off::after { opacity: 0 !important; animation-play-state: paused; }
+@keyframes wcRain { to { background-position: -34px 230px, 42px 320px, 0 0, 0 0; } }
+@keyframes wcLightning {
+    0%, 84%, 100% { opacity: 0; }
+    84.6% { opacity: .20; }
+    85%   { opacity: 0; }
+    85.7% { opacity: .72; }
+    86.4% { opacity: .05; }
+    87%   { opacity: .50; }
+    87.8% { opacity: 0; }
+}
+@media (max-width: 700px) {
+    body.ig-shell::before { opacity: .16; animation-duration: 2.2s; }
+    body.ig-shell::after { animation-duration: 16s; }
+}
+
 button, input { font-family: inherit; }
 button { cursor: pointer; border: none; background: none; color: inherit; }
 a { color: inherit; text-decoration: none; }
+
+.sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-2); }
@@ -143,6 +213,21 @@ main { padding: 4px 0 20px; }
 }
 @media (min-width: 1200px) {
     .grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); column-gap: 20px; }
+}
+@media (max-width: 560px) {
+    /* Bosh feed va katalog YouTube mobil oqimi kabi bir ustunli bo‘ladi:
+       thumbnail kengroq ko‘rinadi, sarlavha va metadata o‘qilishi osonlashadi. */
+    #listGrid {
+        grid-template-columns: minmax(0, 1fr);
+        column-gap: 0;
+        row-gap: 22px;
+        padding: 0 12px;
+    }
+    #listGrid .yt-body { gap: 10px; }
+    #listGrid .yt-av { width: 36px; height: 36px; }
+    #listGrid .yt-title { font-size: 14px; line-height: 1.35; }
+    #listGrid .yt-meta,
+    #listGrid .yt-sub { font-size: 12px; }
 }
 
 .card {
@@ -685,3 +770,19 @@ main { padding: 4px 0 20px; }
 }
 .foot a { color: var(--muted); }
 .foot a:hover { color: var(--accent); }
+
+/* Global accessibility foundation: keyboard users always see the active control. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+/* Respect users who prefer less motion across every page component. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+    }
+}

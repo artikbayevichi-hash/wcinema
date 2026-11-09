@@ -90,7 +90,7 @@
         var arg = parts[1] || '';
 
         document.body.classList.remove('nav-open');
-        $$('.nav-item').forEach(function (b) {
+        $$('.nav-item, .adm-mobile-nav button').forEach(function (b) {
             b.classList.toggle('on', b.getAttribute('data-view') === view ||
                 (view === 'edit' && b.getAttribute('data-view') === 'content'));
         });
@@ -150,10 +150,7 @@
                 + '<div class="field"><label>Kategoriya *</label><select name="category_id" id="qaCat" required></select></div>'
                 + '</div>'
                 + '<div class="field"><label>Telegram havola *</label><input name="first_episode_url" required placeholder="https://t.me/kanal/123"></div>'
-                + '<div class="row2">'
                 + '<div class="field"><label>Turi</label><select name="is_series"><option value="0">Kino / multfilm</option><option value="1">Serial / anime</option></select></div>'
-                + '<div class="field"><label>Davomiyligi (daqiqa)</label><input name="first_episode_duration" type="number" min="0"></div>'
-                + '</div>'
                 + '<button class="btn" type="submit">Qo‘shish</button>'
                 + '</form></div>'
                 + '<div class="panel"><h2>Statistika — ' + cats + ' kun</h2>'
@@ -397,7 +394,6 @@
                 + '<option value="1"' + (Number(it.is_series) === 1 ? ' selected' : '') + '>Serial / anime</option>'
                 + '</select></div>'
                 + '<div class="field"><label>Yil</label><input name="release_year" type="number" min="1895" max="2100" value="' + (it.release_year || '') + '"></div>'
-                + '<div class="field"><label>Baho (0–10)</label><input name="rating" type="number" step="0.1" min="0" max="10" value="' + (it.rating || '') + '"></div>'
                 + '</div>'
                 + '<div class="row2">'
                 + '<div class="field"><label>Holat</label><select name="status">'
@@ -405,11 +401,10 @@
                     return '<option value="' + s + '"' + (it.status === s ? ' selected' : '') + '>' + s + '</option>';
                 }).join('')
                 + '</select></div>'
-                + '<div class="field"><label>Poster / t.me havola</label><input name="poster" maxlength="500" value="' + esc(it.poster) + '" placeholder="https://… yoki t.me/kanal/1"></div>'
+                + '<div class="field"><label>Poster</label><input name="poster" maxlength="500" value="' + esc(it.poster) + '" placeholder="https://…"></div>'
                 + '</div>'
                 + (isNew
-                    ? '<div class="row2"><div class="field"><label>Telegram havola (1-qism)</label><input name="first_episode_url" placeholder="https://t.me/kanal/123"></div>'
-                      + '<div class="field"><label>Davomiyligi (daqiqa)</label><input name="first_episode_duration" type="number" min="0"></div></div>'
+                    ? '<div class="field"><label>Telegram video havolasi (1-qism)</label><input name="first_episode_url" placeholder="https://t.me/kanal/123"></div>'
                     : '')
                 + '<div class="field"><label>Tavsif</label><textarea name="description" maxlength="5000">' + esc(it.description) + '</textarea></div>'
                 + '<button class="btn" type="submit">Saqlash</button> '
@@ -614,8 +609,8 @@
                         + '<td><b>' + esc(u.name || 'Foydalanuvchi') + '</b>'
                         + (u.username ? '<div class="muted">@' + esc(u.username) + '</div>' : '') + '</td>'
                         + '<td class="muted">' + esc(u.tg || '—') + '</td>'
-                        + '<td>' + (u.premium ? '<span class="badge prem">PREMIUM</span> ' : '')
-                        + (u.banned ? '<span class="badge ban" title="' + esc(u.ban_reason) + '">BAN</span>' : '')
+                        + '<td>' + (u.premium ? '<span class="badge prem">PREMIUM' + (u.premium_until ? ' · ' + esc(u.premium_until.slice(0, 10)) : '') + '</span> ' : '')
+                        + (u.banned ? '<span class="badge ban" title="' + esc(u.ban_reason) + '">BAN' + (u.ban_until ? ' · ' + esc(u.ban_until.slice(0, 10)) : '') + '</span>' : '')
                         + (!u.premium && !u.banned ? '<span class="badge dim">oddiy</span>' : '') + '</td>'
                         + '<td class="muted">' + fmtDate(u.last_active) + '</td>'
                         + '<td class="actions">'
@@ -642,14 +637,22 @@
                 });
                 $$('[data-prem]').forEach(function (b) {
                     b.onclick = function () {
-                        act({ action: 'premium', id: b.getAttribute('data-prem'), on: b.getAttribute('data-on') });
+                        var on = Number(b.getAttribute('data-on')) === 1;
+                        var days = 0;
+                        if (on) {
+                            days = parseInt(prompt('Premium necha kun berilsin?', '30') || '0', 10);
+                            if (!days || days < 1) { toast('Premium muddati 1 kundan kam bo‘lmasin', 'err'); return; }
+                        }
+                        act({ action: 'premium', id: b.getAttribute('data-prem'), on: on ? 1 : 0, days: days });
                     };
                 });
                 $$('[data-ban]').forEach(function (b) {
                     b.onclick = function () {
                         var reason = prompt('Ban sababi (ixtiyoriy):', '');
                         if (reason === null) return;
-                        act({ action: 'ban', id: b.getAttribute('data-ban'), reason: reason });
+                        var days = parseInt(prompt('Ban necha kun davom etsin?', '7') || '0', 10);
+                        if (!days || days < 1) { toast('Ban muddati 1 kundan kam bo‘lmasin', 'err'); return; }
+                        act({ action: 'ban', id: b.getAttribute('data-ban'), reason: reason, days: days });
                     };
                 });
                 $$('[data-unban]').forEach(function (b) {
@@ -825,7 +828,7 @@
         $('#menuBtn').onclick = function () {
             document.body.classList.toggle('nav-open');
         };
-        $$('.nav-item').forEach(function (b) {
+        $$('.nav-item, .adm-mobile-nav button').forEach(function (b) {
             b.onclick = function () {
                 location.hash = '#/' + b.getAttribute('data-view');
             };

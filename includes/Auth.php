@@ -134,9 +134,12 @@ class Auth {
             return ['success' => false, 'message' => 'Login Widget imzosi mos kelmadi'];
         }
 
-        // Eskirgan sessiyani rad etish
+        // auth_date majburiy: imzolangan, ammo timestamp'siz payload replay
+        // qilinmasligi kerak. Kelajakdagi timestamp uchun kichik tolerance bor.
         $authDate = (int) ($params['auth_date'] ?? 0);
-        if ($authDate > 0 && (time() - $authDate) > TELEGRAM_AUTH_MAX_AGE) {
+        $now = time();
+        if ($authDate <= 0 || $authDate > ($now + 300)
+            || ($now - $authDate) > TELEGRAM_AUTH_MAX_AGE) {
             return ['success' => false, 'message' => 'Telegram sessiyasi eskirgan (ilovani qayta oching)'];
         }
 
@@ -476,6 +479,22 @@ class Auth {
         );
 
         $u = $this->getUserById($_SESSION['user_id']);
+        // Vaqtinchalik premium/ban muddati tugashi bilan status darhol bekor qilinadi.
+        // Eski bazalarda muddat ustunlari hali bo‘lmasa, mavjud ban logikasi ishlashda davom etadi.
+        if ($u) {
+            try {
+                if (!empty($u['premium_until']) && strtotime((string) $u['premium_until']) <= time()) {
+                    $this->db->update('users', ['is_premium' => 0, 'premium_until' => null], 'id = ?', [(int) $u['id']]);
+                    $u['is_premium'] = 0;
+                }
+                if (!empty($u['ban_until']) && strtotime((string) $u['ban_until']) <= time()) {
+                    $this->db->update('users', ['is_banned' => 0, 'ban_reason' => null, 'banned_at' => null, 'ban_until' => null], 'id = ?', [(int) $u['id']]);
+                    $u['is_banned'] = 0;
+                }
+            } catch (Throwable $e) {
+                // Muddat ustunlari eski instansiyada bo‘lsa, loginni buzmaymiz.
+            }
+        }
         // Ban qilingan foydalanuvchi sessiyasi darhol yopiladi.
         if ($u && (int) ($u['is_banned'] ?? 0) === 1) {
             $this->logout();
@@ -718,7 +737,7 @@ class Auth {
     }
 
     /**
-     * Auth middleware. $json = true bo'lsa JSON xato, aks holda login.php'ga
+     * Auth middleware. $json = true bo'lsa JSON xato, aks holda 1stlogin.php'ga
      * yo'naltiradi. Muvaffaqiyatsiz bo'lsa har doim to'xtaydi.
      */
     public function requireAuth($json = false) {
@@ -730,7 +749,7 @@ class Auth {
             self::json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
 
-        header('Location: login.php');
+        header('Location: 1stlogin.php');
         exit;
     }
 

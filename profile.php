@@ -25,7 +25,7 @@ $meId       = $user ? (int) $user['id'] : null;
     <link rel="icon" type="image/png" href="assets/img/favicon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/favicon.png') ?: 1; ?>">
     <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png?v=<?php echo @filemtime(__DIR__ . '/assets/img/apple-touch-icon.png') ?: 1; ?>">
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?></title>
     <?php require __DIR__ . '/includes/perf-head.php'; ?>
     <meta name="description" content="Profil &mdash; <?php echo htmlspecialchars(SITE_NAME); ?>">
@@ -123,7 +123,7 @@ $meId       = $user ? (int) $user['id'] : null;
 </main>
 
 <!-- Tahrirlash modali -->
-<div class="pf-modal" id="pfModal" hidden>
+<div class="pf-modal" id="pfModal" role="dialog" aria-modal="true" aria-labelledby="pfModalTitle" hidden>
     <div class="pf-modal-box">
         <h3 id="pfModalTitle"><?php echo ig_svg('edit'); ?> Profilni tahrirlash</h3>
         <form id="pfEditForm" autocomplete="off">
@@ -169,7 +169,7 @@ $meId       = $user ? (int) $user['id'] : null;
 </div>
 
 <!-- Kuzatuvchilar / kuzatilayotganlar ro'yxati (Instagram uslubi) -->
-<div class="pf-modal" id="pfListModal" hidden>
+<div class="pf-modal" id="pfListModal" role="dialog" aria-modal="true" aria-labelledby="pfListTitle" hidden>
     <div class="pf-modal-box pf-list-box">
         <div class="pf-list-head">
             <h3 id="pfListTitle">Kuzatuvchilar</h3>

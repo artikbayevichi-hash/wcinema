@@ -53,6 +53,11 @@ $__cfHost   = $__cfWorker !== '' ? (string) (parse_url($__cfWorker, PHP_URL_HOST
 <link rel="preload" as="image" href="<?php echo htmlspecialchars($__perfPoster, ENT_QUOTES); ?>" fetchpriority="high">
 <?php endif; ?>
 <?php
+// Ilova qaysi papkada turgan bo'lsa (`/tele_uzdub/`) — barcha asset URL'lari
+// shu prefiks bilan boshlanishi kerak. DIQQAT: bu o'zgaruvchi quyida ham
+// ishlatiladi, shuning uchun eng boshida e'lon qilinadi.
+$__base  = rtrim((string) (parse_url(SITE_URL, PHP_URL_PATH) ?: ''), '/');
+
 // Admin panel → Sozlamalar dagi e'lon (agar bo'lsa). `defer` — render'ni
 // bloklamaydi, e'lon bo'lmasa skript hech narsa qilmaydi.
 $__bannerV = @filemtime(__DIR__ . '/../assets/js/site-banner.js') ?: 1;
@@ -69,13 +74,15 @@ $__bannerV = @filemtime(__DIR__ . '/../assets/js/site-banner.js') ?: 1;
 //
 // `tg-stream.js` o'sha skriptni qayta `register()` qiladi — bu xavfsiz:
 // brauzer bir xil scope uchun mavjud registratsiyani qaytaradi.
-$__base  = rtrim((string) (parse_url(SITE_URL, PHP_URL_PATH) ?: ''), '/');
 $__swUrl = $__base . '/tg-cdn-worker.js';
 $__swScp = ($__base !== '' ? $__base : '') . '/';
 
-// Bundle versiyasi — `tg-stream.js` dagi `bundleGz()` AYNAN shu qiymatni
-// ishlatadi (preload ham, haqiqiy yuklash ham bir xil URL bo'lishi shart).
-$__bundleV = @filemtime(__DIR__ . '/../assets/js/tg-client.bundle.js.gz') ?: 1;
+// Teleproto default bundle yoki eski GramJS fallback yangilanganda URL ham
+// o'zgaradi — brauzer avvalgi bundle nusxasini qayta ishlatib qolmaydi.
+$__bundleV = max(
+    (int) (@filemtime(__DIR__ . '/../assets/js/teleproto-client.bundle.js.gz') ?: 1),
+    (int) (@filemtime(__DIR__ . '/../assets/js/tg-client.bundle.js.gz') ?: 1)
+);
 ?>
 <script>window.__WCBUNDLEV = <?php echo (int) $__bundleV; ?>;</script>
 <script>
@@ -91,4 +98,25 @@ $__bundleV = @filemtime(__DIR__ . '/../assets/js/tg-client.bundle.js.gz') ?: 1;
   } catch (e) {}
 })();
 </script>
-
+<?php
+// ---------------------------------------------------------------------------
+// Video ochilish metrikasi + "issiq start" prefetch.
+//
+// `defer` — HTML parse'ni bloklamaydi. Ikkala skript ham hech narsani
+// o'zgartirmaydi: o'lchov yuboradi (tg-perf.js) va bo'sh vaqtda eng ko'p
+// ko'rilgan videolarni tayyorlaydi (tg-prefetch.js). Xato bo'lsa — jim.
+//
+// Boshqarish (konsoldan):
+//   localStorage.setItem('wc_perf','0')      -> o'lchovni o'chirish
+//   localStorage.setItem('wc_prefetch','0')  -> prefetch'ni o'chirish
+// ---------------------------------------------------------------------------
+$__perfUrl = $__base . '/api/perf.php';
+$__perfV   = @filemtime(__DIR__ . '/../assets/js/tg-perf.js') ?: 1;
+$__pfV     = @filemtime(__DIR__ . '/../assets/js/tg-prefetch.js') ?: 1;
+?>
+<script>
+window.__WCPERF = { url: <?php echo json_encode($__perfUrl); ?> };
+window.__WCPF   = {};
+</script>
+<script defer src="<?php echo htmlspecialchars($__base, ENT_QUOTES); ?>/assets/js/tg-perf.js?v=<?php echo (int) $__perfV; ?>"></script>
+<script defer src="<?php echo htmlspecialchars($__base, ENT_QUOTES); ?>/assets/js/tg-prefetch.js?v=<?php echo (int) $__pfV; ?>"></script>

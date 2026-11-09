@@ -2,9 +2,10 @@
 // ============================================================================
 // Davomiylikni AVTOMATIK to'ldirish.
 // ----------------------------------------------------------------------------
-// Serverda ffmpeg yo'q — davomiylikni brauzer <video> metadatasidan
-// aniqlaydi va shu yerga yuboradi. Faqat bo'sh (NULL/0) qiymat to'ldiriladi;
-// mavjud qiymat o'zgartirilmaydi (Catalog::saveDuration).
+// Davomiylikni brauzer <video> metadatasidan aniqlaydi va shu yerga yuboradi.
+// Video MP4 faststart alohida includes/FastStart.php orqali bajariladi.
+// Faqat bo'sh (NULL/0) qiymat to'ldiriladi; mavjud qiymat o'zgartirilmaydi
+// (Catalog::saveDuration).
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 

@@ -169,7 +169,7 @@
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
     video.controls = false;
-    video.preload = existing ? (video.getAttribute('preload') || 'auto') : (CFG.autoplay ? 'auto' : 'metadata');
+    video.preload = existing ? (video.getAttribute('preload') || 'metadata') : 'metadata';
 
     var inst = {
       root: root,
@@ -715,13 +715,24 @@
 
     var hls = new Hls({
       enableWorker: true,
+      // Avtomatik sifat ekranga mos maksimal resolutiondan oshmasin.
       capLevelToPlayerSize: true,
-      maxBufferLength: 30,
-      backBufferLength: 30,
-      // tez boshlanish: birinchi bo'lakni manifest tahlilidan oldin olishni boshlaydi,
-      // va boshlang'ich tezlik taxmini 4 Mbit/s (juda past sifatdan boshlamaydi)
+      capLevelOnFPSDrop: true,
+      // Birinchi kadrni tezroq olish uchun boshlang‘ich buffer kichikroq.
+      maxBufferLength: 18,
+      maxMaxBufferLength: 36,
+      backBufferLength: 15,
+      // Auto rejim default bo‘lib qoladi; hls.js tarmoq va qurilmaga qarab
+      // eng xavfsiz boshlang‘ich levelni tanlaydi.
+      startLevel: -1,
+      // Film hali yuklanayotgan bo'lsa (o'sib boruvchi playlist) hls.js uni "jonli"
+      // deb hisoblab OXIRIDAN boshlardi - doim BOSHIDAN boshlaymiz.
+      startPosition: 0,
+      liveDurationInfinity: false,
       startFragPrefetch: true,
-      abrEwmaDefaultEstimate: 4000000
+      abrEwmaDefaultEstimate: 1800000,
+      abrBandWidthFactor: 0.8,
+      abrBandWidthUpFactor: 0.7
     });
     inst.hls = hls;
 
@@ -1249,7 +1260,7 @@
     var v = doc.createElement('video');
     v.setAttribute('playsinline', '');
     v.setAttribute('webkit-playsinline', '');
-    v.setAttribute('preload', CFG.autoplay ? 'auto' : 'metadata');
+    v.setAttribute('preload', 'metadata');
     v.setAttribute('crossorigin', 'anonymous');
     if (media && media.poster) v.setAttribute('poster', media.poster);
     root.appendChild(v);

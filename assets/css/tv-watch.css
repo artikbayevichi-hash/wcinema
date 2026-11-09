@@ -52,35 +52,157 @@ html.tv-mode body.watch-body.tv-fill .watch-player .udp-player video {
 }
 
 /* ---- 2) Boshqaruv paneli: katta + aniq fokus --------------------------- */
+/* ---- YouTube TV tartibi: sarlavha / vaqt chizig'i / tugmalar qatori ---- */
 html.tv-mode .uzp .uzp-bar {
-    height: 96px !important;
-    width: min(1560px, calc(100% - 96px)) !important;
-    bottom: 56px !important;
-    gap: 14px !important;
-    padding: 0 30px !important;
-    border-radius: 40px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    translate: none !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 170px 72px 46px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    align-content: flex-end;
+    gap: 0 14px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: linear-gradient(to top,
+        rgba(0, 0, 0, .94) 0%,
+        rgba(0, 0, 0, .8) 40%,
+        rgba(0, 0, 0, 0) 100%) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
+
+/* 1-qator: sarlavha (+ qism raqami) */
+html.tv-mode .uzp .tv-bar-title {
+    order: 0;
+    flex: 0 0 100%;
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    min-width: 0;
+    margin: 0 0 20px 8px;
+    pointer-events: none;
+    text-shadow: 0 2px 16px rgba(0, 0, 0, .75);
+}
+html.tv-mode .uzp .tv-bar-ttl {
+    max-width: 72%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: 700 42px/1.15 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #fff;
+}
+html.tv-mode .uzp .tv-bar-sub {
+    white-space: nowrap;
+    font: 500 26px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: rgba(255, 255, 255, .74);
+}
+
+/* 2-qator: vaqt chizig'i (joriy vaqt | chiziq | umumiy vaqt) */
+html.tv-mode .uzp .uzp-time > [data-cur] { order: 1; font-size: 26px; margin: 0 4px 0 8px !important; }
+html.tv-mode .uzp .uzp-bar .uzp-seek {
+    order: 2;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    height: 40px;
+    margin: 0 10px !important;
+}
+html.tv-mode .uzp .uzp-time > [data-dur] { order: 3; font-size: 26px; margin: 0 8px 0 4px !important; }
+/* qator uzgich */
+html.tv-mode .uzp .uzp-bar::after {
+    content: "";
+    order: 4;
+    flex: 0 0 100%;
+    height: 18px;
+}
+html.tv-mode .uzp .uzp-seek-track {
+    height: 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .28);
+}
+html.tv-mode .uzp .uzp-seek-play { background: #f59e0b; }
+html.tv-mode .uzp .uzp-seek-buf { background: rgba(255, 255, 255, .4); }
+html.tv-mode .uzp .uzp-seek-thumb {
+    width: 28px;
+    height: 28px;
+    background: #f59e0b;
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, .28);
+    transform: translate(-50%, -50%) scale(1);
+}
+html.tv-mode .uzp .uzp-seek:focus { outline: none; }
+html.tv-mode .uzp .uzp-seek:focus .uzp-seek-track {
+    height: 16px;
+    box-shadow: 0 0 0 4px #fff;
+}
+html.tv-mode .uzp .uzp-seek:focus .uzp-seek-thumb {
+    width: 40px;
+    height: 40px;
+    box-shadow: 0 0 0 6px #fff;
+}
+
+/* 3-qator: tugmalar. Chapda: play / -10 / +10 / amallar. O'ngda: tezlik / sifat / ovoz */
 html.tv-mode .uzp .uzp-bar .uzp-btn {
-    width: 60px;
-    height: 60px;
+    position: relative;
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    color: #fff;
+    background: transparent;
 }
 html.tv-mode .uzp .uzp-bar .uzp-btn svg,
 html.tv-mode .uzp .uzp-bar .uzp-btn.uzp-play svg {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
 }
 html.tv-mode .uzp .uzp-bar .uzp-btn.uzp-pill,
 html.tv-mode .uzp .uzp-bar .uzp-btn.uzp-txt {
     width: auto;
-    height: 60px;
-    padding: 0 18px;
-    font-size: 24px;
+    height: 76px;
+    padding: 0 28px;
+    border-radius: 38px;
+    font-size: 26px;
+    font-weight: 600;
 }
-html.tv-mode .uzp .uzp-time > [data-cur],
-html.tv-mode .uzp .uzp-time > [data-dur] {
-    font-size: 24px;
+html.tv-mode .uzp .uzp-bar .uzp-play { order: 10; }
+html.tv-mode .uzp .uzp-bar .uzp-skip { order: 11; }
+html.tv-mode .uzp .uzp-bar [data-tv-bar="like"]     { order: 12; margin-left: 30px; }
+html.tv-mode .uzp .uzp-bar [data-tv-bar="dislike"]  { order: 13; }
+html.tv-mode .uzp .uzp-bar [data-tv-bar="comments"] { order: 14; }
+html.tv-mode .uzp .uzp-bar [data-tv-bar="save"]     { order: 15; }
+html.tv-mode .uzp .uzp-bar [data-tv-bar="later"]    { order: 16; }
+html.tv-mode .uzp .uzp-row-r > *:not(.uzp-time) { order: 30; }
+html.tv-mode .uzp .uzp-row-r > .uzp-menu-wrap:not(.uzp-select-quality) { margin-left: auto; }
+html.tv-mode .uzp .uzp-vol-range { display: none !important; }
+
+/* Amal tugmalari: ikonka + (bo'lsa) son */
+html.tv-mode .uzp .uzp-bar .tv-bar-act { gap: 12px; }
+html.tv-mode .uzp .uzp-bar .tv-bar-act.has-n {
+    width: auto;
+    padding: 0 30px 0 26px;
+    border-radius: 38px;
 }
-html.tv-mode .uzp .uzp-seek-track { height: 8px; }
+html.tv-mode .uzp .tv-bar-n { font-size: 26px; font-weight: 600; line-height: 1; }
+html.tv-mode .uzp .tv-bar-n:empty { display: none; }
+/* Faol holat (yoqilgan / saqlangan): to'ldirilgan oq doira */
+html.tv-mode .uzp .uzp-bar .tv-bar-act.on {
+    background: rgba(255, 255, 255, .24);
+    color: #fff;
+}
+
+/* "Keyingi qism" xabari yangi panel ustida turadi */
+html.tv-mode .uzp .uzp-next {
+    right: 72px;
+    bottom: 330px;
+    width: 520px;
+}
 html.tv-mode .uzp .uzp-menu { font-size: 24px; }
 html.tv-mode .uzp .uzp-menu-item { padding: 14px 24px; }
 
@@ -91,13 +213,50 @@ html.tv-mode .uzp .uzp-bar [data-act="full"] {
 }
 
 /* Fokus: oq halqa + biroz kattalashish (pultda hozir qayerdaligi ko'rinadi) */
+/* Fokus (YouTube TV): oq doira + qora ikonka, ustida yorliq */
 html.tv-mode .uzp .uzp-bar .uzp-btn:focus,
 html.tv-mode .uzp .uzp-bar .uzp-btn:focus-visible {
-    outline: 4px solid #fff !important;
-    outline-offset: 3px;
-    background: rgba(255, 255, 255, .28) !important;
-    transform: scale(1.1);
+    outline: none !important;
+    background: #fff !important;
+    color: #0b0d12 !important;
+    transform: scale(1.12);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .55);
+    z-index: 3;
 }
+html.tv-mode .uzp .uzp-bar .uzp-btn[aria-label]:focus::after {
+    content: attr(aria-label);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 22px);
+    transform: translateX(-50%);
+    padding: 10px 22px;
+    border-radius: 12px;
+    background: rgba(38, 40, 46, .96);
+    color: #fff;
+    font: 600 24px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    white-space: nowrap;
+    pointer-events: none;
+}
+/* Menyu ochiq bo'lsa yorliq xalaqit bermasin */
+html.tv-mode .uzp .uzp-bar .uzp-btn[aria-expanded="true"]:focus::after { display: none; }
+
+/* TV'dagi qisqa xabar (Saqlandi, Yoqdi...) */
+html.tv-mode .tv-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 330px;
+    transform: translate(-50%, 16px);
+    z-index: 2147483600;
+    padding: 16px 32px;
+    border-radius: 14px;
+    background: rgba(38, 40, 46, .97);
+    color: #fff;
+    font: 600 26px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+}
+html.tv-mode .tv-toast.on { opacity: 1; transform: translate(-50%, 0); }
 html.tv-mode .uzp .uzp-menu-item:focus,
 html.tv-mode .uzp .uzp-menu-item:focus-visible {
     outline: 4px solid #fff;
@@ -107,7 +266,7 @@ html.tv-mode .uzp .uzp-menu-item:focus-visible {
 
 /* Pastki yordamchi yozuv: panel ko'ringanda */
 html.tv-mode body.watch-body .watch-player .uzp.is-active::after {
-    content: "\25BC  Qismlar va tavsiyalar";
+    content: none;
     position: absolute;
     left: 50%;
     bottom: 16px;
@@ -272,4 +431,84 @@ html.tv-mode .tv-card:focus-visible {
     transform: scale(1.06);
     position: relative;
     z-index: 2;
+}
+
+/* ---- Video amallari (Yoqdi / Saqlanganlar / Izohlar) ------------------- */
+html.tv-mode .tv-action-card {
+    width: 270px;
+    min-height: 142px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    padding: 18px 22px;
+    border: 1px solid rgba(255, 255, 255, .17);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, .09);
+}
+html.tv-mode .tv-action-icon { font-size: 31px; line-height: 1; }
+html.tv-mode .tv-action-card .tv-card-ttl { margin: 0; font-size: 22px; }
+html.tv-mode .tv-action-card .tv-card-meta { margin: 0; font-size: 16px; }
+html.tv-mode .tv-action-card.on,
+html.tv-mode .tv-action-card[aria-pressed="true"] {
+    border-color: #fff;
+    background: rgba(255, 255, 255, .2);
+}
+html.tv-mode .tv-action-card:focus,
+html.tv-mode .tv-action-card:focus-visible {
+    outline: 5px solid #fff;
+    outline-offset: 4px;
+    transform: scale(1.06);
+}
+
+/* ---- Izohlar: pult uchun alohida fullscreen panel --------------------- */
+html.tv-mode body.watch-body.tv-comments-open { overflow: hidden; }
+html.tv-mode body.watch-body.tv-comments-open .watch-player { display: none !important; }
+html.tv-mode body.watch-body.tv-comments-open .watch-grid {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483200;
+    display: block;
+    overflow: auto;
+    box-sizing: border-box;
+    padding: 42px 6vw 56px;
+    background: #090b10;
+}
+html.tv-mode body.watch-body.tv-comments-open .watch-main {
+    width: min(1420px, 100%);
+    margin: 0 auto;
+}
+html.tv-mode body.watch-body.tv-comments-open .watch-head,
+html.tv-mode body.watch-body.tv-comments-open .watch-desc,
+html.tv-mode body.watch-body.tv-comments-open .watch-side { display: none !important; }
+html.tv-mode body.watch-body.tv-comments-open .watch-block {
+    display: block !important;
+    width: 100%;
+    margin: 0;
+}
+html.tv-mode body.watch-body.tv-comments-open .watch-block-h {
+    margin: 0 0 22px;
+    font-size: 31px;
+}
+html.tv-mode body.watch-body.tv-comments-open .watch-block-h svg { width: 30px; height: 30px; }
+html.tv-mode body.watch-body.tv-comments-open .watch-comments-wrap { display: block !important; }
+html.tv-mode body.watch-body.tv-comments-open .reels-comments-form {
+    min-height: 72px;
+    margin-bottom: 24px;
+}
+html.tv-mode body.watch-body.tv-comments-open .reels-comments-input { min-height: 56px; font-size: 22px; }
+html.tv-mode body.watch-body.tv-comments-open .reels-comments-send,
+html.tv-mode body.watch-body.tv-comments-open .reels-c-tool { width: 56px; height: 56px; }
+html.tv-mode body.watch-body.tv-comments-open .reels-comments-list {
+    max-height: calc(100vh - 250px);
+    overflow: auto;
+    padding: 6px 10px 24px;
+}
+html.tv-mode body.watch-body.tv-comments-open .reels-c-like-btn,
+html.tv-mode body.watch-body.tv-comments-open .reels-c-mact { min-width: 48px; min-height: 48px; }
+html.tv-mode body.watch-body.tv-comments-open :focus-visible,
+html.tv-mode body.watch-body.tv-comments-open .tv-focus {
+    outline: 4px solid #fff;
+    outline-offset: 4px;
 }

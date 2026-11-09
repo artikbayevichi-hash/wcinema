@@ -56,6 +56,11 @@
     resumeAt: 0,
     switching: false,
     viewed: false,
+    streamGeneration: 0,
+    embedFailed: false,     // embed pleyeri ochilmadi -> o'z pleyerimizga qaytdik
+    embedFailedKey: '',     // qaysi postda (channel/post) ishlamadi
+    userPickedOwn: false,   // foydalanuvchi "Bizning pleyer" ni o'zi tanladimi
+    embedRetry: false,      // "Tez pleyer" bosildi -> tekshiruv natijasini aytamiz
     durSaved: {}
   };
 
@@ -144,10 +149,19 @@
     var b = el('watchToast');
     if (!b) return;
     b.innerHTML = esc(msg);
+    // DIQQAT: `.reels-toast` da `opacity: 0`, ko'rinishi uchun `show`
+    // klassi SHART. Ilgari bu yerda `className = ...` yozilardi va u
+    // `show` ni o'chirib yuborardi — natijada sahifadagi HECH QANDAY
+    // toast ko'rinmasdi ("tugma hech narsa qilmayapti" bo'lib tuyulardi).
     b.className = 'reels-toast' + (kind ? ' ' + kind : '');
     b.hidden = false;
+    void b.offsetWidth;                 // transition uchun reflow
+    b.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { b.hidden = true; }, 2800);
+    toastTimer = setTimeout(function () {
+      b.classList.remove('show');
+      setTimeout(function () { b.hidden = true; }, 220);
+    }, 3200);
   }
 
   /* Yoqdi/Yoqmadi/Saqlash login talab qiladi. Foydalanuvchi kirmagan
@@ -213,11 +227,21 @@
     } catch (err) { /* jim: oldindan yuklash ixtiyoriy qulaylik */ }
   }
 
-  /** Joriy qismdan KEYINGISINI tayyorlaydi (oxirgi qismda hech narsa qilmaydi). */
-  function prefetchNext() {
+  /** Keyingi qismni, so'ng oldingi qismni zaxira sifatida tayyorlaydi. */
+  function prefetchAdjacent() {
     var i = epIndex(S.selectedId);
-    if (i < 0) return;
-    prefetchEpisode(S.episodes[i + 1] || null);
+    if (i < 0) return Promise.resolve(0);
+    var nearby = [S.episodes[i + 1] || null, S.episodes[i - 1] || null]
+      .filter(function (e) { return !!(e && e.tg_channel && e.tg_post); });
+    if (!nearby.length) return Promise.resolve(0);
+    if (global.TgStream && typeof global.TgStream.prefetchManyGram === 'function') {
+      return global.TgStream.prefetchManyGram(nearby.map(function (e) {
+        return { channel: e.tg_channel, post: e.tg_post };
+      }));
+    }
+    // Zaxira yo'l: minimal prefetch so'rovi (video baytlari emas).
+    nearby.forEach(prefetchEpisode);
+    return Promise.resolve(nearby.length);
   }
 
   function watchUrl(epId) {
@@ -251,14 +275,578 @@
     return JSON.stringify(obj).replace(/'/g, '&#39;').replace(/&/g, '&amp;');
   }
 
+  // ================================================ PLEYER TANLOVI (EMBED)
+  //
+  // IKKI PLEYER, ikkisi ham saqlanadi:
+  //   fast -> Telegram rasmiy embed pleyeri (`t.me/...?embed=1`). Video
+  //           baytlari Telegram CDN'idan ketadi: Telegram Web bilan bir xil
+  //           tezlik, sayt serveri baytlarni ko'rmaydi.
+  //   own  -> bizning pleyer (MTProto + Service Worker). "Davom etish",
+  //           sifat tanlash, keyingi qism tugmasi shu yerda ishlaydi.
+  //
+  // Tanlov `localStorage` da eslab qolinadi. Embed faqat OMMAVIY kanal
+  // postlarida mumkin; `t.me/c/...` (xususiy kanal) da avtomatik o'chadi.
+  var PMODE_KEY = 'wc_pmode';
+
+  function tgEmbed() {
+    var e = W.tgEmbed;
+    if (!e || !e.channel || !Number(e.post)) return null;
+    return e;
+  }
+
+  function pmode() {
+    var m = '';
+    try { m = String(localStorage.getItem(PMODE_KEY) || ''); } catch (e) {}
+    if (m === 'fast' || m === 'own') return m;
+    // Boshlang'ich tanlov: O'Z PLEYERIMIZ. Sabab: Telegram embed katta
+    // kinolarni oqizmaydi ("Media is too big"), faqat kichik videolarda
+    // ishlaydi. Shuning uchun embed faqat tekshiruvdan o'tgach va
+    // foydalanuvchi "Tez pleyer" ni tanlaganda ishlatiladi.
+    // Vaqtga sakrash kerak bo'lsa (davom etish yoki `#t=95`) embed buni
+    // bila olmaydi — bu ham 'own' foydasiga.
+    return 'own';
+  }
+
+  function setPmode(m) {
+    try { localStorage.setItem(PMODE_KEY, m); } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------
+  //  EMBED QAYERDA ISHLAYDI? (server tekshiruvi + kesh)
+  //
+  //  Telegram rasmiy embed pleyeri video baytlarini Telegram CDN'idan beradi,
+  //  LEKIN faqat KICHIK fayllarni. Katta kinoda u video o'rniga
+  //  "Media is too big — VIEW IN TELEGRAM" chiqaradi, ya'ni o'ynatmaydi.
+  //  Buni brauzerdan bilib bo'lmaydi (iframe cross-origin), shuning uchun
+  //  bir marta `api/tg-embed.php` dan so'raymiz: u t.me HTML'ini o'qib
+  //  `playable` qaytaradi (6 soat server keshi). Natijani brauzerda ham
+  //  eslab qolamiz - qayta so'ramaymiz.
+  // ---------------------------------------------------------------
+  var EMBED_BAD_KEY = 'wc_embed_bad';
+  var EMBED_OK_KEY  = 'wc_embed_ok';
+  var EMBED_BAD_TTL = 7 * 24 * 3600 * 1000;
+  var EMBED_OK_TTL  = 6 * 3600 * 1000;
+
+  function embedKey() {
+    var e = tgEmbed();
+    return e ? (e.channel + '/' + Number(e.post)) : '';
+  }
+
+  function readMap(key) {
+    try {
+      var v = JSON.parse(localStorage.getItem(key) || '{}');
+      return (v && typeof v === 'object') ? v : {};
+    } catch (e) { return {}; }
+  }
+
+  function writeMap(key, obj) {
+    try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {}
+  }
+
+  // null yoki { at: <vaqt>, reason: 'too_big'|'not_found'|... }
+  function embedBadInfo() {
+    var k = embedKey();
+    if (!k) return { at: Date.now(), reason: 'no_channel' };
+    var v = readMap(EMBED_BAD_KEY)[k];
+    if (!v) return null;
+    if (typeof v === 'number') v = { at: v, reason: '' };   // eski format
+    if (!v.at || (Date.now() - v.at) > EMBED_BAD_TTL) return null;
+    return v;
+  }
+
+  function isEmbedBad() { return !!embedBadInfo(); }
+
+  function markEmbedBad(reason) {
+    var k = embedKey();
+    if (!k) return;
+    var all = readMap(EMBED_BAD_KEY);
+    all[k] = { at: Date.now(), reason: String(reason || '') };
+    writeMap(EMBED_BAD_KEY, all);
+  }
+
+  function clearEmbedBad() {
+    var k = embedKey();
+    if (!k) return;
+    var all = readMap(EMBED_BAD_KEY);
+    if (!(k in all)) return;
+    delete all[k];
+    writeMap(EMBED_BAD_KEY, all);
+  }
+
+  // 'ok' (embed o'ynatadi) | 'bad' (o'ynatmaydi) | 'unknown' (hali tekshirilmagan)
+  function embedState() {
+    var k = embedKey();
+    if (!k) return 'bad';
+    if (isEmbedBad()) return 'bad';
+    var at = Number(readMap(EMBED_OK_KEY)[k]) || 0;
+    if (at && (Date.now() - at) < EMBED_OK_TTL) return 'ok';
+    return 'unknown';
+  }
+
+  function markEmbedOk() {
+    var k = embedKey();
+    if (!k) return;
+    var all = readMap(EMBED_OK_KEY);
+    all[k] = Date.now();
+    writeMap(EMBED_OK_KEY, all);
+    clearEmbedBad();
+  }
+
+  var embedCheckFor = '';     // qaysi post uchun so'rov yuborilgan
+  var embedCoolUntil = 0;     // server javob bermasa — 30 s qayta so'ramaymiz
+
+  // "Tez pleyer" bosilganda embed nima uchun ishlamaganini OSHKORA aytamiz.
+  // Aks holda tugma "hech narsa qilmayapti" bo'lib tuyuladi.
+  function embedBadToast(reason) {
+    if (reason === 'too_big') {
+      return 'Telegram bu katta faylni oqizmaydi \u2014 o\u2018z pleyerimizda ochiladi';
+    }
+    if (reason === 'not_found') {
+      return 'Bu post ommaviy emas \u2014 o\u2018z pleyerimizda ochiladi';
+    }
+    if (reason === 'no_video') {
+      return 'Bu postda video yo\u2018q \u2014 o\u2018z pleyerimizda davom etamiz';
+    }
+    return 'Telegram pleyeri ishlamadi \u2014 o\u2018z pleyerimizda ochiladi';
+  }
+
+  function checkEmbed() {
+    var e = tgEmbed();
+    if (!e || embedState() !== 'unknown') return;
+    var k = embedKey();
+    if (embedCheckFor === k) return;
+    // Server yaqinda javob bermadi: cheksiz qayta so'rov (va qayta-qayta
+    // toast) zanjirini to'xtatamiz.
+    if (Date.now() < embedCoolUntil) return;
+    embedCheckFor = k;
+    var url = (APP.base || '') + '/api/tg-embed.php?channel=' +
+      encodeURIComponent(e.channel) + '&post=' + Number(e.post);
+    var done = function (d) {
+      if (!d || !d.success) {
+        // Tarmoq/server xatosi: "ishlamaydi" deb BELGILAMAYMIZ (post
+        // sog'lom bo'lishi mumkin). Faqat foydalanuvchiga aytamiz.
+        embedCheckFor = '';
+        embedCoolUntil = Date.now() + 30000;
+        if (S.embedRetry) {
+          S.embedRetry = false;
+          toast('Tekshirib bo\u2018lmadi \u2014 o\u2018z pleyerimizda davom eting');
+        }
+        renderPMode();
+        return;
+      }
+      var wantFast = S.embedRetry || pmode() === 'fast';
+      if (d.playable) markEmbedOk();
+      else markEmbedBad(d.reason || '');
+      if (embedKey() !== k) { S.embedRetry = false; return; }  // boshqa qismga o'tdik
+      if (d.playable) {
+        S.embedRetry = false;
+        if (wantFast && !S.embedFailed && !S.userPickedOwn) {
+          setPmode('fast');
+          toast('\u26A1 Telegram pleyeri ochildi');
+          mountPlayer();                            // "tez" tanlangan - embedga o'tamiz
+          return;
+        }
+        renderPMode();
+        return;
+      }
+      // O'ynatmaydi: agar foydalanuvchi endigina bosgan bo'lsa - sababini aytamiz.
+      if (S.embedRetry) {
+        S.embedRetry = false;
+        setPmode('own');                            // behuda "fast" ni eslab qolmaymiz
+        toast(embedBadToast(d.reason || ''));
+      }
+      renderPMode();
+    };
+    if (global.fetch) {
+      global.fetch(url, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(done)
+        .catch(function () { done(null); });
+    }
+  }
+
+  // Amaldagi rejim: embed bu postda ishlamasa (yoki bir marta ochilmasa) —
+  // o'z pleyerimizga qaytamiz.
+  function effectivePmode() {
+    if (pmode() !== 'fast') return 'own';
+    if (S.embedFailed || embedState() !== 'ok') return 'own';
+    return 'fast';
+  }
+
+  function embedUrl(e) {
+    return 'https://t.me/' + encodeURIComponent(e.channel) + '/' + Number(e.post)
+      + '?embed=1&mode=tme&discussion=0';
+  }
+
+  function embedBadNote() {
+    var b = embedBadInfo();
+    var r = (b && b.reason) || '';
+    if (r === 'too_big') {
+      return 'Telegram pleyeri katta faylni oqizmaydi — bizning pleyer ishlatilmoqda';
+    }
+    if (r === 'not_found') {
+      return 'Bu post ommaviy emas — bizning pleyer ishlatilmoqda';
+    }
+    return 'Bu videoda Telegram pleyeri ishlamaydi — bizning pleyer ishlatilmoqda';
+  }
+
+  function renderPMode() {
+    var box = el('watchPMode');
+    if (!box) return;
+    if (!tgEmbed()) {                 // embed umuman mumkin emas
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    var st = embedState();
+    if (st === 'unknown') {           // server tekshiruvi ketmoqda
+      var cooling = Date.now() < embedCoolUntil;
+      if (S.embedRetry || cooling) {
+        // Foydalanuvchi "Tez pleyer" ni bosdi (yoki server yaqinda javob
+        // bermadi): panel yo'qolib qolmasin — holat KO'RINIB tursin.
+        box.hidden = false;
+        box.innerHTML =
+          '<button type="button" class="watch-pmode-btn off" data-pmode="fast" disabled>'
+          + (cooling && !S.embedRetry
+            ? '\u26A0\uFE0F Tekshirib bo\u2018lmadi'
+            : '\u23F3 Tekshirilmoqda\u2026')
+          + '</button>'
+          + '<button type="button" class="watch-pmode-btn on" data-pmode="own">'
+          + '\u25B6 Bizning pleyer <span>MTProto</span></button>';
+      } else {
+        box.hidden = true;
+        box.innerHTML = '';
+      }
+      checkEmbed();
+      return;
+    }
+    if (st === 'bad') {
+      // Embed bu postda o'ynatmaydi — sababini aytamiz. "Tez pleyer" tugmasi
+      // QOLADI: foydalanuvchi qayta urinishi mumkin (masalan, post tuzatilgan
+      // yoki keyinroq ochilgan bo'lsa). Bosilganda `wc_embed_bad` tozalanadi.
+      box.hidden = false;
+      box.innerHTML =
+        '<button type="button" class="watch-pmode-btn off" data-pmode="fast"'
+        + ' title="Qayta urinish — Telegram CDN orqali">'
+        + '\u26A1 Tez pleyer <span>Telegram CDN</span></button>'
+        + '<button type="button" class="watch-pmode-btn on" data-pmode="own"'
+        + ' title="MTProto + Service Worker — davom etish va sifat nazorati">'
+        + '\u25B6 Bizning pleyer <span>MTProto</span></button>'
+        + '<i class="watch-pmode-note warn">' + esc(embedBadNote()) + '</i>';
+      return;
+    }
+    var eff = effectivePmode();
+    box.hidden = false;
+    box.innerHTML =
+      '<button type="button" class="watch-pmode-btn' + (eff === 'fast' ? ' on' : '') + '"'
+      + ' data-pmode="fast" title="Telegram CDN orqali — eng tez">'
+      + '\u26A1 Tez pleyer <span>Telegram CDN</span></button>'
+      + '<button type="button" class="watch-pmode-btn' + (eff === 'own' ? ' on' : '') + '"'
+      + ' data-pmode="own" title="MTProto + Service Worker — davom etish va sifat nazorati">'
+      + '\u25B6 Bizning pleyer <span>MTProto</span></button>';
+  }
+
+  function bindPMode() {
+    var box = el('watchPMode');
+    if (!box) return;
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-pmode]');
+      if (!b) return;
+      var m = b.getAttribute('data-pmode');
+      if (m !== 'fast' && m !== 'own') return;
+
+      if (m === 'fast') {
+        // Ongli tanlov: "ishlamaydi" belgisini tozalab, qaytadan tekshiramiz.
+        // Embed darhol o'rnatilmaydi — tekshiruv `playable:true` desa
+        // `checkEmbed()` o'zi almashtiradi. Aks holda o'z pleyerimiz
+        // (va joriy o'rni) buzilmaydi.
+        S.userPickedOwn = false;
+        clearEmbedBad();
+        S.embedFailed = false;
+        embedCheckFor = '';
+        S.embedRetry = true;
+        if (embedState() === 'ok') {                  // embed allaqachon tasdiqlangan
+          S.embedRetry = false;
+          setPmode('fast');
+          mountPlayer();
+          return;
+        }
+        // Panelda "tekshirilmoqda" ko'rsatamiz, so'ng natijani aytamiz.
+        renderPMode();
+        toast('Telegram pleyeri tekshirilmoqda\u2026');
+        return;
+      }
+
+      S.userPickedOwn = true;
+      var was = effectivePmode();                       // setPmode'dan OLDIN
+      setPmode('own');
+      if (was !== 'own') mountPlayer();                 // embeddan o'z pleyerimizga
+      else renderPMode();
+    });
+  }
+
+  // Embed pleyerini o'rnatadi. `false` — embed manzili yo'q (chaqiruvchi
+  // o'z pleyerini o'rnatadi).
+  //
+  // MUHIM: Telegram embed sahifasi ommaviy bo'lmagan/o'chirilgan postda
+  // "Post not found" ko'rsatadi va buni DOM'dan o'qib bo'lmaydi (cross-origin).
+  // Lekin widget o'z balandligini `postMessage({event:'resize', height})`
+  // bilan yuboradi: haqiqiy video post ~400-500 px, "topilmadi" esa ~66 px.
+  // Shu farq orqali embed ishlamayotganini aniqlaymiz.
+  var embedFrame = null;
+  var embedGeneration = -1;
+  var embedMsgBound = false;
+
+  function bindEmbedMessages() {
+    if (embedMsgBound) return;
+    embedMsgBound = true;
+    global.addEventListener('message', function (ev) {
+      if (ev.origin !== 'https://t.me') return;
+      var d = ev.data;
+      if (typeof d === 'string') {
+        try { d = JSON.parse(d); } catch (e) { return; }
+      }
+      if (!d || d.event !== 'resize') return;
+      var frame = embedFrame;
+      if (!frame || !frame.isConnected) return;      // eski (o'chirilgan) oyna
+      var h = Number(d.height) || 0;
+      if (h > 0 && h < 150) embedGone(embedGeneration);
+    });
+  }
+
+  function embedGone(generation) {
+    if (generation !== S.streamGeneration) return;
+    if (S.embedFailed) return;
+    S.embedFailed = true;
+    S.embedFailedKey = embedKey();
+    markEmbedBad('not_found');                        // keyingi safar darhol 'own'
+    toast('Bu postda Telegram pleyeri ishlamaydi — o‘z pleyerimizga o‘tdik');
+    mountPlayer();
+  }
+
+  function mountEmbed(host, pb, generation) {
+    var e = tgEmbed();
+    if (!e) return false;
+    host.innerHTML =
+      '<div class="player-wrap watch-embed">'
+      + '<iframe src="' + esc(embedUrl(e)) + '"'
+      + ' allow="autoplay; fullscreen; encrypted-media; picture-in-picture"'
+      + ' allowfullscreen referrerpolicy="origin" title="Telegram pleyer"></iframe>'
+      + '</div>';
+    var frame = host.querySelector('iframe');
+    if (!frame) return true;
+    embedFrame = frame;
+    embedGeneration = generation;
+    bindEmbedMessages();
+    // ZAXIRA: Telegram oynasi 9 soniyada ochilmasa (tarmoq/blok) — o'z
+    // pleyerimizga qaytamiz. `S.embedFailed` qayta urinishning oldini oladi.
+    var loaded = false;
+    frame.addEventListener('load', function () { loaded = true; });
+    setTimeout(function () {
+      if (loaded || generation !== S.streamGeneration) return;
+      embedGone(generation);
+    }, 9000);
+    return true;
+  }
+
+  function mountTelegramFallback(host, pb, generation) {
+    if (generation !== S.streamGeneration) return;
+    try { if (global.UzPlayer && typeof global.UzPlayer.destroyAll === 'function') global.UzPlayer.destroyAll(); } catch (e) {}
+    try { if (global.UDP) global.UDP.destroyAll(); } catch (e) {}
+    try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
+    host.innerHTML = '';
+    if (!global.TgStream || typeof global.TgStream.mount !== 'function') {
+      host.innerHTML = '<div class="player-wrap no-video"><div class="nv-msg">Telegram moduli yuklanmadi. Sahifani yangilang.</div></div>';
+      return;
+    }
+    var m = document.createElement('div');
+    m.className = 'watch-tg';
+    host.appendChild(m);
+    var e2 = curEp();
+    global.TgStream.mount(m, {
+      channel: pb.channel || '',
+      post: Number(pb.post) || 0,
+      url: pb.url || '',
+      deep: pb.deep || '',
+      poster: pb.poster || '',
+      cfg: global.UzPlayer ? undefined : udpConfig(),
+      epLabel: e2 ? (e2.season + '-fasl ' + e2.number + '-qism') : '',
+      onReady: function () {
+        var tv = m.querySelector('video');
+        if (tv && global.UzPlayer && typeof global.UzPlayer.attach === 'function') {
+          try { global.UzPlayer.attach(tv, { poster: pb.poster || '' }); } catch (ex) {}
+        }
+        wireVideo(tv);
+        prefetchAdjacent();
+        if (typeof pb.onVideo === 'function') { try { pb.onVideo(tv); } catch (ex) {} }
+      }
+    });
+  }
+
+  function mountMediaFlow(host, pb, url, generation) {
+    if (generation !== S.streamGeneration) return;
+    try {
+      if (global.UzPlayer && typeof global.UzPlayer.mount === 'function') {
+        global.UzPlayer.mount(host, { type: 'direct', src: url, poster: pb.poster || '' });
+      } else {
+        var poster = pb.poster ? ' poster="' + esc(pb.poster) + '"' : '';
+        host.innerHTML = '<div class="player-wrap has-video-container">'
+          + '<div class="udp-player" data-udp data-udp-config="' + udpAttr(udpConfig()) + '">'
+          + '<video playsinline preload="auto"' + poster + '></video></div></div>';
+        var rawVideo = host.querySelector('video');
+        if (rawVideo) rawVideo.src = url;
+        if (global.UDP) global.UDP.initAll();
+      }
+    } catch (e) {
+      mountTelegramFallback(host, pb, generation);
+      return;
+    }
+
+    var video = host.querySelector('video');
+    if (!video) {
+      mountTelegramFallback(host, pb, generation);
+      return;
+    }
+    video.preload = 'auto';
+    var mediaReady = false;
+    var fallbackUsed = false;
+    video.addEventListener('loadeddata', function () { mediaReady = true; }, { once: true });
+    video.addEventListener('playing', function () { mediaReady = true; }, { once: true });
+    video.addEventListener('error', function () {
+      if (mediaReady || fallbackUsed || generation !== S.streamGeneration) return;
+      fallbackUsed = true;
+      mountTelegramFallback(host, pb, generation);
+    }, { once: true });
+    wireVideo(video);
+  }
+
+  // ===================================================== HLS va TELEGRAM PARALLEL
+  //
+  // MUAMMO: server `type: 'hls'` desa, pleyer HLS tayyor bo'lguncha KUTARDI
+  // (film birinchi marta ochilsa - yuklab, bo'laklab bo'lguncha), Telegram esa
+  // umuman ishga tushmasdi: ya'ni texnologiyalar KETMA-KET edi.
+  //
+  // YECHIM (poyga): HLS tayyormi - 1 ta tezkor so'rov bilan tekshiramiz (bu so'rov
+  // tayyorlashni ham BOSHLAB beradi).
+  //   * tayyor  -> darhol HLS (eng tez, diskdan);
+  //   * tayyor emas -> Telegram'ni DARHOL boshlaymiz, HLS fonda tayyorlanadi va
+  //     Telegram birinchi kadrni ko'rsatishga ulgurmasa, HLS tayyor bo'lishi bilan
+  //     unga o'tamiz. Telegram o'ynab ketgan bo'lsa, uni bezovta qilmaymiz.
+  // Telegram'ga kirmagan foydalanuvchida Telegram boshlanmaydi (login oynasi
+  // chiqmasin) - eski tartib: HLS tayyor bo'lishini kutadi.
+  function hlsMediaFor(pb) {
+    var sep = String(pb.url || '').indexOf('?') !== -1 ? '&' : '?';
+    return { type: 'hls', src: pb.url || '', poster: pb.poster || '', refresh: pb.url + sep + 'json=1' };
+  }
+
+  function tgSourceFor(pb) {
+    var e = curEp();
+    var channel = pb.channel || (e && e.tg_channel) || D.tg_channel || '';
+    var post = Number(pb.post || (e && e.tg_post) || D.tg_post) || 0;
+    if (!channel || !post) return null;
+    return {
+      channel: channel,
+      post: post,
+      url: 'https://t.me/' + channel + '/' + post,
+      deep: pb.deep || '',
+      poster: pb.poster || ''
+    };
+  }
+
+  function tgLoggedIn() {
+    try {
+      return !!(global.TgStream && typeof global.TgStream.me === 'function' && global.TgStream.me());
+    } catch (e) { return false; }
+  }
+
+  /** true qaytarsa - poyga shu yerda boshqaruvni oldi; false - eski oddiy yo'l. */
+  function raceHlsTelegram(host, pb, generation) {
+    var tg = tgSourceFor(pb);
+    if (!tg || !tgLoggedIn() || typeof global.TgStream.mount !== 'function') return false;
+
+    var media = hlsMediaFor(pb);
+    var done = false;          // g'olib aniq (yoki Telegram o'ynab ketdi)
+    var tgPlaying = false;
+    var pollTimer = null;
+    var t0 = Date.now();
+
+    function alive() { return generation === S.streamGeneration; }
+    function stopPoll() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+
+    function probe() {
+      var ctl = global.AbortController ? new AbortController() : null;
+      var to = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) {} }, 4000) : null;
+      return fetch(media.refresh, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: ctl ? ctl.signal : undefined
+      }).then(function (r) {
+        if (to) clearTimeout(to);
+        return !!r.ok;                       // 200 = playlist tayyor; 503/502 = hali yo'q
+      }).catch(function () {
+        if (to) clearTimeout(to);
+        return false;
+      });
+    }
+
+    function useHls() {
+      if (done || !alive()) return;
+      done = true;
+      stopPoll();
+      try { if (global.UzPlayer && typeof global.UzPlayer.destroyAll === 'function') global.UzPlayer.destroyAll(); } catch (e) {}
+      try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
+      host.innerHTML = '';
+      try { global.UzPlayer.mount(host, media); } catch (e) {}
+      wireVideo(host.querySelector('video'));
+    }
+
+    function useTelegram() {
+      if (!alive()) return;
+      tg.onVideo = function (v) {
+        if (!v) return;
+        v.addEventListener('playing', function () {
+          tgPlaying = true;
+          done = true;                       // Telegram o'ynab ketdi - HLS'ga o'tmaymiz
+          stopPoll();
+        }, { once: true });
+      };
+      mountTelegramFallback(host, tg, generation);
+    }
+
+    host.innerHTML = '<div class="player-wrap no-video"><div class="nv-msg">Video ulanmoqda\u2026</div></div>';
+    probe().then(function (ready) {
+      if (!alive()) return;
+      if (ready) { useHls(); return; }
+      useTelegram();                         // HLS tayyor emas - Telegram DARHOL
+      (function poll() {
+        if (done || tgPlaying || !alive() || (Date.now() - t0) > 180000) return;
+        pollTimer = setTimeout(function () {
+          probe().then(function (r) {
+            if (done || tgPlaying || !alive()) return;
+            if (r) useHls(); else poll();
+          });
+        }, 1500);
+      })();
+    });
+    return true;
+  }
+
   function mountPlayer() {
     var host = el('watchPlayer');
     if (!host) return;
+    S.streamGeneration += 1;
+    var generation = S.streamGeneration;
 
     try { if (global.UzPlayer && typeof global.UzPlayer.destroyAll === 'function') global.UzPlayer.destroyAll(); } catch (e) {}
     try { if (global.UDP) global.UDP.destroyAll(); } catch (e) {}
     try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
     host.innerHTML = '';
+
+    // Pleyer tanlovi paneli (faqat Telegram embed mumkin bo'lsa ko'rinadi).
+    // Boshqa qismga o'tildi — oldingi qismning "embed ishlamadi" holatini
+    // tozalaymiz (u faqat o'sha postga tegishli edi).
+    if (S.embedFailed && S.embedFailedKey !== embedKey()) S.embedFailed = false;
+    renderPMode();
 
     var pb = S.playback || {};
     var type = pb.type || 'none';
@@ -280,6 +868,12 @@
           onNext: nx ? function (nid) { switchEpisode(Number(nid)); } : null
         });
       } catch (ex) {}
+    }
+
+    // HLS + Telegram poygasi (parallel): qarang `raceHlsTelegram`.
+    if (type === 'hls' && global.UzPlayer && typeof global.UzPlayer.mount === 'function'
+        && raceHlsTelegram(host, pb, generation)) {
+      return;
     }
 
     if (type === 'direct' || type === 'file' || type === 'hls') {
@@ -309,7 +903,7 @@
       host.innerHTML =
         '<div class="player-wrap has-video-container">'
         + '<div class="udp-player" data-udp data-udp-config="' + udpAttr(udpConfig()) + '">'
-        + '<video playsinline preload="auto"' + poster + vattrs + '></video>'
+        + '<video playsinline preload="metadata"' + poster + vattrs + '></video>'
         + '</div></div>';
       if (global.UDP) global.UDP.initAll();
       wireVideo(host.querySelector('video'));
@@ -324,32 +918,38 @@
     }
 
     if (type === 'telegram') {
-      if (!global.TgStream || typeof global.TgStream.mount !== 'function') {
-        host.innerHTML = '<div class="player-wrap no-video">'
-          + '<div class="nv-msg">Telegram moduli yuklanmadi. Sahifani yangilang.</div>'
-          + '</div>';
+      // 1) ENG TEZ YO'L: Telegram'ning rasmiy embed pleyeri.
+      //
+      // `t.me/<kanal>/<post>?embed=1` sahifasi video baytlarini Telegram'ning
+      // o'z CDN'idan beradi — Telegram Web'dagi kabi. Bizning MTProto pleyer
+      // esa O'CHIRILMAGAN: foydalanuvchi pastdagi tugma bilan almashadi.
+      if (effectivePmode() === 'fast' && mountEmbed(host, pb, generation)) return;
+
+      if (!APP.mediaflowEnabled) {
+        mountTelegramFallback(host, pb, generation);
         return;
       }
-      var m = document.createElement('div');
-      m.className = 'watch-tg';
-      host.appendChild(m);
-      var e2 = curEp();
-      global.TgStream.mount(m, {
-        channel: pb.channel || '',
-        post:    Number(pb.post) || 0,
-        url:     pb.url || '',
-        deep:    pb.deep || '',
-        poster:  pb.poster || '',
-        cfg:     global.UzPlayer ? undefined : udpConfig(),
-        epLabel: e2 ? (e2.season + '-fasl ' + e2.number + '-qism') : '',
-        onReady: function () {
-          var tv = m.querySelector('video');
-          if (tv && global.UzPlayer && typeof global.UzPlayer.attach === 'function') {
-            try { global.UzPlayer.attach(tv, { poster: pb.poster || '' }); } catch (ex) {}
+      host.innerHTML = '<div class="player-wrap no-video"><div class="nv-msg">Video oqimi ulanmoqda…</div></div>';
+      fetch(base + '/api/mediaflow-url.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({ content_id: Number(D.id) || 0, episode_id: Number(S.selectedId) || 0 })
+      }).then(function (response) {
+        return response.json().catch(function () { throw new Error('Invalid response'); }).then(function (data) {
+          if (!response.ok || !data || data.success === false || !data.url) {
+            throw new Error('MediaFlow unavailable');
           }
-          wireVideo(tv);
-          prefetchNext();
-        }
+          return data;
+        });
+      }).then(function (data) {
+        if (generation !== S.streamGeneration) return;
+        mountMediaFlow(host, pb, data.url, generation);
+      }).catch(function () {
+        if (generation === S.streamGeneration) mountTelegramFallback(host, pb, generation);
       });
       return;
     }
@@ -706,7 +1306,8 @@
   function mirrorLib(kind, on) {
     // PHP sessiyasi bor foydalanuvchining profili serverdan o'qiydi -
     // mahalliy nusxa kerak emas (va chalkashtirmaydi).
-    if (W.loggedIn) return;
+    // PHP sessiyasi bor foydalanuvchida ham mahalliy nusxa yuritiladi: TV'dagi
+    // "Yoqqanlar / Saqlanganlar / Keyinroq ko'rish" qatorlari shundan o'qiydi.
     var lib = global.WCLib;
     if (!lib) return;
     try {
@@ -791,10 +1392,10 @@
     // doim ko'rinib turadi (YouTube'da ham "3,9 ming" o'chirilmaydi).
     var vote = '<div class="watch-vote">'
       + '<button type="button" class="watch-act watch-act-vote' + (D.has_liked ? ' on' : '') + '"'
-      +     ' id="actLike" title="Yoqdi" aria-label="Yoqdi">'
+      +     ' id="actLike" title="Yoqdi" aria-label="Yoqdi" aria-pressed="' + (D.has_liked ? 'true' : 'false') + '">'
       +     ACT_ICON.thumbUp + ' <span class="watch-act-vote-n" id="actLikeN">' + esc(voteTxt(likes, 'Yoqdi')) + '</span></button>'
       + '<button type="button" class="watch-act watch-act-vote watch-act-vote-d' + (D.has_disliked ? ' on' : '') + '"'
-      +     ' id="actDislike" title="Yoqmadi" aria-label="Yoqmadi">'
+      +     ' id="actDislike" title="Yoqmadi" aria-label="Yoqmadi" aria-pressed="' + (D.has_disliked ? 'true' : 'false') + '">'
       +     ACT_ICON.thumbDown + ' <span class="watch-act-vote-n" id="actDislikeN">' + esc(voteTxt(dislikes, 'Yoqmadi')) + '</span></button>'
       + '</div>';
 
@@ -835,9 +1436,12 @@
       var lk = el('actLike'), dk = el('actDislike');
       if (lk) lk.classList.toggle('on', D.has_liked);
       if (dk) dk.classList.toggle('on', D.has_disliked);
+      if (lk) lk.setAttribute('aria-pressed', D.has_liked ? 'true' : 'false');
+      if (dk) dk.setAttribute('aria-pressed', D.has_disliked ? 'true' : 'false');
       // Sonlar ANIMATSIYA bilan 1 dan boshlab o'sib/tushib boradi.
       animCount(el('actLikeN'), oldL, D.likes, function (n) { return voteTxt(n, 'Yoqdi'); });
       animCount(el('actDislikeN'), oldD, D.dislikes, function (n) { return voteTxt(n, 'Yoqmadi'); });
+      fireState();
     }
 
     /* Server 401 qaytarsa (foydalanuvchini tanimadi) login oynasiga emas,
@@ -863,8 +1467,10 @@
       var b = el(btnId);
       if (!b) return;
       b.onclick = function () {
+        if (b.classList.contains('busy')) return;
         if (!isLoggedIn()) { needLogin(); return; }
         b.classList.add('busy');
+        b.setAttribute('aria-busy', 'true');
         fetch(withMeQS(base + '/api/like.php'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -884,7 +1490,10 @@
           mirrorLib('liked', !!D.has_liked);
         }).catch(function (err) {
           toast(err.message || 'Xatolik');
-        }).finally(function () { b.classList.remove('busy'); });
+        }).finally(function () {
+          b.classList.remove('busy');
+          b.removeAttribute('aria-busy');
+        });
       };
     }
     bindVote('actLike', 'like');
@@ -952,6 +1561,11 @@
         if (!isLoggedIn()) { needLogin(); closeSaveMenu(); return; }
         it.classList.add('busy');
         ensureSaved().then(function () {
+          if (global.TvMode && global.TvMode.isTv()) {
+            closeSaveMenu();
+            toast('Video Saqlanganlar / Keyinroq ko‘rish ro‘yxatiga qo‘shildi');
+            return;
+          }
           // `nav.php` dagi Kutubxona bo'limi:
           //   Keyinroq ko'rish -> saved.php
           //   Saqlanganlar     -> saved.php (saved.php -> profile.php?tab=saved)
@@ -1697,7 +2311,9 @@
 
     // Chuqur havola darhol yangilanadi - "Ulashish" va "orqaga" to'g'ri ishlaydi.
     try {
-      history.pushState({ ep: epId }, '', watchUrl(epId).replace(base, ''));
+      // Loyiha /tele_uzdub papkasida ishlaydi; base ni olib tashlash
+      // refreshda root /watch.php ga olib borib, Apache 404 chiqaradi.
+      history.pushState({ ep: epId }, '', watchUrl(epId));
     } catch (e) {}
 
     // MUHIM: Telegram hujjatini `content.php` SO'ROVI bilan PARALLEL tayyorlaymiz.
@@ -1724,6 +2340,7 @@
         // "Barcha" holatiga qaytaramiz.
         S.epSeason = 0;
         S.selectedId = epId;
+        prefetchAdjacent();
         renderHead();
         renderSide();
         mountPlayer();
@@ -1739,7 +2356,7 @@
         S.switching = false;
         toast(err && err.message ? err.message : 'Qismni yuklab bo‘lmadi');
         // Havolani orqaga qaytaramiz - foydalanuvchi "yo'qotilmasin".
-        try { history.replaceState({}, '', watchUrl(S.selectedId).replace(base, '')); } catch (e) {}
+        try { history.replaceState({}, '', watchUrl(S.selectedId)); } catch (e) {}
       });
   }
 
@@ -1781,6 +2398,7 @@
     renderSide();
     mountPlayer();
     bindSideClicks();
+    bindPMode();
     initEpFind();
     bindEpMobileUI();
     initRecObserver();
@@ -1800,6 +2418,7 @@
             if (d.episodes && d.episodes.length) S.episodes = d.episodes;
             S.epSeason = 0;
             S.selectedId = id;
+            prefetchAdjacent();
             renderHead(); renderSide(); mountPlayer();
             return openComments();
           })
@@ -1817,6 +2436,43 @@
     boot();
   }
 
+  /* ---- TV (pult) uchun: tv-watch.js shu amallarni chaqiradi ---------------- */
+  function fireState() {
+    try { document.dispatchEvent(new CustomEvent('wc:watchState')); } catch (e) {}
+  }
+
+  /** Saqlanganlarga qo'shish / olib tashlash (toggle). */
+  function tvToggleSaved() {
+    if (!isLoggedIn()) { needLogin(); return Promise.resolve(!!D.in_watchlist); }
+    return fetch(withMeQS(base + '/api/watchlist.php'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      credentials: 'same-origin',
+      body: 'id=' + encodeURIComponent(D.id)
+    }).then(function (raw) {
+      // 401: server tanimadi - amal mahalliy bajariladi.
+      if (raw.status === 401) return { success: true, in_watchlist: !D.in_watchlist };
+      return raw.json();
+    }).then(function (r) {
+      if (r.success === false) throw new Error(r.message || 'Xato');
+      D.in_watchlist = !!r.in_watchlist;
+      var w = el('actWatchlist');
+      if (w) w.classList.toggle('on', D.in_watchlist);
+      mirrorLib('saved', D.in_watchlist);
+      fireState();
+      return D.in_watchlist;
+    });
+  }
+
+  /** "Keyinroq ko'rish" ro'yxati (shu brauzerda saqlanadi). */
+  function tvToggleLater() {
+    var lib = global.WCLib;
+    if (!lib) return false;
+    var on = lib.toggle('later', libItem());
+    fireState();
+    return on;
+  }
+
   // Boshqa modullar (sinovlar, konsol) uchun.
   global.Watch = {
     state: S,
@@ -1824,6 +2480,10 @@
     renderSide: renderSide,
     loadMoreRelated: loadMoreRelated,
     filterEpisodes: filterEpisodes,
-    switchEpisode: switchEpisode
+    switchEpisode: switchEpisode,
+    tv: {
+      toggleSaved: tvToggleSaved,
+      toggleLater: tvToggleLater
+    }
   };
 })(window);

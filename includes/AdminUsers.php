@@ -45,10 +45,30 @@ class AdminUsers
             if (!in_array('banned_at', $names, true)) {
                 $this->db->query('ALTER TABLE users ADD COLUMN banned_at DATETIME NULL');
             }
+            if (!in_array('ban_until', $names, true)) {
+                $this->db->query('ALTER TABLE users ADD COLUMN ban_until DATETIME NULL');
+            }
+            if (!in_array('premium_until', $names, true)) {
+                $this->db->query('ALTER TABLE users ADD COLUMN premium_until DATETIME NULL');
+            }
+            $this->clearExpired();
         } catch (Throwable $e) {
             error_log('[AdminUsers] ensure: ' . $e->getMessage());
         }
         return self::$ready;
+    }
+
+    /** Muddati tugagan vaqtinchalik statuslarni avtomatik bekor qiladi. */
+    public function clearExpired()
+    {
+        try {
+            $this->db->query("UPDATE users SET is_premium = 0, premium_until = NULL
+                              WHERE is_premium = 1 AND premium_until IS NOT NULL AND premium_until <= NOW()");
+            $this->db->query("UPDATE users SET is_banned = 0, ban_reason = NULL, banned_at = NULL, ban_until = NULL
+                              WHERE is_banned = 1 AND ban_until IS NOT NULL AND ban_until <= NOW()");
+        } catch (Throwable $e) {
+            error_log('[AdminUsers] clearExpired: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -90,7 +110,7 @@ class AdminUsers
 
         $rows = $this->db->fetchAll(
             "SELECT id, user_id, telegram_user_id, first_name, last_name, username,
-                    avatar, is_premium, is_banned, ban_reason, is_bot_blocked,
+                    avatar, is_premium, premium_until, is_banned, ban_reason, ban_until, is_bot_blocked,
                     created_at, last_login_at, last_activity
                FROM users
               WHERE $whereSql
@@ -113,18 +133,21 @@ class AdminUsers
     }
 
     /** Premium yoqish/o'chirish. */
-    public function setPremium($id, $on)
+    public function setPremium($id, $on, $days = 0)
     {
+        $until = ($on && (int) $days > 0)
+            ? date('Y-m-d H:i:s', time() + ((int) $days * 86400))
+            : null;
         return (bool) $this->db->update(
             'users',
-            ['is_premium' => $on ? 1 : 0],
+            ['is_premium' => $on ? 1 : 0, 'premium_until' => $until],
             'id = ?',
             [(int) $id]
         );
     }
 
     /** Ban / unban. */
-    public function setBanned($id, $on, $reason = '')
+    public function setBanned($id, $on, $reason = '', $days = 0)
     {
         $id = (int) $id;
         if ($id <= 0) {
@@ -134,6 +157,9 @@ class AdminUsers
             'is_banned'  => $on ? 1 : 0,
             'ban_reason' => $on ? mb_substr(trim((string) $reason), 0, 255) : null,
             'banned_at'  => $on ? date('Y-m-d H:i:s') : null,
+            'ban_until'  => ($on && (int) $days > 0)
+                ? date('Y-m-d H:i:s', time() + ((int) $days * 86400))
+                : null,
         ];
         return (bool) $this->db->update('users', $fields, 'id = ?', [$id]);
     }

@@ -1,0 +1,29 @@
+; W CINEMA PHP-FPM pool example for Linux production.
+; Install this as a pool file for the installed PHP-FPM version.
+; IMPORTANT: pm.max_children=16 is only a conservative example, not a 1,000-user guarantee.
+; Calculate it from RAM reserved for PHP-FPM / measured p95 RSS per PHP worker.
+
+[tele_uzdub]
+user = www-data
+group = www-data
+listen = /run/php/tele_uzdub.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+listen.backlog = 1024
+
+pm = dynamic
+pm.max_children = 16
+pm.start_servers = 4
+pm.min_spare_servers = 2
+pm.max_spare_servers = 8
+pm.max_spawn_rate = 16
+pm.max_requests = 500
+
+; Keep app PHP requests bounded; video bytes are offloaded to Nginx internal locations.
+request_terminate_timeout = 120s
+request_slowlog_timeout = 5s
+slowlog = /var/log/php-fpm/tele_uzdub-slow.log
+catch_workers_output = yes
+
+; Do not expose the FastCGI socket publicly. Nginx connects over the Unix socket above.

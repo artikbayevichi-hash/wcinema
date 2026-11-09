@@ -243,6 +243,36 @@ define('SITE_URL_FALLBACK', env_value('SITE_URL_FALLBACK', 'http://localhost/tel
 // har restartda o'zgarsada config.php'ni tahrirlash shart bo'lmaydi.
 define('SITE_URL', rtrim(env_value('SITE_URL', '') ?: detect_site_url(), '/'));
 
+/**
+ * Ilova URL yo'li (web root ga nisbatan), masalan `/tele_uzdub`.
+ *
+ * NIMA UCHUN: `SITE_URL` — to'liq manzil (https://host/tele_uzdub) va u
+ * tunnel o'lganda yoki o'zgarganda noto'g'ri bo'lib qoladi. Shu sababli
+ * ichki fayl manzillari (`uploads/...`, `api/tg-resolve.php?...`) uchun
+ * ABSOLUT o'rniga ilova yo'li ishlatiladi: `/tele_uzdub/uploads/...`.
+ * Bunday manzil ISTALGAN domenda, tunnlda yoki localhost'da bir xil
+ * ishlaydi — tunnel o'lsa ham, ko'rinmay qolmaydi.
+ */
+if (!defined('APP_BASE_PATH')) {
+    $__appBase = '';
+    $__docRoot = isset($_SERVER['DOCUMENT_ROOT']) ? realpath($_SERVER['DOCUMENT_ROOT']) : false;
+    $__appRoot = realpath(__DIR__);
+    if ($__docRoot && $__appRoot) {
+        $__docRoot = str_replace('\\', '/', $__docRoot);
+        $__appRoot = str_replace('\\', '/', $__appRoot);
+        if (strpos($__appRoot, $__docRoot) === 0) {
+            $__appBase = rtrim(substr($__appRoot, strlen($__docRoot)), '/');
+        }
+    }
+    // DOCUMENT_ROOT topilmasa — SITE_URL yo'lidan olamiz.
+    if ($__appBase === '') {
+        $__p = parse_url(SITE_URL, PHP_URL_PATH);
+        $__appBase = rtrim((string) $__p, '/');
+    }
+    define('APP_BASE_PATH', $__appBase);
+    unset($__appBase, $__docRoot, $__appRoot, $__p);
+}
+
 // CDN for uploaded files (optional but RECOMMENDED for million-user scale).
 // If set, "uploads/..." relative urls are served directly from CDN instead of
 // api/stream.php, so origin server never touches video bytes.
@@ -257,7 +287,7 @@ require_once __DIR__ . '/includes/SiteSettings.php';
 $_siteName = trim((string) SiteSettings::get('site_name', ''));
 define('SITE_NAME', $_siteName !== '' ? $_siteName : 'W CINEMA');
 unset($_siteName);
-define('MINI_APP_URL', SITE_URL . '/login.php');
+define('MINI_APP_URL', SITE_URL . '/1stlogin.php');
 
 // ---------------------------------------------------------------------------
 // HLS oqim (Cloudflare edge-kesh) — filmlar uchun "nol VPS trafigi" rejimi
@@ -272,7 +302,13 @@ define('HLS_ENABLED', in_array(
     ['1', 'true', 'yes', 'on'],
     true
 ));
-define('FFMPEG_BIN',  trim((string) env_value('FFMPEG_BIN', 'ffmpeg')));   // ffmpeg binar manzili
+define('FFMPEG_BIN',  trim((string) env_value('FFMPEG_BIN', 'ffmpeg')));   // HLS va faststart uchun ffmpeg yo'li
+// Yuklangan/import qilingan MP4 fayllarini qayta kodlamasdan faststart qilish.
+define('FASTSTART_ENABLED', in_array(
+    strtolower(trim((string) env_value('FASTSTART_ENABLED', '1'))),
+    ['1', 'true', 'yes', 'on'],
+    true
+));
 define('HLS_SEG_SEC', max(2, (int) env_value('HLS_SEG_SEC', '10')));         // segment uzunligi (soniya)
 define('HLS_CACHE_DIR', __DIR__ . '/storage/hls_cache');                        // HLS keshi (web'dan yopiq)
 define('HLS_MAX_MB',   max(256, (int) env_value('HLS_MAX_MB', '15000')));    // HLS disk kvotasi (MB)

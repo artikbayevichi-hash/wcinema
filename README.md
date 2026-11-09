@@ -55,6 +55,29 @@ Tomoshabinlar videoni Telegram'dan ko'radi (`t.me/...`), shu bois sayt
 serveriga og'irlik tushmaydi. `api/content-upload.php` (admin poster fayli)
 ataylab o'chirilgan (410) — poster faqat URL bilan saqlanadi.
 
+### MP4 faststart (progressiv ijro)
+
+Yangi MP4 fayllar Telegram kanaliga yuborilishidan oldin, shuningdek Telegram'dan
+`uploads/videos/` ga yangi import qilinganda `includes/FastStart.php` MP4 atomlarini
+tekshiradi. `moov` atom `mdat`dan keyinda bo'lsa, FFmpeg `-c copy -movflags
++faststart` bilan faylni **qayta kodlamasdan** qayta joylaydi; `api/stream.php`
+dagi Range/seek oqimi o'zgarishsiz qoladi. MP4 bo'lmagan formatlar o'tkazib
+yuboriladi. Avvaldan diskda turgan eski videolar avtomatik qayta ishlanmaydi.
+
+FFmpeg ixtiyoriy — u yo'q yoki ishlamay qolsa, yuklash asl video bilan davom
+etadi. XAMPP/hostingda FFmpeg'ni o'rnating, Apache/PHP foydalanuvchisi binarni
+ishga tushira olishini ta'minlang va `.env` ga yo'l bering:
+
+```env
+FASTSTART_ENABLED=1
+FFMPEG_BIN="C:\ffmpeg\bin\ffmpeg.exe"
+```
+
+Windows XAMPP'da FFmpeg `PATH` da bo'lsa, `FFMPEG_BIN=ffmpeg` ishlaydi;
+Linux hosting'da tizim yo'lini (`/usr/bin/ffmpeg`) ko'rsating. Hosting'da
+`proc_open` o'chirilgan bo'lsa, faststart ishlamaydi, lekin upload davom etadi.
+Funksiyani o'chirish uchun `FASTSTART_ENABLED=0` qiling.
+
 Limitlar: `REEL_MAX_UPLOAD_MB` (50), `REEL_MIN/MAX_LENGTH` (3–90 s), hajm
 `min(post_max_size, upload_max_filesize, REEL_MAX_UPLOAD_MB)` = amaliy chegara
 (`REEL_EFFECTIVE_MAX_UPLOAD_MB`).
@@ -416,5 +439,3 @@ jimgina o'tkazib yuboriladi va odatdagi yo'l ishlaydi.
 **Sessiya qulfi.** `api/stream.php`, `api/live.php`, `api/hls.php` boshida
 `session_write_close()` — oqim davomida foydalanuvchining boshqa so'rovlari
 (progress, bildirishnoma) bloklanmaydi. `stream.php` bo'laklari 8 KB → 256 KB.
-
-

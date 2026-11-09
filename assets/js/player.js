@@ -68,16 +68,6 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         // shu yerga yoziladi. (Asl uzdub faylida deklaratsiya yo'q edi — bug.)
         var bufferingLabel = el('div', 'udp-buffering-label');
         buffering.appendChild(bufferingLabel);
-        var loaderImg = el('img', 'udp-loading-img');
-        loaderImg.src = window.ROOT_URL + '/assets/loading-infinity.gif';
-        loaderImg.alt = '';
-        loaderImg.onload = function () {
-            root.classList.add('udp-img-ready');
-        };
-        loaderImg.onerror = function () {
-            loaderImg.remove();
-        };
-        buffering.appendChild(loaderImg);
         root.appendChild(buffering);
 
         // Title bar

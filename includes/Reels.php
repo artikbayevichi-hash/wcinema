@@ -28,6 +28,7 @@ require_once __DIR__ . '/TelegramBot.php';
 require_once __DIR__ . '/Notifications.php';
 require_once __DIR__ . '/Alerts.php';
 require_once __DIR__ . '/Blocks.php';
+require_once __DIR__ . '/FastStart.php';
 
 class Reels {
 
@@ -236,7 +237,12 @@ class Reels {
                 'media_count'=> $nMedia,
                 'title'      => $r['title'] ?: ($r['content_title'] ?? 'Reels'),
                 'description'=> $r['description'],
-                'poster'     => $r['poster'] ?: ($pb['poster'] ?? null),
+                'poster'     => Catalog::resolvePoster(
+                    $r['poster'] ?: ($pb['poster'] ?? null),
+                    $r['title'] ?: ($r['content_title'] ?? 'Reels'),
+                    'reels',
+                    'Reels'
+                ),
                 'status'     => (int) $r['status'],
                 // Rad etish sababi - faqat muallif va admin uchun ko'rsatiladi
                 'reject_reason' => $r['reject_reason'] ?? null,
@@ -601,7 +607,12 @@ class Reels {
             $caption .= "\n\n" . $description;
         }
 
-        $ext  = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        // MP4 bo'lsa, Telegram'ga jo'natishdan oldin moov atomini boshiga
+        // ko'chiramiz. FFmpeg bo'lmasa asl upload o'zgarishsiz yuboriladi.
+        $prepared = FastStart::prepare($file['tmp_name'], $file['name']);
+        $sendPath = $prepared['path'];
+        $sendName = $prepared['name'];
+        $ext  = strtolower(pathinfo((string) $sendName, PATHINFO_EXTENSION));
         $mime = $ext === 'webm' ? 'video/webm'
               : ($ext === 'mov' ? 'video/quicktime'
               : ($ext === 'mkv' ? 'video/x-matroska' : 'video/mp4'));
@@ -609,20 +620,22 @@ class Reels {
         $tg = new TelegramBot();
         $tg->setTimeout(600);   // katta fayl sekin yuklanishi mumkin
 
-        // 1) sendVideo — kanalda inline oqim uchun eng yaxshi variant.
-        $res = $tg->sendVideo(REELS_CHANNEL, new CURLFile($file['tmp_name'], $mime, $file['name']), [
-            'caption'            => $caption,
-            'supports_streaming' => true,
-        ]);
-        // 2) Zaxira: sendDocument (mkv/mov ba'zan video deb qabul qilinmaydi).
-        if (!$res || empty($res['result']['message_id'])) {
-            $res = $tg->sendDocument(REELS_CHANNEL, new CURLFile($file['tmp_name'], $mime, $file['name']), [
-                'caption' => $caption,
+        try {
+            // 1) sendVideo — kanalda inline oqim uchun eng yaxshi variant.
+            $res = $tg->sendVideo(REELS_CHANNEL, new CURLFile($sendPath, $mime, $sendName), [
+                'caption'            => $caption,
+                'supports_streaming' => true,
             ]);
+            // 2) Zaxira: sendDocument (mkv/mov ba'zan video deb qabul qilinmaydi).
+            if (!$res || empty($res['result']['message_id'])) {
+                $res = $tg->sendDocument(REELS_CHANNEL, new CURLFile($sendPath, $mime, $sendName), [
+                    'caption' => $caption,
+                ]);
+            }
+        } finally {
+            FastStart::cleanup($prepared);
+            @unlink($file['tmp_name']);
         }
-
-        // Vaqtinchalik faylni darhol o'chiramiz — diskda qolmasin.
-        @unlink($file['tmp_name']);
 
         if (!$res || empty($res['result']['message_id'])) {
             $last = $tg->getLastError();

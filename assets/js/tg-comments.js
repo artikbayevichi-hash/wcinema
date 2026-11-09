@@ -1822,8 +1822,14 @@
     if (!t) { try { console.log('[tg-comments]', msg); } catch (e) {} return; }
     t.textContent = msg;
     t.hidden = false;
+    // `.reels-toast` `opacity: 0` bilan boshlanadi — `show` bo'lmasa
+    // xabar ko'rinmaydi (jim "hech narsa bo'lmadi" holati).
+    t.classList.add('show');
     if (toast._t) clearTimeout(toast._t);
-    toast._t = setTimeout(function () { t.hidden = true; }, 2600);
+    toast._t = setTimeout(function () {
+      t.classList.remove('show');
+      setTimeout(function () { t.hidden = true; }, 220);
+    }, 2600);
   }
 
   // ----------------------------------------------------- layk (reaksiya)

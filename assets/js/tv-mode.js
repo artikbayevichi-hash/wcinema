@@ -108,6 +108,10 @@
         var d = document, b = d.body, h = d.documentElement;
         if (!b) return on;                       // <body> hali yo'q
         b.classList.toggle('tv-mode', on);
+        var libMenu = d.getElementById('igLibMenu');
+        var libButton = d.getElementById('igLibBtn');
+        if (libMenu) libMenu.hidden = !on;
+        if (libButton) libButton.setAttribute('aria-expanded', on ? 'true' : 'false');
         if (h) {
             // <html> ga ham qo'yamiz - tv-head.php shuni <head> da qiladi,
             // shunda sahifa chizilishidan oldin ham TV uslublari ishlaydi.
@@ -178,7 +182,7 @@
 
     /** Ochiq modal bo'lsa — fokus faqat uning ichida. */
     function scope() {
-        var ids = ['modal', 'trimModal', 'chatPicker', 'cPicker', 'igSearch'];
+        var ids = ['modal', 'trimModal', 'chatPicker', 'cPicker', 'igSearch', 'tvSearch', 'tvCompose', 'igSettings', 'igNtf'];
         for (var i = 0; i < ids.length; i++) {
             var m = document.getElementById(ids[i]);
             if (m && !m.hidden) {
@@ -278,11 +282,42 @@
                 return true;
             }
         }
-        // 2) qidiruv oynasi
+        // 2) qidiruv oynasi (oddiy IG-uslubidagi)
         var s = document.getElementById('igSearch');
         if (s && !s.hidden) {
             var back = s.querySelector('[data-close]');
             if (back) { back.click(); return true; }
+        }
+        // 2b) TV qidiruv oynasi (YouTube TV uslubidagi)
+        var tvs = document.getElementById('tvSearch');
+        if (tvs && !tvs.hidden) {
+            var tvBack = document.getElementById('tvSearchBack');
+            if (tvBack) { tvBack.click(); return true; }
+            tvs.hidden = true;
+            return true;
+        }
+        // 2c) Izoh yozish klaviaturasi (video sahifasi)
+        var cmpBox = document.getElementById('tvCompose');
+        if (cmpBox && !cmpBox.hidden) {
+            var cmpX = document.getElementById('tvComposeCancel');
+            if (cmpX) { cmpX.click(); return true; }
+            cmpBox.hidden = true;
+            return true;
+        }
+        // 2d) Sozlamalar va bildirishnomalar oynalari
+        var setBox = document.getElementById('igSettings');
+        if (setBox && !setBox.hidden) {
+            var setX = document.getElementById('igSetClose');
+            if (setX) { setX.click(); return true; }
+            setBox.hidden = true;
+            return true;
+        }
+        var ntfBox = document.getElementById('igNtf');
+        if (ntfBox && !ntfBox.hidden) {
+            var ntfX = document.getElementById('igNtfClose');
+            if (ntfX) { ntfX.click(); return true; }
+            ntfBox.hidden = true;
+            return true;
         }
         // 3) chat: xabar oynasidan ro'yxatga
         if (document.body.classList.contains('chat-open')) {
@@ -424,6 +459,28 @@
     function boot() {
         platform = detectPlatform();
         apply(initial(), true);
+
+        // Yon panel oynalari (Sozlamalar / Bildirishnomalar): ochilganda fokus
+        // ichiga kiradi, yopilganda ochgan tugmasiga qaytadi (pult uchun).
+        [
+            { id: 'igSettings', back: '#igMoreBtn' },
+            { id: 'igNtf',      back: '#igSide a[href="notifications.php"]' }
+        ].forEach(function (cfg) {
+            var box = document.getElementById(cfg.id);
+            if (!box || !global.MutationObserver) return;
+            new MutationObserver(function () {
+                if (!on) return;
+                setTimeout(function () {
+                    if (!box.hidden) {
+                        var list = scope();
+                        if (list.length) focusEl(list[0]);
+                    } else {
+                        var b = document.querySelector(cfg.back);
+                        if (b && visible(b)) focusEl(b);
+                    }
+                }, 60);
+            }).observe(box, { attributes: true, attributeFilter: ['hidden'] });
+        });
 
         document.addEventListener('keydown', onKey, true);
 
