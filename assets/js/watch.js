@@ -1158,8 +1158,14 @@
     renderActions();
 
     // Tavsif
+    // VAQTINCHA O'CHIRILGAN (foydalanuvchi so'rovi): tavsif matni va janr
+    // havolalari ("Bu sinov anime", Komediya, Fantaziya) ko'rsatilmaydi.
+    // Ma'lumot DB/API da saqlanib turadi — qaytarish uchun shu 3 qatorni
+    // olib tashlash kifoya.
     var d = el('watchDesc');
     if (!d) return;
+    d.hidden = true;
+    return;
     var desc = String(D.description || '').trim();
     var genres = S.genres || [];
     if (!desc && !genres.length) { d.hidden = true; return; }

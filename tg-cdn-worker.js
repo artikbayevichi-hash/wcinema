@@ -118,7 +118,12 @@ const FIRST_CHUNK = 2 * 1024 * 1024;
 //
 //   `moov` boshida bo'lsa (faststart) — umuman yuklamaymiz (traffik
 //   behuda emas).
-const TAIL_PREFETCH = 4 * 1024 * 1024;      // faylning oxiridan shuncha bayt
+// O'LCHANGAN: yangi filmlarning `moov` i 3.4–5.0 MB (masalan 4.23 MB,
+// 4.96 MB). 4 MB yetmasdi — brauzer indeksni so'raganda keshda topilmay,
+// yana Telegram'ga uchta RTT ketardi (fayl "ochilmayotgan"dek tuyulardi).
+// 8 MB barcha o'lchangan holatlarni qoplaydi (baytlar keshga yoziladi,
+// keyingi ochishda Telegram'ga umuman murojaat bo'lmaydi).
+const TAIL_PREFETCH = 8 * 1024 * 1024;      // faylning oxiridan shuncha bayt
 const TAIL_CACHE = new Map();               // size -> { start, bytes }
 const TAIL_MAX_ENTRIES = 2;                 // RAMni cheklovchi
 
@@ -373,7 +378,7 @@ function noop() { /* bo'sh */ }
 // ============================================================================
 const CACHE_NAME = 'wctg-chunks-v1';
 const CACHE_TTL = 24 * 60 * 60 * 1000;        // 24 soat
-const CACHE_MAX = 400 * 1024 * 1024;          // 400 MB
+const CACHE_MAX = 1024 * 1024 * 1024;         // 1 GB (kvota 55% dan oshmaydi)
 const CACHE_MAX_KEYS = 4096;
 const READAHEAD_BYTES = 20 * 1024 * 1024;     // 20 MB oldindan o'qish
 const INFLIGHT = new Map();                   // kalit -> Promise (ikki marta yuklamaslik)

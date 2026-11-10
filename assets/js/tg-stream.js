@@ -1601,7 +1601,7 @@
   //  (Ilgari keyingi reel uchun 1 MB fon rejimida tortilar edi — u aktiv
   //  video bilan bir klientda raqobatlashib, global `tgCap` ni pasaytirib
   //  butun oqimni sekinlashtirardi. Endi bunday yo'q.)
-  var HEAD_MAX = 512 * 1024;      // bitta Telegram bloki — RAM da kam
+  var HEAD_MAX = 1024 * 1024;     // bitta Telegram bloki — RAM da kam
   var HEAD_KEEP = 2;              // nechta hujjatni saqlaymiz
 
   // Kalit — hujjat id'si. MUHIM: `S.doc`/`S.loc` KESKGA YOZISH paytida
@@ -2081,44 +2081,119 @@
       });
     }
 
-    // 2) Katta yoki chegarani kesib o'tuvchi so'rov — bo'laklab yig'amiz.
+    // 2) Katta yoki chegarani kesib o'tuvchi so'rov.
+    //
+    // PARALLEL O'QISH. Ilgari har bir 1 MB blok KETMA-KET o'qilardi: har
+    // blok uchun to'liq RTT (150–400 ms) kutilardi, ya'ni 8 MB oraliq
+    // ~3 s olardi. Endi 4 tagacha Telegram so'rovi BIR VAQTDA yuboriladi:
+    // oraliq deyarli bitta RTT da keladi. Tartib saqlanadi — baytlar
+    // o'z joyiga (`buf` ichidagi aniq ofsetga) yoziladi, shuning uchun
+    // javoblar aralash kelishi muammo emas.
+    //
+    // Har bir so'rov baribir 1 MB blok ichida qoladi (Telegram qoidasi),
+    // `LIMIT_INVALID` kelsa `tgCap` ikkiga bo'linadi va o'sha bo'lak
+    // qaytadan, kichikroq o'lchamda o'qiladi.
     return (function () {
-      var parts = [], got = 0;
+      var LANES = 4;             // bir vaqtda nechta so'rov
 
-      function finish() {
-        if (!got) return new Uint8Array(0);
-        if (parts.length === 1) return parts[0];
-        var out = new Uint8Array(got), p = 0;
-        for (var i = 0; i < parts.length; i++) { out.set(parts[i], p); p += parts[i].length; }
-        return out;
+      // Oraliqni reja bo'laklariga bo'lamiz — har biri bitta blok ichida.
+      var plan = [], acc = 0;
+      while (acc < length) {
+        var off = offset + acc;
+        var skip = off - Math.floor(off / 4096) * 4096;
+        var fits = Math.min(tgCap, roomInBlock(off)) - skip;
+        if (fits < 1) fits = 1;
+        var piece = Math.min(fits, length - acc);
+        plan.push({ off: off, len: piece });
+        acc += piece;
       }
 
-      function step() {
-        if (got >= length) return finish();
-        if (ctx && ctx.abort && ctx.abort()) return finish();
-        var off = offset + got;
-        var skip = off - Math.floor(off / 4096) * 4096;
-        // Shu blokka sig'adigan maksimal foydali bayt soni.
-        var fits = Math.min(tgCap, roomInBlock(off)) - skip;
-        if (fits < 1) fits = 1;                    // hech qachon to'xtamasin
-        var piece = Math.min(fits, length - got);
-        return readOnce(off, piece, null, ctx).then(function (b) {
-          if (!b.length) return finish();          // fayl tugadi
-          parts.push(b);
-          got += b.length;
-          return step();
-        }, function (e) {
-          var m = (e && (e.errorMessage || e.message)) || String(e);
-          if (isLimitError(m) && tgCap > TG_MIN) {
-            tgCap = Math.max(TG_MIN, Math.floor(tgCap / 2));
-            return step();
-          }
-          if (got) return finish();                // borini qaytaramiz
-          throw e;
+      var parts = new Array(plan.length);   // indeks bo'yicha natijalar
+      var cursor = 0;
+      var firstErr = null;
+
+      // Bitta reja bo'lagini to'liq o'qish (blok chegarasiga rioya qilib).
+      function readSeg(seg) {
+        var buf = new Uint8Array(seg.len);
+        var got = 0;
+        var tries = 0;
+
+        function more() {
+          if (got >= seg.len) return Promise.resolve(got);
+          if (ctx && ctx.abort && ctx.abort()) return Promise.resolve(got);
+          var o = seg.off + got;
+          var s = o - Math.floor(o / 4096) * 4096;
+          var room = Math.min(tgCap, roomInBlock(o)) - s;
+          if (room < 1) room = 1;
+          var want = Math.min(room, seg.len - got);
+          return readOnce(o, want, null, ctx).then(function (b) {
+            if (!b.length) return got;             // fayl tugadi
+            buf.set(b, got);
+            got += b.length;
+            return more();
+          }, function (e) {
+            var m = (e && (e.errorMessage || e.message)) || String(e);
+            if (isLimitError(m) && tgCap > TG_MIN) {
+              tgCap = Math.max(TG_MIN, Math.floor(tgCap / 2));
+              return more();
+            }
+            // BIR MARTA qayta urinish. Parallel yo'laklarda bitta so'rov
+            // tasodifiy uzilishi mumkin (tarmoq/DC qisqa uzilishi). Ilgari
+            // butun oraliq shu sababli yiqilardi va video "ochilmadi" deb
+            // ko'rsatilardi. `FLOOD_WAIT` da kutish kerak (300 ms yetmaydi) —
+            // uni qayta urinmaymiz, pastdagi `serveRead` o'zi hal qiladi.
+            if (!/FLOOD_WAIT/.test(m) && tries < 1 && !(ctx && ctx.abort && ctx.abort())) {
+              tries++;
+              return new Promise(function (res) { setTimeout(res, 300); }).then(more);
+            }
+            throw e;
+          });
+        }
+
+        return more().then(function (n) {
+          if (!n) return new Uint8Array(0);
+          return n === seg.len ? buf : buf.subarray(0, n);
         });
       }
 
-      return step();
+      // Bitta "yo'lak": navbatdan reja olib, ketma-ket bajaradi. Bir nechta
+      // yo'lak parallel ishlaydi — natijada 4 ta so'rov bir vaqtda ketadi.
+      function lane() {
+        if (cursor >= plan.length) return Promise.resolve();
+        if (ctx && ctx.abort && ctx.abort()) return Promise.resolve();
+        var i = cursor++;
+        return readSeg(plan[i]).then(function (b) {
+          parts[i] = b;
+        }, function (e) {
+          parts[i] = null;
+          if (!firstErr) firstErr = e;
+        }).then(lane);
+      }
+
+      var lanes = [];
+      var n = Math.min(LANES, plan.length);
+      for (var i = 0; i < n; i++) lanes.push(lane());
+
+      return Promise.all(lanes).then(function () {
+        // Faqat UZLUKSIZ boshni qaytaramiz: agar o'rtada bo'lak yetishmasa
+        // (xato/tugash), keyingi baytlar noto'g'ri joyda bo'lib qolardi.
+        var chunks = [], total = 0;
+        for (var j = 0; j < plan.length; j++) {
+          var b = parts[j];
+          if (!b || !b.length) break;
+          chunks.push(b);
+          total += b.length;
+          if (b.length < plan[j].len) break;       // fayl tugadi
+        }
+        if (!total) {
+          if (firstErr) throw firstErr;            // hech narsa kelmadi — xato
+          return new Uint8Array(0);
+        }
+        if (chunks.length === 1) return chunks[0];
+        var out = new Uint8Array(total), p = 0;
+        for (var k = 0; k < chunks.length; k++) { out.set(chunks[k], p); p += chunks[k].length; }
+        return out;
+      });
     })();
   }
 
@@ -3138,6 +3213,32 @@
     var title = node.querySelector('[data-prep-title]');
     var note = node.querySelector('[data-prep-note]');
 
+    // ------------------------------------------------ QOTIB QOLISH QO'RIQCHISI
+    //
+    // NIMA UCHUN: yangi fayllarda (MKV/HEVC, MP4 indeksi fayl oxirida) remux
+    // boshlanadi-yu, `read()` dan bo'sh javob kelib jarayon JIM qotib qolishi
+    // mumkin. Foydalanuvchi "Tayyorlanmoqda…" ni cheksiz ko'radi va "film
+    // umuman ochilmayapti" deydi. Endi 75 soniya ichida video boshlanmasa —
+    // aniq xabar, qayta urinish va Telegram havolasi ko'rsatiladi.
+    var started = false;
+    var phase = '';
+    var lastLog = Date.now();
+    var deadline = Date.now() + 75000;
+    var guard = isPreview() ? 0 : setInterval(function () {
+      if (ctl.signal.aborted) { clearInterval(guard); return; }
+      if (started) { clearInterval(guard); return; }
+      if (v && (v.currentTime > 0.05 || v.readyState >= 2)) {
+        started = true; clearInterval(guard); return;
+      }
+      var heavy = phase === 'transcode' || phase === 'transcode-ffmpeg';
+      // Kodlash (transcode) uzoq davom etishi mumkin — faqat JIMLIKni tekshiramiz.
+      if (heavy ? (Date.now() - lastLog > 60000) : (Date.now() > deadline)) {
+        clearInterval(guard);
+        adaptiveFailed(node, opts, probe,
+          new Error('STALL: video ' + (heavy ? 'kodlashda jim qoldi' : '75 soniyada boshlanmadi')));
+      }
+    }, 1000);
+
     // Saytdagi mavjud boshqaruv (play/pause, seek, ovoz, to'liq ekran)
     // shu DOM tuzilmasiga bog'liq — shuning uchun ham xuddi shu
     // strukturani yasadik.
@@ -3167,10 +3268,12 @@
         filename: info.filename,
         read: read,
         signal: ctl.signal,
-        log: function (m) { if (note) note.textContent = m; },
+        log: function (m) { lastLog = Date.now(); if (note) note.textContent = m; },
         progress: function (i) {
           // Konvertatsiya o'ynashdan OLDINGA yig'ilishi mumkin — shuning
           // uchun haqiqiy "tayyor" foizi (media vaqti bo'yicha) ko'rsatiladi.
+          phase = i.phase || '';
+          lastLog = Date.now();
           var d = i.duration || 0;
           var media = d > 0 ? Math.min(1, (i.mediaTime + 1) / d) : 0;
           var conv = d > 0 ? Math.min(1, (i.ratio || 0)) : 0;
@@ -3183,6 +3286,7 @@
         }
       });
     }).then(function (h) {
+      if (guard) clearInterval(guard);
       if (ctl.signal.aborted) { h.stop(); return; }
       S.play = h;
       S.playAbort = null;
@@ -3205,6 +3309,7 @@
       // Konvertatsiya tugagach — hech narsa qolmasin.
       h.done.catch(function () { /* stop() da to'xtatiladi */ });
     }).catch(function (e) {
+      if (guard) clearInterval(guard);
       // Bekor qilingan bo'lsa — xato emas, foydalanuvchi filmni yopdi.
       if (e && e.name === 'AbortError') return;
       var m = (e && (e.errorMessage || e.message)) || String(e);
@@ -3265,11 +3370,18 @@
     // `LIMIT_INVALID` (Telegram so'rov hajmini rad etdi) — bu FORMAT
     // emas, o'qish/tarmoq xatosi. Formatga tegishli xato faqat
     // kodek haqiqatan dekodlanmaganda chiqadi (`UNSUPPORTED_CODEC`).
-    var isFormat = /UNSUPPORTED_CODEC|undecodable_source_codec|canDecodeVideo/i.test(m);
+    var isFormat = /UNSUPPORTED_CODEC|undecodable_source_codec|canDecodeVideo|FORMAT_UNKNOWN|NO_VIDEO_TRACK|CANNOT_ENCODE/i.test(m);
+    var isStall = /^STALL/.test(m);
     var reason, sub;
-    if (isFormat) {
+    if (isStall) {
+      reason = 'Bu fayl brauzer ichida tayyorlanmadi';
+      sub = 'Sabab: ' + m.replace(/^STALL:\s*/, '') + '. Fayl formati (MKV/HEVC) '
+        + 'yoki Telegram oqimi to‘xtab qoldi. Pastdagi tugma orqali Telegram ilovasida oching — '
+        + 'u yerda muammosiz o‘ynaydi.';
+    } else if (isFormat) {
       reason = 'Bu formatni brauzer ichida ochib bo‘lmadi';
-      sub = 'Sabab: ' + m + ' (serverdan kelgan baytlar to‘g‘ri, muammo formatda)';
+      sub = 'Sabab: ' + m + '. Telegram ilovasida bu film normal o‘ynaydi — '
+        + 'pastdagi havoladan foydalaning.';
     } else {
       reason = 'Videoni tayyorlashda xatolik yuz berdi';
       sub = 'Sabab: ' + m + '. Bu video formati xatosi ekanini anglatmaydi; Telegram oqimi '

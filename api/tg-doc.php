@@ -58,10 +58,11 @@ function apiFail($message, $status = 400) {
 // Kesh format versiyasi. 2 = `file_reference` va atributlar TO'G'RI o'qiladi
 // (1-versiyada `fr` har doim bo'sh qolardi).
 const TG_DOC_CACHE_VER = 2;
-// `file_reference` muddati bilan bog'liq. 10 daqiqa — eskirgan havola
-// brauzerda FILE_REFERENCE_EXPIRED beradi va u o'zi yangilaydi, lekin
-// qisqa kesh = kamroq kechikish.
-const TG_DOC_CACHE_TTL = 600;
+// `file_reference` muddati bilan bog'liq. 30 daqiqa: shu vaqt ichida
+// qayta ochilgan film/metadata uchun Telegram'ga UMUMAN murojaat bo'lmaydi
+// (ochilishdagi ~150 ms kechikish yo'qoladi). Eskirgan havola bo'lsa
+// brauzer FILE_REFERENCE_EXPIRED oladi va o'zi yangilaydi.
+const TG_DOC_CACHE_TTL = 1800;
 // Bitta so'rovda nechta video (Telegram flood himoyasi uchun).
 const TG_DOC_MAX_BATCH  = 120;
 

@@ -425,11 +425,11 @@
             url: box.dataset.url || '',
             deep: box.dataset.deep || ''
         };
-        if (typeof window.TgStream.warmMedia === 'function') {
-            try { window.TgStream.warmMedia(opts); } catch (e) {}
-        }
+        // BITTA chaqiruv: 4 MB warm-up birinchi kadr bilan musobaqalashib,
+        // ochilishni sekinlashtirardi. Joriy slayd uchun faqat ~256 KB
+        // (probe + fayl boshi + moov) yetarli — qolgani oqim davomida keladi.
         if (typeof window.TgStream.prefetch === 'function') {
-            try { window.TgStream.prefetch(opts); } catch (e) {}
+            try { window.TgStream.prefetch(Object.assign({}, opts, { warmBytes: 256 * 1024 })); } catch (e) {}
         }
     }
 
@@ -597,13 +597,12 @@
             deep: box.dataset.deep || ''
         };
 
-        // Metama'lumot oldindan tayyorlanadi (tez ochilish).
+        // Bitta chaqiruv: metama'lumot + ~2 MB bosh bayt. Birinchi kadr uchun
+        // yetarli, lekin joriy oqimni bo'g'ib qo'ymaydi (avvalgi 4 MB ortiqcha).
         if (typeof window.TgStream.prefetch === 'function') {
-            try { window.TgStream.prefetch(opts); } catch (e) {}
-        }
-        // Bayt darajasida "isitish": fayl boshi + indeks RAM ga.
-        if (typeof window.TgStream.warmMedia === 'function') {
-            try { window.TgStream.warmMedia(opts); } catch (e) {}
+            try {
+                window.TgStream.prefetch(Object.assign({}, opts, { warmBytes: 2 * 1024 * 1024 }));
+            } catch (e) {}
         }
     }
 

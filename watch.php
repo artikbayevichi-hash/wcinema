@@ -216,23 +216,11 @@ $WATCH = [
     'episodes'  => $episodes,
     'selectedId' => $selected ? (int) $selected['id'] : 0,
     'playback'  => $playback,
-    // Telegram'ning RASMIY embed pleyeri uchun ma'lumot.
-    //
-    // `t.me/<kanal>/<post>?embed=1` sahifasi video baytlarini Telegram'ning
-    // o'z CDN'idan beradi — ya'ni Telegram Web'dagi kabi tez, sayt serveri
-    // esa baytlarni umuman ko'rmaydi.
-    //
-    // Faqat OMMAVIY kanal postlari uchun ishlaydi: `t.me/c/<id>/<post>`
-    // (xususiy kanal) da kanal nomi yo'q, shuning uchun `null` qaytaramiz va
-    // `watch.js` avvalgidek o'z MTProto pleyerimizni ishlatadi.
-    'tgEmbed'   => ($playback && ($playback['type'] ?? '') === 'telegram'
-                    && !empty($playback['channel'])
-                    && (int) ($playback['post'] ?? 0) > 0)
-        ? [
-            'channel' => (string) $playback['channel'],
-            'post'    => (int) $playback['post'],
-        ]
-        : null,
+    // Telegram RASMIY embed pleyeri O'CHIRILGAN: sayt faqat o'z MTProto
+    // pleyerimizdan (Service Worker + tg-stream.js) foydalanadi. Pleyer
+    // tanlash paneli ham olib tashlangan. Qaytarish kerak bo'lsa, shu
+    // qiymatni yana massiv qilib to'ldirish kifoya.
+    'tgEmbed'   => null,
     'progress'  => $progress,
     'hasPlaylist' => $hasPlaylist,
     'related'   => $related,
@@ -334,11 +322,8 @@ $NAV_ACTIVE = 'home';
             <div class="watch-player" id="watchPlayer"
                  style="<?php echo $watchPoster !== '' ? '--wposter:url(&quot;' . esc($watchPoster) . '&quot;)' : ''; ?>"></div>
 
-            <?php /* Pleyer tanlovi: "⚡ Tez" (Telegram rasmiy embed pleyeri —
-                     video baytlari Telegram CDN'dan) va "▶ Bizning pleyer"
-                     (MTProto + Service Worker). Faqat ommaviy Telegram
-                     postida ko'rinadi; ro'yxatni `watch.js` to'ldiradi. */ ?>
-            <div class="watch-pmode" id="watchPMode" hidden></div>
+            <?php /* Pleyer tanlash paneli olib tashlandi: saytda faqat o'z
+                     MTProto pleyerimiz ishlaydi. */ ?>
 
             <!-- Sarlavha + YouTube uslubidagi meta qatori
 
