@@ -124,7 +124,13 @@ const FIRST_CHUNK = 2 * 1024 * 1024;
 // 8 MB barcha o'lchangan holatlarni qoplaydi (baytlar keshga yoziladi,
 // keyingi ochishda Telegram'ga umuman murojaat bo'lmaydi).
 const TAIL_PREFETCH = 8 * 1024 * 1024;      // faylning oxiridan shuncha bayt
+const TAIL_LANES = 8;                       // 8 × 512 KB = 4 MB bir raundda
 const TAIL_CACHE = new Map();               // size -> { start, bytes }
+// Davom etayotgan prefetch promise'i. Nima uchun kerak: brauzer `moov` ni
+// zaxira tayyor bo'lishidan OLDIN so'rasa, ilgari o'sha 8 MB Telegram'dan
+// IKKINCHI marta tortilardi (prefetch + so'rov) — sekin va isrof. Endi
+// so'rov prefetch tugashini kutadi va baytlarni keshdan oladi.
+const TAIL_PROMISE = new Map();             // size -> Promise
 const TAIL_MAX_ENTRIES = 2;                 // RAMni cheklovchi
 
 // `moov` boshdagi baytlarda bormi? MP4 qutilarini (box) boshidan yurib
@@ -317,12 +323,14 @@ function applyMp4Fix(doc, start, size, u8) {
 // `doc` berilsa u DISK keshiga ham yoziladi — qayta ochishda indeks darhol
 // tayyor bo'ladi (RTT ham, Telegram trafigi ham tejaladi).
 function prefetchTail(size, doc) {
-  if (size <= TAIL_PREFETCH) return;              // kichik faylda muammo yo'q
-  if (TAIL_CACHE.has(size)) return;
+  if (size <= TAIL_PREFETCH) return Promise.resolve(null);   // kichik faylda muammo yo'q
+  const ready = TAIL_CACHE.get(size);
+  if (ready && ready.bytes) return Promise.resolve(ready);    // allaqachon tayyor
+  if (TAIL_PROMISE.has(size)) return TAIL_PROMISE.get(size);  // davom etyapti
   const start = size - TAIL_PREFETCH;
   // Kesh kalitini oldindan band qilamiz — ikki marta yuklanmasin.
   TAIL_CACHE.set(size, null);
-  readRange(start, TAIL_PREFETCH, size, doc).then(function (bytes) {
+  const p = readRange(start, TAIL_PREFETCH, size, doc, TAIL_LANES).then(function (bytes) {
     if (bytes && bytes.length) {
       TAIL_CACHE.set(size, { start: start, bytes: bytes });
     } else {
@@ -331,9 +339,32 @@ function prefetchTail(size, doc) {
     while (TAIL_CACHE.size > TAIL_MAX_ENTRIES) {
       TAIL_CACHE.delete(TAIL_CACHE.keys().next().value);
     }
+    return TAIL_CACHE.get(size) || null;
   }).catch(function () {
     TAIL_CACHE.delete(size);
+    return null;
+  }).then(function (v) {
+    if (TAIL_PROMISE.get(size) === p) TAIL_PROMISE.delete(size);
+    return v;
   });
+  TAIL_PROMISE.set(size, p);
+  return p;
+}
+
+// So'ralgan oraliq tayyorlanishini KUTAMIZ (takroriy yuklash o'rniga).
+// Faqat prefetch oynasi ichidagi so'rovlar uchun; aks holda darhol `null`.
+async function awaitTail(start, want, size, doc, ms) {
+  const p = TAIL_PROMISE.get(size);
+  if (!p) return null;
+  const win = size - TAIL_PREFETCH;
+  if (start < win || start + want > size) return null;
+  let timer = null;
+  const timeout = new Promise(function (res) {
+    timer = setTimeout(function () { res(null); }, Math.max(1000, ms || 6000));
+  });
+  try { await Promise.race([p, timeout]); } catch (e) { /* pastda keshdan tekshiramiz */ }
+  if (timer) clearTimeout(timer);
+  return tailFromCache(start, want, size);
 }
 
 // So'ralgan oraliq keshda bormi? (butunlay sig'ishi kerak)
@@ -894,6 +925,17 @@ self.addEventListener('message', (e) => {
     return;
   }
 
+  // --- Fayl oxirini (MP4 indeksini) oldindan yuklash -------------------
+  //
+  // Sahifa filmni ochishdan OLDIN yuboradi (mount/prefetch paytida). Shu
+  // tufayli brauzer `moov` ni so'raganda javob keshdan, bir zumda bo'ladi.
+  // Ilgari prefetch faqat birinchi media-javob ichida boshlanardi — ya'ni
+  // brauzer allaqachon kutib turgan paytda.
+  if (d.type === 'warmtail') {
+    if (d.size > 0) prefetchTail(Number(d.size), String(d.doc || ''));
+    return;
+  }
+
   // --- So'rov natijasi keldi (sahifadan) -----------------------------
   if (d.type === 'result') {
     const i = waiting.findIndex((j) => j.id === d.id);
@@ -1159,9 +1201,13 @@ function readRangeSerial(start, goal) {
 //
 // Telegram 1 MB blok chegarasini kesib o'tish taqiqlangan — CHUNK (512 KB)
 // va uning karrali oynalar bu chegaraga har doim sig'adi.
-async function readRangeGrid(start, goal, size, doc) {
+async function readRangeGrid(start, goal, size, doc, lanes) {
   const end = Math.min(size, start + goal);
   if (end <= start) return new Uint8Array(0);
+
+  // Bir raundda nechta oyna (512 KB) parallel o'qiladi. Tail prefetch uchun
+  // 8 ta beriladi: 8 MB lik indeks 4 raund o'rniga 2 raundda keladi.
+  const par = Math.max(1, Math.min(Number(lanes) || PARALLEL, 8));
 
   const out = new Uint8Array(end - start);
   let filled = 0;
@@ -1171,7 +1217,7 @@ async function readRangeGrid(start, goal, size, doc) {
     // Navbatdagi PARALLEL ta oynani rejalashtiramiz (tartib aniq).
     const batch = [];
     let b = w;
-    while (batch.length < PARALLEL && b < end) {
+    while (batch.length < par && b < end) {
       const len = Math.min(CHUNK, size - b);
       if (len <= 0) break;
       batch.push({ off: b, want: len });
@@ -1225,13 +1271,13 @@ async function readRangeGrid(start, goal, size, doc) {
 // `doc` berilgan bo'lsa avval KESHLI grid yo'lini sinaymiz (disk cache +
 // Telegram). U ishlamasa — quyidagi tekshirilgan eski yo'llar o'zgarishsiz
 // ishlatiladi.
-async function readRange(start, want, size, doc) {
+async function readRange(start, want, size, doc, lanes) {
   const goal = Math.min(want, size - start);
   if (goal <= 0) return new Uint8Array(0);
 
   if (doc && CACHE_OK) {
     try {
-      return await readRangeGrid(start, goal, size, doc);
+      return await readRangeGrid(start, goal, size, doc, lanes);
     } catch (err) {
       const msg = String((err && err.message) || err);
       if (msg === 'NO_PROVIDER') throw err;
@@ -1744,7 +1790,12 @@ self.addEventListener('fetch', (e) => {
     let bytes;
     // MP4 indeksi (moov) oldindan yuklangan bo'lishi mumkin — Telegram'ga
     // murojaat qilmasdan, shu zaxiradan qaytaramiz (1 RTT tejaladi).
-    const cached = tailFromCache(start, want, size);
+    let cached = tailFromCache(start, want, size);
+    // Zaxira hali TAYYOR EMAS, lekin yuklanmoqda — kutamiz. Bu Telegram'ga
+    // ikkinchi marta murojaat qilishning oldini oladi (moov 2× yuklanmaydi).
+    if (!cached) {
+      cached = await awaitTail(start, want, size, cacheDoc);
+    }
     if (cached && cached.length) {
       STATS.requests++;
       STATS.bytes += cached.length;

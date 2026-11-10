@@ -598,7 +598,11 @@ $NAV_ACTIVE = 'home';
                         channel: currentPlayback.channel,
                         post: currentPlayback.post,
                         metadataOnly: true,
-                        warmBytes: warmCurrentHead
+                        warmBytes: warmCurrentHead,
+                        // Fayl oxiridagi MP4 indeksini (moov) HOZIR yuklashni
+                        // boshlaymiz — player mount bo'lishidan oldin. Brauzer
+                        // indeksni so'raganda javob keshdan, bir zumda keladi.
+                        warmTail: warmCurrentHead > 0
                     }).catch(function () {
                         if (!window.TgStream.hasSession()) {
                             location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');

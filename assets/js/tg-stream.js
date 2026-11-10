@@ -1536,10 +1536,34 @@
       ctl.postMessage({ type: 'provide', size: S.size }, [S.chan.port2]);
       // SW R2 keshini to'ldirishi uchun ruxsat (faqat Wi-Fi/ethernet).
       try { ctl.postMessage({ type: 'seed', ok: canSeed() }); } catch (e) {}
+      // MP4 indeksini (moov) DARHOL oldindan yuklashni boshlaymiz. Shu
+      // tufayli brauzer indeksni so'raganda u allaqachon keshda bo'ladi.
+      var did = (S.loc && S.loc.id != null) ? S.loc.id
+        : (S.doc && S.doc.id != null) ? S.doc.id : '';
+      warmTail(S.size, did);
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  // Fayl oxirini (MP4 `moov` indeksini) fonda yuklashni boshlaydi.
+  //
+  // Nima uchun alohida funksiya: indeksni iloji boricha EARLIROQ so'rash
+  // kerak — hatto player hali mount bo'lmagan (prefetch bosqichida) paytda.
+  // SW hali tayyor bo'lmasa, `ensureWorker()` tugashini kutamiz va keyin
+  // yuboramiz — xabar yo'qolmaydi.
+  function warmTail(size, docId) {
+    try {
+      if (!(Number(size) > 0) || docId == null || docId === '') return;
+      var msg = { type: 'warmtail', size: Number(size), doc: String(docId) };
+      var ctl = swCtl();
+      if (ctl) { ctl.postMessage(msg); return; }
+      ensureWorker().then(function () {
+        var c = swCtl();
+        if (c) c.postMessage(msg);
+      }).catch(function () { /* film ochilganda connect() yuboradi */ });
+    } catch (e) { /* ixtiyoriy tezlashtirish */ }
   }
 
   // Telegram'dan aniq oraliqni o'qish.
@@ -3670,6 +3694,9 @@
       headSize(doc.id, size);
       S.pvCache = S.pvCache || {};
       S.pvCache[key] = { t: Date.now(), doc: doc, size: size, loc: loc, probe: probe, fromFast: true };
+      // Joriy film: indeksni hozir, player mount bo'lishidan OLDIN yuklashni
+      // boshlaymiz. Brauzer `moov` so'raganda javob keshdan keladi.
+      if (opts.warmTail) warmTail(size, doc.id);
 
       // Faqat joriy video uchun (ixtiyoriy) bosh baytlarni oldindan olamiz.
       var warm = Math.min(Number(opts.warmBytes) || 0, 4 * 1024 * 1024);
@@ -3734,7 +3761,14 @@
     // Keyingi videolar uchun ortiqcha warm yo'q. Joriy watch sahifasi
     // `warmBytes` bersagina, o'sha miqdor oldindan olinadi (4 MiB bilan cheklanadi).
     var hit = S.pvCache && S.pvCache[key];
-    if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) return Promise.resolve(true);
+    if (hit && (Date.now() - hit.t) < 20 * 60 * 1000) {
+      // Keshda bor, lekin indeks hali yuklanmagan bo'lishi mumkin — baribir
+      // "warmtail" yuboramiz (SW takroriy ishni o'zi bloklaydi).
+      if (opts.warmTail && hit.size) {
+        warmTail(hit.size, (hit.loc && hit.loc.id) || (hit.doc && hit.doc.id));
+      }
+      return Promise.resolve(true);
+    }
 
     // Xuddi shu hujjat allaqachon yuklanmoqda.
     if (S.prefetchKey === key && S.prefetchPromise) return S.prefetchPromise;
@@ -3821,6 +3855,7 @@
             // Metadata'ni darhol ko'rinadigan qilamiz; player tugallanishini
             // kutmasdan ochilishi mumkin, warm read esa fon rejimida yakunlanadi.
             S.pvCache[key] = cacheEntry;
+            if (opts.warmTail) warmTail(size, doc.id);
             var warm = warmBytes ? readBytes(0, warmBytes, ctx).catch(function () { return null; })
               : Promise.resolve(null);
             return warm.then(function () {

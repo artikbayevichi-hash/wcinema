@@ -429,7 +429,7 @@
         // ochilishni sekinlashtirardi. Joriy slayd uchun faqat ~256 KB
         // (probe + fayl boshi + moov) yetarli — qolgani oqim davomida keladi.
         if (typeof window.TgStream.prefetch === 'function') {
-            try { window.TgStream.prefetch(Object.assign({}, opts, { warmBytes: 256 * 1024 })); } catch (e) {}
+            try { window.TgStream.prefetch(Object.assign({}, opts, { warmBytes: 256 * 1024, warmTail: true })); } catch (e) {}
         }
     }
 
