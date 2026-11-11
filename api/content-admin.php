@@ -429,17 +429,25 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         }
     }
 
-    // Telegram post/CDN manzillari vaqtinchalik bo‘lishi yoki hotlinkni
-    // bloklashi mumkin. Saqlash vaqtida posterning lokal nusxasini olamiz.
-    // Poster berilmagan bo‘lsa, yuqoridagi first_episode_url’dan Telegram
-    // preview-kadr olinadi — bu video uchun avtomatik poster bo‘ladi.
+    // Poster DISKKA YOZILMAYDI.
+    //
+    // Ilgari bu yerda `downloadImage()` chaqirilib, rasm
+    // `uploads/posters/tg_*.jpg` ga saqlanardi. Endi poster xuddi video
+    // kabi Telegram'ning o'zidan ochiladi:
+    //
+    //   • t.me havolasi  -> `TgResolve::image()` orqali CDN manzilga
+    //                       aylantiriladi (https://cdn*.telesco.pe/file/…)
+    //   • CDN manzili    -> o'zgartirilmasdan saqlanadi
+    //   • CDN topilmasa  -> t.me havolasi qoladi (uni `Catalog::posterSrc()`
+    //                       `api/tg-resolve.php?mode=img` proksisiga
+    //                       aylantiradi), ya'ni sayt baribir ishlaydi.
     if (!empty($fields['poster'])) {
         $posterHost = strtolower((string) parse_url((string) $fields['poster'], PHP_URL_HOST));
-        if (preg_match('#(^|\.)(t\.me|telegram\.me|telesco\.pe|cdn-telegram\.org)$#i', $posterHost)) {
+        if (preg_match('#(^|\.)(t\.me|telegram\.me)$#i', $posterHost)) {
             try {
-                $localPoster = (new TgResolve())->downloadImage((string) $fields['poster']);
-                if ($localPoster) {
-                    $fields['poster'] = $localPoster;
+                $cdn = (new TgResolve())->image((string) $fields['poster']);
+                if (is_string($cdn) && preg_match('#^https?://#i', $cdn)) {
+                    $fields['poster'] = $cdn;
                 }
             } catch (Throwable $e) {
                 error_log('[content-admin] Telegram poster: ' . $e->getMessage());

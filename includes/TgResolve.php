@@ -286,11 +286,15 @@ class TgResolve {
     }
 
     /**
-     * t.me post rasm (poster) ni SERVERGA yuklab oladi.
+     * ESKIRGAN - YANGI KODDA ISHLATILMAYDI.
      *
-     * Agar $url t.me post havolasi bo'lsa, avval og:image CDN topiladi
-     * (kesh orqali), so'ngra u uploads/posters/ ga saqlanadi va
-     * "uploads/posters/tg_....ext" qaytariladi. Muvaffaqiyatsiz -> null.
+     * Ilgari t.me post posterini serverga (`uploads/posters/tg_*.jpg`)
+     * yuklab olardi. Endi posterlar DISKKA YOZILMAYDI: ular xuddi video
+     * kabi Telegram CDN'dan to'g'ridan-to'g'ri ochiladi (`image()`),
+     * shuning uchun bu metod faqat eski chaqiruvlarni buzmaslik uchun
+     * qoldirilgan.
+     *
+     * Yangi kodda `image()` ishlatilsin.
      */
     public function downloadImage($url) {
         $src = trim((string) $url);
