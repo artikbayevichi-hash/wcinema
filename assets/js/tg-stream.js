@@ -1610,6 +1610,71 @@
     } catch (e) { /* ixtiyoriy tezlashtirish */ }
   }
 
+  // ==================================== KESHNI OLDINDAN "URUG'LANTIRISH"
+  //
+  // NIMA UCHUN
+  //   `watch.php` ochilganda pleerning eng birinchi `<video>` so'rovi aynan
+  //   fayl boshidan boshlanadi. O'sha baytlar allaqachon qo'lda (hover yoki
+  //   warm-up paytida) o'qilgan bo'lsa ham, ular faqat RAM'da yotadi va
+  //   sahifa almashganda (klik -> navigatsiya) YO'QOLADI.
+  //
+  //   Bu funksiya o'sha baytlarni Service Worker keshiga (Cache API) yozadi.
+  //   Cache API butun origin uchun umumiy, sahifa yopilsa ham qoladi. Natijada
+  //   yangi sahifadagi birinchi 1 MB Telegram'ga umuman murojaat qilmasdan,
+  //   DISKDAN bir zumda keladi — video "yorug'lik tezligida" boshlanadi.
+  //
+  //   Kalit formati `tg-cdn-worker.js` dagi `chunkKey()` bilan AYNAN bir xil
+  //   bo'lishi shart, aks holda SW uni topa olmaydi.
+  var SEED_CACHE = 'wctg-chunks-v1';
+  var SEED_CHUNK = 512 * 1024;          // SW dagi CHUNK bilan bir xil
+  var SEED_LIMIT = 2 * 1024 * 1024;     // bir hujjat uchun ko'pi 2 MB
+  var SEEDED = {};                      // doc -> vaqt (takror yozmaslik uchun)
+
+  function seedChunks(docId, u8, size) {
+    if (!docId || !u8 || !u8.length) return;
+    if (typeof caches === 'undefined' || !caches.open) return;
+
+    var id = String(docId);
+    if (!/^[0-9]{1,20}$/.test(id)) return;      // `?doc=` bilan bir xil qoida
+
+    // Bir hujjat uchun 2 MB dan ko'pini yozmaymiz va 5 daqiqada bir martadan
+    // ko'p takrorlamaymiz — kesh bekorga to'lib ketmasin.
+    var now = Date.now();
+    if (SEEDED[id] && (now - SEEDED[id]) < 5 * 60 * 1000) return;
+
+    var total = Math.min(u8.length, SEED_LIMIT);
+    var jobs = [];
+    for (var off = 0; off + 4096 <= total; off += SEED_CHUNK) {
+      var len = Math.min(SEED_CHUNK, total - off);
+      if (size && off + len > size) len = size - off;
+      if (len <= 0) break;
+      jobs.push({ off: off, len: len });
+    }
+    if (!jobs.length) return;
+    SEEDED[id] = now;
+
+    var origin = location.origin;
+    caches.open(SEED_CACHE).then(function (cache) {
+      var chain = Promise.resolve();
+      jobs.forEach(function (j) {
+        var key = origin + '/__wctg/chunk/' + id + '/' + j.off + '/' + j.len;
+        // `slice` nusxa beradi: asl massiv keyingi o'qishlarda o'zgarishi mumkin.
+        var body = u8.slice(j.off, j.off + j.len);
+        chain = chain.then(function () {
+          return cache.put(key, new Response(body, {
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'Content-Length': String(j.len),
+              'X-WC-At': String(Date.now()),
+              'X-WC-Len': String(j.len)
+            }
+          }));
+        });
+      });
+      chain.catch(function () { /* kvota to'ldi — oqimga ta'sir qilmaydi */ });
+    }, function () { /* Cache API yo'q */ });
+  }
+
   // Telegram'dan aniq oraliqni o'qish.
   //
   // TELEGRAM QOIDALARI (biri buzilsa "LIMIT_INVALID" keladi):
@@ -1671,6 +1736,12 @@
   //  butun oqimni sekinlashtirardi. Endi bunday yo'q.)
   var HEAD_MAX = 1024 * 1024;     // bitta Telegram bloki — RAM da kam
   var HEAD_KEEP = 2;              // nechta hujjatni saqlaymiz
+
+  // Hozir yuklanayotgan "bosh" bo'lak. Warm-up 1 MB ni o'qib turganda pleer
+  // aynan shu 1 MB ni qayta so'rasa — IKKINCHI so'rov yubormaymiz, o'sha
+  // javobni kutamiz. Aks holda 2 ta bir xil `upload.getFile` parallel ketib,
+  // birinchi kadr sun'iy ravishda sekinlashardi.
+  var HEAD_FETCH = {};            // id -> { p: Promise<Uint8Array>, end: bayt }
 
   // Kalit — hujjat id'si. MUHIM: `S.doc`/`S.loc` KESKGA YOZISH paytida
   // emas, SO'ROVNING BOSHI da olinadi. Aks holda (foydalanuvchi shu paytda
@@ -2070,13 +2141,41 @@
     return u8.slice(skip, skip + Math.min(length, u8.length - skip));
   }
 
+  // Warm-up boshlagan o'qishni kutish (tavsif: `HEAD_FETCH` yuqorida).
+  function pendingHeadRead(id, offset, length, ctx) {
+    var e = id ? HEAD_FETCH[id] : null;
+    if (!e || offset >= e.end) return null;
+    return e.p.then(function (buf) {
+      if (!buf || !buf.length) return readBytesRemote(offset, length, ctx);
+      var end = Math.min(offset + length, buf.length);
+      if (end <= offset) return readBytesRemote(offset, length, ctx);
+      var part = buf.slice(offset, end);
+      if (part.length >= length) return part;
+      // Warm-up so'ragan oraliq qisqaroq bo'lgan (fayl kichik) — qolganini
+      // odatdagi yo'l bilan olamiz.
+      return readBytesRemote(offset + part.length, length - part.length, ctx).then(function (rest) {
+        if (!rest || !rest.length) return part;
+        var out = new Uint8Array(part.length + rest.length);
+        out.set(part, 0);
+        out.set(rest, part.length);
+        return out;
+      });
+    }, function () {
+      return readBytesRemote(offset, length, ctx);
+    });
+  }
+
   // To'liq oraliqni o'qish. Avval disk keshi tekshiriladi, topilmasa
   // `readBytesRemote` orqali Telegram'dan o'qiladi.
   function readBytes(offset, length, ctx) {
     if (!(length > 0)) return Promise.resolve(new Uint8Array(0));
     if (ctx && ctx.abort && ctx.abort()) return Promise.resolve(new Uint8Array(0));
 
-    // 00) Disk keshi. Fayl avval to'liq ko'rilgan bo'lsa, Telegram'ga
+    // 00) Warm-up hozir shu baytlarni yuklayapti — takroriy so'rov yubormaymiz.
+    var pend = pendingHeadRead(headId(ctx), offset, length, ctx);
+    if (pend) return pend;
+
+    // 01) Disk keshi. Fayl avval to'liq ko'rilgan bo'lsa, Telegram'ga
     //     UMUMAN murojaat qilmaymiz — javob mahalliy diskdan keladi.
     var p = docBlobGet(headId(ctx));
     if (!p) return readBytesRemote(offset, length, ctx);
@@ -3754,16 +3853,27 @@
       warm = Math.min(warm, 1024 * 1024);
       warm = Math.floor(warm / 4096) * 4096;
       if (!warm) return true;
-      return f.getFile({
+      var hk = String(doc.id);
+      var rawP = f.getFile({
         id: doc.id,
         accessHash: doc.accessHash,
         fileReference: doc.fileReference,
         thumbSize: '',
         dcId: doc.dcId
       }, 0, warm).then(function (b) {
-        headPut(doc.id, 0, b instanceof Uint8Array ? b : new Uint8Array(b));
-        return true;
-      }).catch(function (e) {
+        var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
+        headPut(doc.id, 0, u8);
+        // Kelajakdagi sahifa (klik -> watch.php) uchun diskka ham yozamiz.
+        if (opts.cacheSeed) seedChunks(doc.id, u8, size);
+        return u8;
+      });
+      // Pleerning birinchi so'rovi shu o'qishni kutadi (takroriy yuklash yo'q).
+      HEAD_FETCH[hk] = { p: rawP, end: warm };
+      var clearHead = function () {
+        if (HEAD_FETCH[hk] && HEAD_FETCH[hk].p === rawP) delete HEAD_FETCH[hk];
+      };
+      rawP.then(clearHead, clearHead);
+      return rawP.then(function () { return true; }).catch(function (e) {
         var msg = (e && (e.errorMessage || e.message)) || String(e);
         // Telegram bu hujjatni rad etdi — tez yo'l BU HUJJAT uchun
         // ishlamaydi. Yozuvni tozalab, eski (GramJS) yo'lga qaytamiz.
@@ -3907,8 +4017,19 @@
             if (opts.warmTail) warmTail(size, doc.id);
             var warm = warmBytes ? readBytes(0, warmBytes, ctx).catch(function () { return null; })
               : Promise.resolve(null);
-            return warm.then(function () {
+            if (warmBytes) {
+              // Pleerning birinchi so'rovi shu o'qishni kutadi — ikki marta
+              // yuklamaymiz (tez yo'ldagi bilan bir xil mantiq).
+              var hk = String(doc.id);
+              HEAD_FETCH[hk] = { p: warm, end: warmBytes };
+              var clearHead = function () {
+                if (HEAD_FETCH[hk] && HEAD_FETCH[hk].p === warm) delete HEAD_FETCH[hk];
+              };
+              warm.then(clearHead, clearHead);
+            }
+            return warm.then(function (b) {
               if (aborted) return false;
+              if (b && b.length && opts.cacheSeed) seedChunks(doc.id, b, size);
               cacheEntry.t = Date.now();
               return true;
             });
