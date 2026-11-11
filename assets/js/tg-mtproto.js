@@ -1010,6 +1010,45 @@
         let keyIdLong = 0n;
         for (let i = 7; i >= 0; i--) keyIdLong = (keyIdLong << 8n) | BigInt(conn.keyId[i]);
 
+        // --- BOSHQA DC'LAR UCHUN auth_key'lar ------------------------------
+        // Telegram har bir DC uchun ALOHIDA auth_key talab qiladi: boshqa DC
+        // manziliga "uy" DC kaliti bilan murojaat qilinsa, server
+        // AUTH_KEY_UNREGISTERED qaytaradi (natijada oqim GramJS'ga tushib,
+        // 5.4 MB bundle + DH handshake + export/import — 5–40 s).
+        //
+        // GramJS o'zi ishlagan paytda har bir DC uchun kalit yaratib,
+        // `session.authKeys` da saqlaydi. `tg-stream.js` shu kalitlarni
+        // localStorage'ga ko'chirib qo'yadi (`harvestDcKeys`) va keyingi
+        // sahifa yuklanishida shu yerga beradi — u holda tez klient barcha
+        // DC'larga to'g'ridan-to'g'ri ulanadi (bundle ham, handshake ham yo'q).
+        const dcKeys = new Map();
+
+        function asU8(v) {
+            if (!v) return null;
+            if (v instanceof Uint8Array) return v;
+            if (typeof ArrayBuffer !== 'undefined' && v instanceof ArrayBuffer) return new Uint8Array(v);
+            if (v.buffer && v.byteLength === v.buffer.byteLength) return new Uint8Array(v.buffer);
+            if (Array.isArray(v)) return new Uint8Array(v);
+            return null;
+        }
+
+        function addDcKey(id, raw) {
+            const n = Number(id);
+            const k = asU8(raw);
+            if (!(n > 0) || !k || k.length !== 256) return false;
+            dcKeys.set(n, { authKey: k, keyId: sha1(k).subarray(12, 20) });
+            return true;
+        }
+
+        if (opts.dcKeys && typeof opts.dcKeys === 'object') {
+            Object.keys(opts.dcKeys).forEach(function (id) { addDcKey(id, opts.dcKeys[id]); });
+        }
+
+        /** Berilgan DC uchun kalit: saqlangan bo'lsa — o'sha, aks holda uy DC. */
+        function keyFor(id) {
+            return dcKeys.get(Number(id)) || { authKey: session.authKey, keyId: conn.keyId };
+        }
+
         const clients = new Map();
 
         // --- Ulanishlar havzasi (pool) -----------------------------------
@@ -1030,9 +1069,10 @@
         let poolBroken = false;
 
         function newExtraConnection(id) {
+            const k = keyFor(id);
             const c = new MtConnection({
-                authKey: session.authKey,
-                keyId: conn.keyId,
+                authKey: k.authKey,
+                keyId: k.keyId,
                 dcId: id
             });
             c.apiId = conn.apiId;
@@ -1071,9 +1111,10 @@
         function getConnection(dcId) {
             const id = dcId || session.dcId;
             if (clients.has(id)) return clients.get(id);
+            const k = keyFor(id);
             const c = new MtConnection({
-                authKey: session.authKey,
-                keyId: conn.keyId,
+                authKey: k.authKey,
+                keyId: k.keyId,
                 dcId: id
             });
             c.apiId = conn.apiId;
@@ -1095,6 +1136,27 @@
                     return getConnection(dcId).connect();
                 } catch (e) {
                     return Promise.reject(e);
+                }
+            },
+
+            /** Yangi DC kalitini qo'shish (GramJS'dan yig'ilgan bo'lishi mumkin). */
+            setDcKey: function (dcId, raw) {
+                return addDcKey(dcId, raw);
+            },
+
+            /** Shu DC uchun alohida kalit bormi? */
+            hasDcKey: function (dcId) {
+                return dcKeys.has(Number(dcId));
+            },
+
+            /** Buzilgan kalitni tashlab, ulanishni yopamiz. */
+            dropDcKey: function (dcId) {
+                const id = Number(dcId);
+                dcKeys.delete(id);
+                const c = clients.get(id);
+                if (c && id !== session.dcId) {
+                    try { c.close(); } catch (e) {}
+                    clients.delete(id);
                 }
             },
 

@@ -141,6 +141,7 @@
     docSize: null,         // { docId: bayt } — butun fayl hajmi
     fast: null,            // minimal MTProto klient (25 KB) — GramJS'siz oqim
     fastBroken: false,     // tez yo'l ishlamadi → eski (GramJS) yo'lga qaytamiz
+    fastBadDc: null,       // { dcId: 1 } — shu DC kaliti rad etilgan (boshqalar ishlayveradi)
     mountOpts: null        // joriy mount opts (tez yo'l ishlamasa qayta ishga tushirish uchun)
   };
 
@@ -190,6 +191,9 @@
           apiId: a.id,
           apiHash: a.hash,
           session: saved,
+          // Boshqa DC'lar uchun oldin yig'ilgan auth_key'lar (bo'lmasa —
+          // tez klient faqat "uy" DC'da ishlaydi, qolgani GramJS'ga tushadi).
+          dcKeys: loadDcKeys(),
           deviceModel: 'W CINEMA Web',
           systemVersion: '1.0',
           appVersion: '1.0'
@@ -208,6 +212,21 @@
     var f = fastClient();
     if (!f) return;
     try { f.warm().catch(function () {}); } catch (e) {}
+    // Boshqa DC'lar: saytdagi videolar turli DC'larda yotadi (2/4/1/5).
+    // Karta bosilganda WebSocket handshake kutib qolmasligi uchun ulanishni
+    // HOZIR boshlaymiz — video metama'lumoti localStorage'da allaqachon bor.
+    try {
+      var all = JSON.parse(localStorage.getItem(DOC_META_KEY) || '{}') || {};
+      var seen = {}, home = Number(f.session && f.session.dcId) || 0, n = 0;
+      for (var k in all) {
+        if (!Object.prototype.hasOwnProperty.call(all, k)) continue;
+        var dc = Number(all[k] && all[k].dc);
+        if (!dc || dc === home || seen[dc]) continue;
+        seen[dc] = 1;
+        if (++n > 3) break;                  // ko'pi bilan 3 ta qo'shimcha ulanish
+        try { f.warm(dc).catch(function () {}); } catch (e) {}
+      }
+    } catch (e) {}
   }
 
   // ------------------------------------------------------- hujjat metama'lumot
@@ -232,6 +251,148 @@
     for (var i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
     try { return btoa(bin); } catch (e) { return ''; }
   }
+
+  // ---------------------------------------------------------------------------
+  // DC KALITLARI — boshqa DC'lardagi videolarni "sovuq" ochish muammosi
+  // ---------------------------------------------------------------------------
+  //
+  // MUAMMO: Telegram har bir DC uchun ALOHIDA auth_key beradi. Bizning tez
+  // klient (`tg-mtproto.js`) faqat "uy" DC kalitini biladi. Boshqa DC'dagi
+  // hujjat so'ralsa server AUTH_KEY_UNREGISTERED qaytaradi → oqim GramJS'ga
+  // tushadi: 5.4 MB bundle + DH handshake + export/import. O'lchandi:
+  // bunday sovuq ochilish 5–40 s (p90 ttfb 15 s), "uy" DC'da esa 0.3–1 s.
+  //
+  // YECHIM: GramJS o'zi ishlagan paytda har bir DC uchun kalit yaratadi
+  // (`session.authKeys`). Biz uni bir marta yig'ib (`harvestDcKeys`)
+  // localStorage'ga yozamiz, keyingi sahifa yuklanishida esa tez klientga
+  // beramiz. Natija: DH handshake va bundle umuman kerak emas — faqat
+  // ~200 ms WebSocket handshake (u ham sahifa yuklanishida `warmFast` bilan
+  // oldindan boshlanadi).
+  var DCKEY_KEY = 'wc_tg_dckey_v1';
+  var DCKEY_TTL = 30 * 24 * 3600 * 1000;      // 30 kun (kalit uzoq yashaydi)
+
+  // Kalitlar qaysi akkauntga tegishli ekanini ajratish uchun sessiya
+  // satridagi auth_key baytlarining yengil xeshi. MUHIM: satrning o'zini
+  // xeshlash ISHLAMAYDI — GramJS `session.save()` har safar qayta yoziladi
+  // (dcId/port ham o'zgarishi mumkin), natijada xesh o'zgarib, saqlangan
+  // kalitlar "begona" bo'lib qolardi. Shu sabab xeshni faqat 256 baytli
+  // kalitdan olamiz: u sessiya davomida o'zgarmaydi.
+  function sessionAuthKeyU8() {
+    var s = '';
+    try { s = String(loadSession() || ''); } catch (e) { return null; }
+    if (!s || s.length < 40) return null;
+    // Format: `<versiya>` + base64(dcId | addrLen | addr | port | authKey[256])
+    var bin;
+    try { bin = atob(s.slice(1).replace(/-/g, '+').replace(/_/g, '/')); }
+    catch (e) { return null; }
+    if (bin.length < 262) return null;
+    var out = new Uint8Array(256);
+    var start = bin.length - 256;
+    for (var i = 0; i < 256; i++) out[i] = bin.charCodeAt(start + i) & 0xff;
+    return out;
+  }
+
+  function sessionTag() {
+    var h = 2166136261;
+    var key = sessionAuthKeyU8();
+    if (key) {
+      for (var i = 0; i < key.length; i++) {
+        h ^= key[i];
+        h = (h + (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24)) >>> 0;
+      }
+      return 'k' + (h >>> 0).toString(36);
+    }
+    // Kalitni ajratib ololmadi (format o'zgargan) — satr bo'yicha.
+    var s = '';
+    try { s = String(loadSession() || ''); } catch (e) { s = ''; }
+    for (var j = 0; j < s.length; j++) {
+      h ^= s.charCodeAt(j);
+      h = (h + (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24)) >>> 0;
+    }
+    return 's' + (h >>> 0).toString(36) + '.' + s.length;
+  }
+
+  function dcKeyStoreRead() {
+    try {
+      var all = JSON.parse(localStorage.getItem(DCKEY_KEY) || 'null');
+      return (all && typeof all === 'object') ? all : null;
+    } catch (e) { return null; }
+  }
+  function dcKeyStoreWrite(all) {
+    try { localStorage.setItem(DCKEY_KEY, JSON.stringify(all)); } catch (e) {}
+  }
+
+  /** Tez klientga beriladigan kalitlar: { "2": Uint8Array(256), ... } */
+  function loadDcKeys() {
+    var all = dcKeyStoreRead();
+    if (!all || !all.keys || all.sid !== sessionTag()) return null;
+    var now = Date.now();
+    var out = null;
+    for (var k in all.keys) {
+      if (!Object.prototype.hasOwnProperty.call(all.keys, k)) continue;
+      var e = all.keys[k];
+      if (!e || !e.k || (now - (Number(e.t) || 0)) > DCKEY_TTL) continue;
+      var u8 = b64ToU8(e.k);
+      if (u8.length !== 256) continue;
+      out = out || {};
+      out[String(Number(k))] = u8;
+    }
+    return out;
+  }
+
+  function saveDcKey(dc, u8) {
+    dc = Number(dc);
+    if (!(dc > 0) || !u8 || u8.length !== 256) return;
+    var sid = sessionTag();
+    var all = dcKeyStoreRead();
+    if (!all || all.sid !== sid) all = { sid: sid, keys: {} };
+    all.keys = all.keys || {};
+    all.keys[String(dc)] = { k: u8ToB64(u8), t: Date.now() };
+    dcKeyStoreWrite(all);
+  }
+
+  /** Kalitni o'chirish (server uni rad etgan bo'lsa). */
+  function dropSavedDcKey(dc) {
+    try {
+      var all = dcKeyStoreRead();
+      if (all && all.keys) {
+        delete all.keys[String(Number(dc))];
+        dcKeyStoreWrite(all);
+      }
+    } catch (e) {}
+    try { if (S.fast && S.fast.dropDcKey) S.fast.dropDcKey(dc); } catch (e) {}
+  }
+
+  /**
+   * GramJS `session.authKeys` dan barcha DC kalitlarini yig'ib, saqlaydi.
+   * GramJS muvaffaqiyatli o'qigan zahoti chaqiriladi — shu sababli keyingi
+   * sahifa yuklanishida tez klient bu DC'ga ham to'g'ridan-to'g'ri ulanadi.
+   *
+   * DIQQAT: "uy" DC'ni ham yig'amiz. `sess.dcId` GramJS boshqa DC'ga
+   * o'tganda o'zgaradi va u paytda haqiqiy uy kaliti `_dcAuthKeys` ichida
+   * qoladi — uni tashlab ketish xato bo'lardi. Joriy kalitni
+   * `getAuthKey(d)` o'zi qaytaradi, shuning uchun 1..5 ni to'liq aylanamiz.
+   */
+  function harvestDcKeys() {
+    try {
+      var sess = S.client && S.client.session;
+      if (!sess || typeof sess.getAuthKey !== 'function') return 0;
+      var n = 0;
+      for (var d = 1; d <= 5; d++) {
+        var k = null;
+        try { k = sess.getAuthKey(d); } catch (e) { k = null; }
+        var raw = k && (typeof k.getKey === 'function' ? k.getKey() : (k.key || null));
+        if (!raw || raw.length !== 256) continue;
+        var u8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+        saveDcKey(d, u8);
+        try { if (S.fast && S.fast.setDcKey) S.fast.setDcKey(d, u8); } catch (e) {}
+        if (S.fastBadDc) delete S.fastBadDc[d];
+        n++;
+      }
+      return n;
+    } catch (e) { return 0; }
+  }
+
 
   // GramJS `bytes` serializer Buffer yoki string qabul qiladi; Uint8Array
   // obyektini to'g'ridan-to'g'ri bersak "Bytes or str expected" xatosi chiqadi.
@@ -291,6 +452,27 @@
       fn: vi.filename || '',
       w: vi.w || 0, h: vi.h || 0, dur: vi.duration || 0
     });
+  }
+
+  // `FILE_MIGRATE_X` kelganda metama'lumotdagi DC eskirgan bo'ladi.
+  // Shu hujjatning yozuvini topib, DC'ni to'g'rilaymiz — keyingi ochilish
+  // darhol to'g'ri DC'ga ulanadi (yana migrate bo'lmaydi).
+  function fixDocMetaDc(docId, dc) {
+    if (docId == null || !(Number(dc) > 0)) return;
+    try {
+      var raw = localStorage.getItem(DOC_META_KEY);
+      if (!raw) return;
+      var all = JSON.parse(raw) || {};
+      var id = String(docId), changed = false;
+      for (var k in all) {
+        if (!Object.prototype.hasOwnProperty.call(all, k)) continue;
+        if (all[k] && String(all[k].id) === id && Number(all[k].dc) !== Number(dc)) {
+          all[k].dc = Number(dc);
+          changed = true;
+        }
+      }
+      if (changed) localStorage.setItem(DOC_META_KEY, JSON.stringify(all));
+    } catch (e) { /* kvota yoki buzilgan JSON — jim */ }
   }
 
   // Metama'lumotni lokal keshga yozamiz (ko'p hujjat — 40 tagacha).
@@ -1040,10 +1222,24 @@
     return /AUTH_KEY_UNREGISTERED|AUTH_KEY_INVALID|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED|AUTH_KEY_DUPLICATED|AUTH_BYTES_INVALID|AUTH_RESTART/.test(String(m || ''));
   }
 
+  // "Shu DC uchun kalit yaroqsiz" xatolari. Bunda akkauntdan CHIQMAYMIZ —
+  // faqat o'sha DC kalitini tashlab, oqimni GramJS orqali davom ettiramiz
+  // (GramJS o'zi yangi kalit yaratib beradi).
+  function isDcKeyErr(m) {
+    var s = String(m || '');
+    if (/^DC_ID_INVALID$/.test(s)) return true;
+    return /AUTH_KEY_UNREGISTERED|AUTH_KEY_INVALID|AUTH_KEY_PERM_EMPTY/.test(s);
+  }
+
   function clearSession() {
     try { localStorage.removeItem(CFG.memKey); } catch (e) {}
     try { localStorage.removeItem('wc_tg_me_v1'); } catch (e) {}
     try { localStorage.removeItem('wc_tg_photo_v1'); } catch (e) {}
+    // Sessiya bekor qilindi → u bilan birga yaratilgan DC kalitlari ham
+    // o'lgan. Ularni qoldirsak, keyingi kirishda tez klient "yaroqsiz kalit"
+    // bilan urinib, ortiqcha xato/xatolarni keltirib chiqaradi.
+    try { localStorage.removeItem(DCKEY_KEY); } catch (e) {}
+    S.fastBadDc = null;
     S.me = null;
   }
 
@@ -2015,7 +2211,8 @@
 
     // --- TEZ YO'L: minimal MTProto klient ------------------------------
     var fast = S.fast;
-    if (fast && !S.fastBroken && loc && loc.id != null) {
+    var badDc = !!(S.fastBadDc && dc && S.fastBadDc[dc]);
+    if (fast && !S.fastBroken && !badDc && loc && loc.id != null) {
       var rawLoc = {
         id: loc.id,
         accessHash: loc.accessHash,
@@ -2056,6 +2253,35 @@
         //    QAYTA yechish kerak — buni `fastFallback()` qiladi (mount'ni
         //    qayta ishga tushiradi → `findDoc()` yangi havola oladi).
         if (isFileRefErr(eMsg)) return gramFallback(e);
+
+        // 2a) `FILE_MIGRATE_X` — hujjat boshqa DC'da yotibdi (metama'lumotdagi
+        //     DC eskirgan). BIR marta yangi DC bilan takrorlaymiz; DC'ni ham
+        //     keshlangan metama'lumotga yozamiz.
+        var mig = /^FILE_MIGRATE_(\d+)$/.exec(eMsg);
+        if (mig && !(ctx && ctx.migrated)) {
+          var nd = Number(mig[1]);
+          if (nd > 0) {
+            try { if (S.doc) S.doc.dcId = nd; } catch (x) {}
+            fixDocMetaDc(loc && loc.id, nd);
+            return readOnce(offset, length, cap, {
+              loc: loc, dcId: nd, abort: ctx && ctx.abort, migrated: true
+            }).catch(function (e3) { return gramFallback(e3); });
+          }
+        }
+
+        // 2b) SHU DC uchun kalit rad etildi (boshqa DC'da hech qanday kalit
+        //     yo'q yoki eskirgan). Faqat shu DC'ni "yomon" deb belgilaymiz —
+        //     qolgan DC'lar tez yo'lda ishlayveradi. So'rov GramJS orqali
+        //     bajariladi; u yangi kalit yaratadi va `harvestDcKeys` uni
+        //     darhol localStorage'ga saqlaydi (keyingi ochilish tez bo'ladi).
+        if (isDcKeyErr(eMsg)) {
+          if (dc) {
+            S.fastBadDc = S.fastBadDc || {};
+            S.fastBadDc[dc] = 1;
+            dropSavedDcKey(dc);
+          }
+          return readOnceGram(offset, length, cap, ctx, loc, dc, skip, aligned, want, hid);
+        }
 
         // 3) Tez yo'l ishlamadi — eski yo'lga qaytamiz (u hujjatni qayta
         // yechishi mumkin). Eski yo'l ham yo'q bo'lsa — butun oqimni
@@ -2102,6 +2328,9 @@
     }
 
     return once(loc).then(function (res) {
+      // GramJS shu DC uchun yangi auth_key yaratgan bo'lishi mumkin — uni
+      // darhol saqlaymiz, shunda keyingi sahifada tez klient ishlatadi.
+      harvestDcKeys();
       var b = res.bytes || res;
       var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
       return finishRead(u8, skip, length, aligned, hid);
@@ -2830,6 +3059,9 @@
       var fc = (meta && meta.fr) ? fastClient() : null;
       if (fc && meta) {
         S.fast = fc;
+        // Hujjat qaysi DC'da bo'lsa — ulanishni HOZIR boshlaymiz. Pleer
+        // birinchi baytni so'raganda WebSocket allaqachon ochiq bo'ladi.
+        try { fc.warm(Number(meta.dc) || undefined).catch(function () {}); } catch (e) {}
         var fdoc = docMetaToDoc(meta);
         var fsize = bytesOf(fdoc);
         var fprobe = quickPlaybackProbe(fdoc);
@@ -2875,6 +3107,10 @@
     }
     var client = sessionResult.client;
     if (S.job !== job) return;
+
+    // GramJS ulanishi paytida boshqa DC'lar uchun auth_key'lar yaratilgan
+    // bo'lishi mumkin — ularni saqlab qo'yamiz (keyingi yuklanishda tez yo'l).
+    harvestDcKeys();
 
     // --- 2b) Hujjat keshi --------------------------------------------
     // Hujjat metama'lumoti keshlanadi. Format probe bo'lsa ishlatiladi;
