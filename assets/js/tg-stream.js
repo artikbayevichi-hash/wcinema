@@ -2118,7 +2118,9 @@
     // `LIMIT_INVALID` kelsa `tgCap` ikkiga bo'linadi va o'sha bo'lak
     // qaytadan, kichikroq o'lchamda o'qiladi.
     return (function () {
-      var LANES = 4;             // bir vaqtda nechta so'rov
+      // Wi-Fi/ethernet'da 6 ta parallel so'rov (yuqori RTT'ni yopish uchun),
+      // mobil internetda 4 ta — trafik va flood chegarasi tejamkor bo'lsin.
+      var LANES = canSeed() ? 6 : 4;   // bir vaqtda nechta so'rov
 
       // Oraliqni reja bo'laklariga bo'lamiz — har biri bitta blok ichida.
       var plan = [], acc = 0;

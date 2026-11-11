@@ -411,11 +411,15 @@ const CACHE_NAME = 'wctg-chunks-v1';
 const CACHE_TTL = 24 * 60 * 60 * 1000;        // 24 soat
 const CACHE_MAX = 1024 * 1024 * 1024;         // 1 GB (kvota 55% dan oshmaydi)
 const CACHE_MAX_KEYS = 4096;
-const READAHEAD_BYTES = 20 * 1024 * 1024;     // 20 MB oldindan o'qish
+// Read-ahead ikki xil: mobil internetda tejamkor, Wi-Fi'da saxiy.
+// Wi-Fi'da 48 MB oldindan tayyor turishi yuqori RTT'da qotishlarni yo'q qiladi.
+const READAHEAD_SLOW = 20 * 1024 * 1024;      // 20 MB (cellular / noma'lum)
+const READAHEAD_FAST = 48 * 1024 * 1024;      // 48 MB (Wi-Fi / ethernet)
 const INFLIGHT = new Map();                   // kalit -> Promise (ikki marta yuklamaslik)
 const PF = { doc: '', cursor: 0, active: 0 };// read-ahead holati
 
 let CACHE_OK = (typeof caches !== 'undefined');
+let CACHE_FULL = false;                       // kvota 55% dan oshdi — yangi yozuv to'xtaydi
 let LAST_PRUNE = 0;
 let CACHE_HITS = 0;
 let CACHE_PUTS = 0;
@@ -460,7 +464,8 @@ function cachePut(key, u8) {
   if (!CACHE_OK || !u8 || !u8.length) return;
   (async function () {
     try {
-      if (!(await cacheBudgetOk())) return;
+      if (!(await cacheBudgetOk())) { CACHE_FULL = true; return; }
+      CACHE_FULL = false;
       const body = new Response(u8.slice(), {
         headers: {
           'Content-Type': 'application/octet-stream',
@@ -579,11 +584,19 @@ async function readWindow(doc, off, len) {
 // produktor baribir kutadi, shuning uchun bu yerda qo'shimcha yuk sezilmaydi.
 function maybePrefetch(doc, size, off, sent) {
   if (!doc || !CACHE_OK || !size) return;
-  if (PF.active >= 2) return;
+
+  // Wi-Fi'da ko'proq: 48 MB oyna va 3 ta parallel bo'lak.
+  const readAhead = SEED_OK ? READAHEAD_FAST : READAHEAD_SLOW;
+  const lanes = SEED_OK ? 3 : 2;
+
+  // Kichik fayl (reel/epizod) fonda to'liq yozilsin — keyingi ochilish 0 ms.
+  seedWholeFile(doc, size);
+
+  if (PF.active >= lanes) return;
 
   // Bo'lak chegarasiga yuqoriga tekislaymiz.
   const startW = Math.ceil(off / CHUNK) * CHUNK;
-  const endW = Math.min(size, sent + READAHEAD_BYTES);
+  const endW = Math.min(size, sent + readAhead);
   if (startW >= endW) return;
 
   if (PF.doc !== doc) { PF.doc = doc; PF.cursor = startW; }
@@ -600,6 +613,45 @@ function maybePrefetch(doc, size, off, sent) {
 
   PF.active++;
   readWindow(doc, w, len).then(noop, noop).then(function () { PF.active--; });
+}
+
+// ============================================================================
+// KICHIK FAYLLARNI TO'LIQ KESHLASH (faqat tez/arzon tarmoqda)
+// ============================================================================
+//
+// NIMA UCHUN
+//   Reels va qisqa epizodlar ko'pincha 5–80 MB. Wi-Fi'da ularni BIR MARTA
+//   to'liq diskka yozib qo'ysak, qayta ochilganda Telegram'ga umuman murojaat
+//   bo'lmaydi — video bir zumda boshlanadi (yirik klientlarning IndexedDB
+//   keshi ham shu usulda ishlaydi). Katta filmlar (320 MB+) bu yerga
+//   kirmaydi: 1 GB kesh bitta faylga to'lib, boshqa videolar sekinlashardi.
+//
+// XAVFSIZLIK
+//   * Faqat `SEED_OK` (Wi-Fi/ethernet, Save-Data yo'q) — mobil trafik yemaydi.
+//   * `CACHE_FULL` (kvota 55%) bo'lsa darhol to'xtaydi.
+//   * Bir vaqtda faqat 1 ta bo'lak va faqat read-ahead bo'sh turganda —
+//     pleerning joriy oqimidan hech narsa tortib olmaydi.
+const SEED_FILE_MAX = 320 * 1024 * 1024;      // 320 MB
+const SF = { doc: '', cursor: 0, active: 0 }; // to'liq keshlash holati
+
+function seedWholeFile(doc, size) {
+  if (!doc || !size || !CACHE_OK) return;
+  if (!SEED_OK || CACHE_FULL) return;
+  if (size > SEED_FILE_MAX) return;
+  if (PF.active > 0) return;                   // pleer kutmayotgan paytda ishlaymiz
+
+  if (SF.doc !== doc) { SF.doc = doc; SF.cursor = 0; SF.active = 0; }
+  if (SF.active >= 1) return;
+  if (SF.cursor >= size) return;
+
+  const w = SF.cursor;
+  const len = Math.min(CHUNK, size - w);
+  SF.cursor = w + len;
+  SF.active++;
+
+  // `readWindow` avval keshni tekshiradi — allaqachon yozilgan bo'lsa
+  // tarmoqqa chiqmaydi, shuning uchun bu qadam deyarli bepul.
+  readWindow(doc, w, len).then(noop, noop).then(function () { SF.active--; });
 }
 
 // ============================================================================
