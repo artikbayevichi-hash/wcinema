@@ -1506,6 +1506,50 @@
   // qiymatni so'raymiz.
   function swCtl() { return getSwController(); }
 
+  // --- Ko'rilgan videoning keshini o'chirish -------------------------------
+  //
+  // FOYDALANUVCHI TALABI: bitta video oxirigacha ko'rilsa, uning keshda
+  // qolgan bo'laklari JOY EGALLAMASIN — darhol o'chsin. Qayta bosilganda
+  // video yangidan ochiladi. Buni Service Worker bajaradi (`drop` xabari),
+  // chunki kesh Cache API'da, sahifa xotirasida emas.
+  function lookDocId(doc) {
+    if (doc == null) return '';
+    var s = String(doc);
+    return /^[0-9]{1,20}$/.test(s) ? s : '';
+  }
+
+  function dropDocCache(doc) {
+    var ctl = swCtl();
+    if (!ctl || !doc) return;
+    try { ctl.postMessage({ type: 'drop', doc: doc }); } catch (e) { /* SW yo'q */ }
+  }
+
+  // Kesh kaliti `docQ()` bilan AYNAN bir xil bo'lishi shart (u `S.loc.id` ni
+  // afzal ko'radi) — aks holda boshqa videoning keshi o'chib ketardi.
+  function currentDocId() {
+    var id = (S.loc && S.loc.id != null) ? S.loc.id
+      : (S.doc && S.doc.id != null) ? S.doc.id : null;
+    return lookDocId(id);
+  }
+
+  // Bitta tinglovchi butun hujjat uchun: preview/oddiy/remux — barchasi shu
+  // yerga tushadi (video elementi qaysi yo'l bilan yaratilganidan qat'i nazar).
+  // `loop` bo'lsa `ended` umuman otilmaydi, preview esa döngüde — tegilmaydi.
+  try {
+    document.addEventListener('ended', function (e) {
+      var v = e.target;
+      if (!v || v.tagName !== 'VIDEO' || v.loop) return;
+      var d = v.getAttribute('data-wc-doc') || '';
+      if (!d) {
+        try {
+          var u = new URL(v.currentSrc || v.src, location.href);
+          if (/\/tgfile\/?$/.test(u.pathname)) d = u.searchParams.get('doc') || '';
+        } catch (err) { d = ''; }
+      }
+      dropDocCache(lookDocId(d));
+    }, true);
+  } catch (e) { /* eski brauzer — kesh 24 soatlik TTL bilan o'chadi */ }
+
   // Prefiksni R2 ga yuklash mumkinmi?
   //
   // Mobil internetda 5 MB yuklash foydalanuvchining trafigini yeydi —
@@ -3141,6 +3185,8 @@
     try {
       var v = document.getElementById('playerVideo');
       if (v) {
+        // Ko'rildi deb topilganda keshni o'chirish uchun hujjat id'si.
+        v.setAttribute('data-wc-doc', currentDocId());
         v.addEventListener('error', function () {
           onVideoError(node, opts, probe, v);
         }, { once: true });
@@ -3224,6 +3270,7 @@
       + '</div>';
 
     var v = document.getElementById('playerVideo');
+    if (v) v.setAttribute('data-wc-doc', currentDocId());
     if (isPreview() && v) {
       v.muted = true; v.loop = true;
       // Oddiy rejimda avtomatik o'ynashni UDP boshqaradi; preview'da UDP

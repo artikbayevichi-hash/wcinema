@@ -396,12 +396,14 @@ function noop() { /* bo'sh */ }
 //   * `doc` bo'lmasa (yoki `Save-Data: on`) kesh UMUMAN ishlamaydi —
 //     eski xatti-harakat o'zgarishsiz qoladi.
 //   * Faqat TO'LIQ bo'lak yoziladi; qisqa/uzilgan javob yozilmaydi.
-//   * 24 soatdan eski yozuvlar o'chadi; umumiy hajm 400 MB bilan cheklangan.
+//   * Video oxirigacha ko'rilsa — o'sha videoning keshi DARHOL o'chadi.
+//   * 1 GB ga yaqinlashsa (850 MB) — uzoq ko'rilmagan videolar butunlay
+//     o'chiriladi; 24 soatdan eski yozuvlar ham.
 //   * `put` dan oldin baytdan NUSXA olinadi — keyingi esds tuzatish keshdagi
 //     asl nusxani buzmaydi.
 //
-// 20 MB READ-AHEAD
-//   WebK kabi: pleer hozir turgan joydan 20 MB oldinga bo'laklar fonda
+// READ-AHEAD (20 MB mobil / 48 MB Wi-Fi)
+//   WebK kabi: pleer hozir turgan joydan oldinga bo'laklar fonda
 //   yuklanadi va diskka yoziladi. Foydalanuvchi seek qilganda yoki oldinga
 //   o'tsa — baytlar allaqachon tayyor. Yuklash `queue` bo'sh bo'lganda
 //   (ya'ni pleer kutayotganda emas) ketadi, shuning uchun joriy oqimni
@@ -411,6 +413,7 @@ const CACHE_NAME = 'wctg-chunks-v1';
 const CACHE_TTL = 24 * 60 * 60 * 1000;        // 24 soat
 const CACHE_MAX = 1024 * 1024 * 1024;         // 1 GB (kvota 55% dan oshmaydi)
 const CACHE_MAX_KEYS = 4096;
+const PRUNE_AT = 0.85;                        // 850 MB dan oshsa tozalash boshlanadi
 // Read-ahead ikki xil: mobil internetda tejamkor, Wi-Fi'da saxiy.
 // Wi-Fi'da 48 MB oldindan tayyor turishi yuqori RTT'da qotishlarni yo'q qiladi.
 const READAHEAD_SLOW = 20 * 1024 * 1024;      // 20 MB (cellular / noma'lum)
@@ -420,6 +423,14 @@ const PF = { doc: '', cursor: 0, active: 0 };// read-ahead holati
 
 let CACHE_OK = (typeof caches !== 'undefined');
 let CACHE_FULL = false;                       // kvota 55% dan oshdi — yangi yozuv to'xtaydi
+const DOC_AT = new Map();                     // doc -> oxirgi yozilgan vaqt (LRU)
+
+// Kesh kalitidan hujjat id'sini ajratib olamiz.
+function docOfKey(key) {
+  const base = self.location.origin + '/__wctg/chunk/';
+  if (key.indexOf(base) !== 0) return '';
+  return key.slice(base.length).split('/')[0] || '';
+}
 let LAST_PRUNE = 0;
 let CACHE_HITS = 0;
 let CACHE_PUTS = 0;
@@ -477,6 +488,8 @@ function cachePut(key, u8) {
       const cache = await caches.open(CACHE_NAME);
       await cache.put(key, body);
       CACHE_PUTS++;
+      const dk = docOfKey(key);
+      if (dk) DOC_AT.set(dk, Date.now());
       maybePrune();
     } catch (e) {
       /* kvota to'ldi yoki boshqa xato — oqimga ta'sir qilmaydi */
@@ -486,24 +499,41 @@ function cachePut(key, u8) {
 
 function maybePrune() {
   const now = Date.now();
-  if (now - LAST_PRUNE < 10 * 60 * 1000) return;
+  if (now - LAST_PRUNE < 60 * 1000) return;        // 1 daqiqada bir marta
   LAST_PRUNE = now;
   pruneCache().catch(noop);
 }
 
-// Eskirgan yozuvlarni o'chirish + hajm chegarasini ushlash.
+// Keshni HUJJAT (video) bo'yicha tozalash.
 //
-// NIMA UCHUN SKAN CHEKLANGAN
-//   `cache.keys()` + har bir kalit uchun `match()` — qimmat amal. 4096 kalitni
-//   har 10 daqiqada to'liq skanerlash Service Worker'ni band qilib, oqimni
-//   sekinlashtirishi mumkin. Shuning uchun faqat ro'yxat BOSHIDAN (eng eski
-//   yozuvlardan) `PRUNE_SCAN` tagacha ko'ramiz. `keys()` qo'shilish tartibida
-//   qaytadi, ya'ni eng eski yozuvlar aynan boshida turadi.
+// QOIDALAR
+//   1) Bitta video oxirigacha ko'rildi — uning keshi DARHOL butunlay o'chadi
+//      (sahifa `ended` da `{type:'drop', doc}` yuboradi). Qayta bosilsa,
+//      video yangidan ochiladi.
+//   2) Umumiy hajm 1 GB ga yaqinlashsa (850 MB) — eng uzoq vaqt
+//      "ko'rilmagan" videolar butunlay o'chiriladi. Hozir o'ynalayotgan
+//      video hech qachon o'chirilmaydi.
+//   3) 24 soatdan eski yozuvlar baribir o'chadi.
 //
-//   Bitta bo'lak eng ko'pi CHUNK (512 KB). 800 ta kalit ≈ 400 MB — bu bizning
-//   to'liq chegaramiz. Ya'ni 800 dan kam kalit bo'lsa, hajm chegarasi baribir
-//   oshmaydi va skanerlashning hojati yo'q.
-const PRUNE_SCAN = 800;
+// NIMA UCHUN HUJJAT BO'YICHA
+//   Ilgari eng eski BO'LAKLAR o'chirilardi: natijada yarim film keshi qolib,
+//   foydasi bo'lmay qolardi. Endi butun video bo'yicha — kesh mantiqiy
+//   tozalanadi va joy bo'shaydi.
+async function dropDoc(doc) {
+  if (!CACHE_OK || !doc) return 0;
+  const prefix = self.location.origin + '/__wctg/chunk/' + doc + '/';
+  const cache = await caches.open(CACHE_NAME);
+  const keys = await cache.keys();
+  let n = 0;
+  for (let i = 0; i < keys.length; i++) {
+    if (keys[i].url.indexOf(prefix) !== 0) continue;
+    try { await cache.delete(keys[i]); n++; } catch (e) { /* o'tkazamiz */ }
+  }
+  DOC_AT.delete(doc);
+  if (PF.doc === doc) { PF.doc = ''; PF.cursor = 0; }
+  if (SF.doc === doc) { SF.doc = ''; SF.cursor = 0; }
+  return n;
+}
 
 async function pruneCache() {
   if (!CACHE_OK) return;
@@ -512,40 +542,72 @@ async function pruneCache() {
     const keys = await cache.keys();
     if (!keys.length) return;
 
-    // Kalitlar kam bo'lsa hammasi skanerlanadi (arzon), ko'p bo'lsa — faqat
-    // eng eski 800 tasi.
+    const base = self.location.origin + '/__wctg/chunk/';
+    const byDoc = new Map();          // doc -> { bytes, keys: [] }
+    let total = 0;
+
+    // `keys()` narxi arzon: bayt hajmini URL'dagi `len` dan olamiz —
+    // har bir kalit uchun `match()` qilish (eski usul) ancha qimmat edi.
+    for (let i = 0; i < keys.length; i++) {
+      const u = keys[i].url;
+      if (u.indexOf(base) !== 0) continue;
+      const p = u.slice(base.length).split('/');
+      const doc = p[0] || '';
+      const len = Number(p[2]) || 0;
+      let e = byDoc.get(doc);
+      if (!e) { e = { bytes: 0, keys: [] }; byDoc.set(doc, e); }
+      e.bytes += len;
+      e.keys.push(keys[i]);
+      total += len;
+    }
+    if (!byDoc.size) return;
+
     const now = Date.now();
-    const alive = [];
-    let bytes = 0;
-    const scan = Math.min(keys.length, PRUNE_SCAN);
 
-    for (let k = 0; k < scan; k++) {
-      const req = keys[k];
-      const res = await cache.match(req);
-      if (!res) continue;
-      const at = Number(res.headers.get('X-WC-At')) || 0;
-      const len = Number(res.headers.get('X-WC-Len')) || 0;
-      if (at && (now - at) > CACHE_TTL) {
-        await cache.delete(req);
-        continue;
+    // Hozir o'ynalayotgan / yozilayotgan hujjatga tegilmaydi.
+    function keep(doc, at) {
+      if (doc && (doc === PF.doc || doc === SF.doc)) return true;
+      return !!at && (now - at) < 3 * 60 * 1000;    // yaqinda ko'rilgan
+    }
+
+    // Eng eski (uzoq ko'rilmagan) hujjat birinchi turadi.
+    const docs = [];
+    byDoc.forEach(function (e, doc) {
+      docs.push({ doc: doc, bytes: e.bytes, at: DOC_AT.get(doc) || 0 });
+    });
+    docs.sort(function (a, b) { return a.at - b.at; });
+
+    for (let i = 0; i < docs.length; i++) {
+      const d = docs[i];
+      const expired = !!d.at && (now - d.at) > CACHE_TTL;
+      const needRoom = total > CACHE_MAX * PRUNE_AT;
+      if (!expired && !needRoom) break;             // qolganlari yangiroq
+      if (keep(d.doc, d.at)) continue;
+
+      const e = byDoc.get(d.doc);
+      for (let k = 0; k < e.keys.length; k++) {
+        try { await cache.delete(e.keys[k]); } catch (err) { /* o'tkazamiz */ }
       }
-      alive.push({ req: req, len: len });
-      bytes += len;
+      total -= e.bytes;
+      DOC_AT.delete(d.doc);
+      byDoc.delete(d.doc);
+      if (total <= 0) break;
     }
 
-    // 1) Umumiy kalit soni chegaradan oshgan — eng eskilaridan o'chiramiz.
-    let i = 0;
-    while (i < alive.length && (keys.length - i) > CACHE_MAX_KEYS) {
-      await cache.delete(alive[i].req);
-      bytes -= alive[i].len;
-      i++;
-    }
-
-    // 2) Skanerlangan (ya'ni eng eski) qism 400 MB dan oshgan — kichraytiramiz.
-    while (i < alive.length && bytes > CACHE_MAX * 0.9) {
-      await cache.delete(alive[i].req);
-      bytes -= alive[i].len;
-      i++;
+    // Kalit soni ham chegarada tursin (juda ko'p kichik fayl bo'lsa).
+    let liveKeys = 0;
+    byDoc.forEach(function (e) { liveKeys += e.keys.length; });
+    if (liveKeys > CACHE_MAX_KEYS) {
+      for (let i = 0; i < docs.length && liveKeys > CACHE_MAX_KEYS; i++) {
+        const d = docs[i];
+        if (!byDoc.has(d.doc) || keep(d.doc, d.at)) continue;
+        const e = byDoc.get(d.doc);
+        for (let k = 0; k < e.keys.length; k++) {
+          try { await cache.delete(e.keys[k]); } catch (err) { /* o'tkazamiz */ }
+        }
+        liveKeys -= e.keys.length;
+        byDoc.delete(d.doc);
+      }
     }
   } catch (e) {
     /* kesh tozalash hech qachon oqimni buzmasligi kerak */
@@ -974,6 +1036,17 @@ self.addEventListener('message', (e) => {
   // `saveData` yo'qligini biladi — shunda `ok:true` yuboradi.
   if (d.type === 'seed') {
     SEED_OK = !!d.ok;
+    return;
+  }
+
+  // --- Video oxirigacha ko'rildi — uning keshini butunlay o'chiramiz ------
+  //
+  // Sahifa `<video>` `ended` bo'lganda yuboradi. Keshda yarim film qolib
+  // joy egallamasin: qayta bosilsa video yangidan ochiladi.
+  if (d.type === 'drop') {
+    dropDoc(String(d.doc || '')).then(function (n) {
+      if (n > 0) say('🗑 ko‘rildi · kesh tozalandi (' + n + ' bo‘lak)');
+    }, noop);
     return;
   }
 
