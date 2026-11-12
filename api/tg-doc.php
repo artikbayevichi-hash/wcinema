@@ -319,6 +319,10 @@ if ($warm) {
     if (function_exists('fastcgi_finish_request')) {
         @fastcgi_finish_request();
     }
+    // Fon ishi paytida MadelineProto konsolga yozadi (`WARNING: ...`). Javob
+    // allaqachon yuborilgan, lekin bu chiqindi socketga tushmasligi uchun
+    // keyingi chiqishni buferga olamiz.
+    @ob_start();
 
     if (!$need) {
         exit;
