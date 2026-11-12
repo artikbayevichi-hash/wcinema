@@ -234,7 +234,14 @@
   // Hujjat joylashuvi (id / access_hash / file_reference / dc_id) — video
   // oqimining kaliti. Uni oldindan bilamiz — GramJS bundle'i va `findDoc`
   // RPC'si umuman kerak bo'lmaydi.
-  var DOC_META_KEY = 'wc_tg_docmeta_v1';
+  // 2026-11-12: `_v1` kaliti SERVER (bot sessiyasi) bergan `file_reference`
+  // bilan to'ldirilgan edi. U tomoshabinning O'Z akkauntida
+  // `FILE_REFERENCE_INVALID` bo'lgani uchun video umuman ochilmasdi
+  // (rad etish -> `fresh=1` kutish -> yana rad etish -> GramJS).
+  // Kalitni `_v2` ga ko'tardik va eskisini bir marta o'chiramiz — aks holda
+  // eski yozuvlar yana 30 daqiqa ishlatilib, xato takrorlanardi.
+  var DOC_META_KEY = 'wc_tg_docmeta_v2';
+  try { localStorage.removeItem('wc_tg_docmeta_v1'); } catch (e) { /* jim */ }
   var DOC_META_TTL = 30 * 60 * 1000;      // 30 daqiqa (file_reference ~24 soat yashaydi)
 
   function b64ToU8(b64) {
@@ -507,7 +514,18 @@
   // yo'l "ishlamaydi" — lekin bu HOLATDA ham video to'g'ri ochiladi, chunki
   // `gramFallback()` avtomatik eski (GramJS) yo'lga o'tadi va hujjatni
   // foydalanuvchining O'Z sessiyasi bilan qayta yechadi.
-  var USE_SERVER_DOC_META = true;
+  // DIQQAT (2026-11-12): server (BOT sessiyasi, MadelineProto) bergan
+  // `file_reference` brauzerdagi foydalanuvchi akkauntida ISHLAMAYDI —
+  // Telegram uni `FILE_REFERENCE_INVALID` bilan rad etadi (MadelineProto
+  // o'z ReferenceDatabase'i bilan har so'rovda boshqa qiymat beradi).
+  // Natijada har ochilishda: rad etish -> `fresh=1` (3-6 s kutish) ->
+  // yana rad etish -> GramJS'ga qaytish. Foydalanuvchi uchun bu "video
+  // umuman ochilmayapti" bo'lib ko'rinadi.
+  //
+  // Shuning uchun bu yo'l O'CHIRILDI: hujjat har doim foydalanuvchining
+  // O'Z sessiyasi bilan yechiladi va 30 daqiqaga lokal keshlanadi
+  // (`DOC_META_TTL`), keyingi ochilishlar 0 RPC bilan boshlanadi.
+  var USE_SERVER_DOC_META = false;
 
   function docMetaFromServer(opts, fresh) {
     // `api/tg-doc.php` hujjatni BOT sessiyasi bilan yechadi, lekin

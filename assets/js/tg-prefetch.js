@@ -30,8 +30,6 @@
   var GAP  = 500;                  // batchlar orasidagi tanaffus
   var META_ITEMS = 24;
   var META_BATCH = 20;             // server batch: bitta so'rovda 20 ta hujjat
-  var WARM_KEY   = 'wc_tg_warm_ts'; // server keshi isitilgan vaqt
-  var WARM_EVERY = 10 * 60 * 1000;  // 10 daqiqada bir marta
 
   function conn() {
     return w.navigator && (w.navigator.connection || w.navigator.mozConnection || w.navigator.webkitConnection) || null;
@@ -76,36 +74,10 @@
     });
   }
 
-  // Server keshi oxirgi marta qachon isitilgan?
-  function warmRecently() {
-    try {
-      var t = parseInt(localStorage.getItem(WARM_KEY) || '0', 10) || 0;
-      return (Date.now() - t) < WARM_EVERY;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function markWarm() {
-    try { localStorage.setItem(WARM_KEY, String(Date.now())); } catch (e) {}
-  }
-
-  // `api/tg-doc.php?warm=1` — javob DARHOL qaytadi, Telegram bilan ishlash
-  // esa SERVERDA, javobdan keyin davom etadi. Brauzer hech narsa kutmaydi.
-  //
-  // Natija: keyingi 30 daqiqa ichida HAR BIR foydalanuvchi uchun hujjat
-  // metama'lumoti ~10 ms da keladi — video birinchi bayti darhol boshlanadi.
-  function warmServer() {
-    var url = (BASE || '') + '/api/tg-doc.php?warm=1';
-    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var init = { credentials: 'same-origin', cache: 'no-store' };
-    if (ctl) {
-      init.signal = ctl.signal;
-      // Javob darhol keladi; 8 s — faqat osilib qolmaslik uchun.
-      setTimeout(function () { try { ctl.abort(); } catch (e) {} }, 8000);
-    }
-    return fetch(url, init).catch(function () {});
-  }
+  // Server keshi isitish (`api/tg-doc.php?warm=1`) 2026-11-12 da OLIB
+  // TASHLANDI: bot sessiyasi bergan `file_reference` foydalanuvchi akkauntida
+  // ishlamaydi, ya'ni bu isitish pleerga foyda bermasdi — faqat serverda
+  // bekorga Telegram RPC ishlatardi.
 
   function loadList() {
     var url = (BASE || '') + '/api/hot.php?n=' + encodeURIComponent(String(META_ITEMS));
@@ -130,12 +102,14 @@
     await waitIdle();
     if (videoBusy()) return;
 
-    // 1) SERVER keshini isitish — eng katta yutuq. Telegram'ga murojaat
-    //    serverda bo'ladi, brauzer esa javobni kutmaydi.
-    if (!warmRecently()) {
-      markWarm();
-      try { warmServer(); } catch (e) {}
-    }
+    // 1) SERVER keshini isitish OLIB TASHLANDI (2026-11-12).
+    //
+    // Nima uchun: server (bot sessiyasi, MadelineProto) bergan
+    // `file_reference` foydalanuvchining O'Z akkauntida ishlamaydi —
+    // Telegram uni `FILE_REFERENCE_INVALID` bilan rad etadi. Ya'ni bu kesh
+    // pleerga hech qanday foyda bermasdi, faqat har 10 daqiqada serverda
+    // bekorga Telegram RPC ishga tushirardi. Metama'lumot endi faqat
+    // foydalanuvchining O'Z sessiyasi bilan (3-qadam) olinadi.
 
     var items = [];
     try { items = await loadList(); } catch (e) { return; }
@@ -147,15 +121,17 @@
     }).slice(0, META_ITEMS);
     if (!items.length) return;
 
-    // 2) Serverdan BITTA so'rovda (GramJS bundle'siz) — tez yo'l.
+    // 2) Server meta yo'li (`prefetchMany`) 2026-11-12 dan O'CHIRILGAN —
+    //    doim 0 qaytaradi (bot `file_reference` foydalanuvchi akkauntida
+    //    ishlamaydi). Chaqiruv API mosligi uchun qoldirilgan.
     var got = 0;
     if (typeof T.prefetchMany === 'function') {
       try { got = await T.prefetchMany(items); } catch (e) { got = 0; }
     }
 
-    // 3) Zaxira: foydalanuvchining O'Z sessiyasi (GramJS). Faqat server
-    //    yo'li ishlamagan holatda — aks holda 5.4 MB bundle bekorga
-    //    yuklanardi.
+    // 3) ASOSIY yo'l: foydalanuvchining O'Z sessiyasi (GramJS). Telegram
+    //    aynan shu sessiyaga tegishli `file_reference` beradi — shuning
+    //    uchun faqat shu yo'l ishonchli ishlaydi.
     if (got >= items.length) return;
     try { if (typeof T.hasSession === 'function' && !T.hasSession()) return; } catch (e) { return; }
     if (typeof T.prefetchManyGram !== 'function') return;

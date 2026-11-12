@@ -232,44 +232,15 @@ $WATCH = [
 ];
 
 // ---------------------------------------------------------------------------
-// JORIY VIDEO METAMA'LUMOTI — HTML ICHIDA
+// JORIY VIDEO METAMA'LUMOTI — BU YERDA BERILMAYDI (2026-11-12)
 // ---------------------------------------------------------------------------
-// Video baytlari Telegram'dan to'g'ridan-to'g'ri brauzerga oqadi, lekin buning
-// uchun hujjatning `id / access_hash / file_reference / dc_id` qiymatlari
-// kerak. Ilgari brauzer ularni `api/tg-doc.php` dan alohida so'rov bilan
-// olardi — bu birinchi baytni bitta RTT + PHP ishga tushishiga kechiktirardi.
-//
-// Endi tayyor kesh yozuvi (30 daqiqa amal qiladi) to'g'ridan-to'g'ri sahifa
-// HTML'iga qo'shiladi. Qo'shimcha yuk YO'Q: `cli/tg-meta-warm.php` kataloguni
-// baribir fonda isitadi, bu yerda faqat diskdan o'qiladi (~1 ms, Telegram'ga
-// murojaat yo'q). Kesh bo'sh bo'lsa `tgDoc = null` — brauzer avvalgidek
-// endpointga murojaat qiladi.
-$WATCH['tgDoc'] = null;
-if (is_array($playback) && ($playback['type'] ?? '') === 'telegram'
-    && !empty($playback['channel']) && (int) ($playback['post'] ?? 0) > 0) {
-    require_once __DIR__ . '/includes/TgDocCache.php';
-    $tgCh   = (string) $playback['channel'];
-    $tgPost = (int) $playback['post'];
-    $tgDoc  = tgDocCacheRead($tgCh, $tgPost);
-    if ($tgDoc && (time() - (int) ($tgDoc['t'] ?? 0)) < TG_DOC_CACHE_TTL) {
-        $WATCH['tgDoc'] = [
-            // Brauzerdagi kalit: `<kanal>/<post>` (`tg-stream.js` bilan bir xil).
-            'key'  => $tgCh . '/' . $tgPost,
-            // Brauzer `t` ni MILLISEKUNDDA kutadi; serverda soniya.
-            't'    => (int) $tgDoc['t'] * 1000,
-            'id'   => (string) $tgDoc['id'],
-            'ah'   => (string) $tgDoc['ah'],
-            'fr'   => (string) $tgDoc['fr'],
-            'dc'   => (int) $tgDoc['dc'],
-            'size' => (int) $tgDoc['size'],
-            'mime' => (string) ($tgDoc['mime'] ?? ''),
-            'fn'   => (string) ($tgDoc['fn'] ?? ''),
-            'w'    => (int) ($tgDoc['w'] ?? 0),
-            'h'    => (int) ($tgDoc['h'] ?? 0),
-            'dur'  => (int) ($tgDoc['dur'] ?? 0),
-        ];
-    }
-}
+// Ilgari server (BOT sessiyasi, MadelineProto) yechgan `file_reference` keshdan
+// olinib, HTML ichiga qo'shilardi. Amalda bu havola tomoshabinning O'Z
+// akkauntida `FILE_REFERENCE_INVALID` bilan rad etilardi: har ochilish
+// "rad etish -> `fresh=1` (3-6 s) -> yana rad etish -> GramJS" zanjiriga
+// tushardi va video umuman ochilmasdi. Shuning uchun bu blok OLIB TASHLANDI.
+// Hujjat endi faqat foydalanuvchining O'Z sessiyasi (GramJS) bilan yechiladi
+// va `tg-stream.js` ichida 30 daqiqaga lokal keshlanadi.
 
 $NAV_ACTIVE = 'home';
 ?>
@@ -598,38 +569,6 @@ $NAV_ACTIVE = 'home';
         miniApp: <?php echo json_encode($WATCH['miniApp']); ?>
     };
     window.WATCH = <?php echo json_encode($WATCH, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
-    // ------------------------------------------------------------------
-    // JORIY VIDEO METAMA'LUMOTINI LOKAL KESHGA DARHOL QO'YISH
-    // ------------------------------------------------------------------
-    // `watch.php` serverdagi keshdan (`window.WATCH.tgDoc`) tayyor
-    // metama'lumotni HTML ichiga qo'shadi. Uni `tg-stream.js` ishlatadigan
-    // localStorage formatiga (wc_tg_docmeta_v1) shu yerda — skriptlar
-    // yuklanishidan OLDIN — yozib qo'yamiz.
-    //
-    // Natija: `TgStream.prefetch()` birinchi `upload.getFile` so'rovini
-    // `api/tg-doc.php` javobini KUTMASDAN boshlaydi. Bu bitta HTTP
-    // yurish-yurish (RTT) + PHP ishga tushishini yo'q qiladi va birinchi
-    // baytni sezilarli erta yetkazadi. Kesh bo'sh bo'lsa `tgDoc` null —
-    // brauzer avvalgidek endpointdan so'raydi (hech narsa buzilmaydi).
-    (function () {
-        try {
-            var d = window.WATCH && window.WATCH.tgDoc;
-            if (!d || !d.key || !d.id || !d.fr) return;
-            var K = 'wc_tg_docmeta_v1';
-            var raw = localStorage.getItem(K);
-            var all = raw ? (JSON.parse(raw) || {}) : {};
-            // Brauzerdagi yozuv undan YANGIROQ bo'lsa — uni ustidan yozmaymiz
-            // (GramJS o'z akkaunti uchun tazaroq havola olgan bo'lishi mumkin).
-            var old = all[d.key];
-            if (old && (Number(old.t) || 0) >= (Number(d.t) || 0)) return;
-            all[d.key] = {
-                t: d.t, id: d.id, ah: d.ah, fr: d.fr, dc: d.dc,
-                size: d.size, mime: d.mime || '', fn: d.fn || '',
-                w: d.w || 0, h: d.h || 0, dur: d.dur || 0
-            };
-            localStorage.setItem(K, JSON.stringify(all));
-        } catch (e) { /* localStorage o'chirilgan / kvota to'lgan — jim */ }
-    })();
 </script>
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <?php /* Minimal MTProto klient (25 KB) — 5.4 MB GramJS bundle'ini video oqimi
@@ -676,12 +615,13 @@ $NAV_ACTIVE = 'home';
             var currentPlayback = (window.WATCH && window.WATCH.playback) || {};
             if (currentPlayback.type === 'telegram' && currentPlayback.channel
                 && currentPlayback.post && typeof window.TgStream.prefetch === 'function') {
-                // Birinchi 1 MB ni oldindan olamiz — bu Telegram'ning bitta
-                // `upload.getFile` so'rovidagi eng katta hajm (1 MB blok
-                // chegarasi). Shu tufayli pleer mount bo'lganda birinchi
-                // so'rov oniy javob oladi, Telegram'ni kutmaydi. Data
-                // Saver/2G da faqat metama'lumot olinadi.
-                var warmCurrentHead = 1024 * 1024;
+                // Birinchi 256 KB ni oldindan olamiz. 1 MB emas: tez klient
+                // hovuzi standart holatda BITTA ulanish ishlatadi, shuning
+                // uchun katta warm joriy oqimning birinchi baytini bloklab
+                // qo'yardi (o'lchovda `ttfb` 6 s gacha chiqqan). 256 KB esa
+                // pleerning birinchi `Range` so'rovini qoplaydi va ulanishni
+                // uzoq band qilmaydi. Data Saver/2G da faqat metama'lumot.
+                var warmCurrentHead = 256 * 1024;
                 try {
                     var netInfo = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
                     if (netInfo && (netInfo.saveData || /(^|-)2g$/.test(String(netInfo.effectiveType || '')))) {
