@@ -975,10 +975,11 @@
             // Siqilgan javobda `Content-Length` — SIQILGAN hajm, biz esa
             // yoyilganini sanaymiz. Foiz yolg'on bo'lmasligi uchun `total`
             // ni 0 qoldiramiz (interfeys faqat MB ko'rsatadi).
-            var total = enc.indexOf('gzip') !== -1
-              ? 0
-              : (Number(res.headers.get('Content-Length')) || 0);
-            if (enc.indexOf('gzip') !== -1) {
+            //
+            // HAR QANDAY `Content-Encoding` (gzip/br/deflate) bo'lsa ham
+            // brauzer javobni o'zi yechgan — qayta ochish shart emas.
+            var total = enc ? 0 : (Number(res.headers.get('Content-Length')) || 0);
+            if (enc) {
               return streamInject(res.body, total, onProgress);
             }
             if (!canGunzip()) throw new Error('gz ochilmaydi');
@@ -1020,9 +1021,7 @@
             // Apache `.js` ni ham `Content-Encoding: gzip` bilan beradi —
             // u holda `Content-Length` yoyilgan hajmga to'g'ri kelmaydi.
             var enc = (res.headers.get('Content-Encoding') || '').toLowerCase();
-            var total = enc.indexOf('gzip') !== -1
-              ? 0
-              : (Number(res.headers.get('Content-Length')) || 0);
+            var total = enc ? 0 : (Number(res.headers.get('Content-Length')) || 0);
             return streamInject(res.body, total, onProgress);
           })
           .catch(function () { return injectScript(bundleUrl()); });
