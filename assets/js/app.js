@@ -385,21 +385,17 @@
             homeFeed.done = !d.has_more;
             homeFeed.loading = false;
 
-            // Ko'rilgan/tarix ro'yxati — mahalliy filter va pastdagi float
-            // "Davom etish" kartochkasi uchun.
+            // Ko'rilgan/tarix ro'yxati — pastdagi float "Davom etish"
+            // kartochkasi uchun. Feed endi hech narsani yashirmaydi:
+            // barcha filmlar ko'rinadi, ko'rilganlari serverdan oxirida keladi.
             let watched = [];
             if (window.WCLib) { try { watched = window.WCLib.list('history') || []; } catch (e) {} }
-            const watchedIds = new Set(watched.map((x) => String(x.id)));
-            const notSeen = (arr) => (arr || []).filter((c) => !watchedIds.has(String(c.id)));
 
-            // Bitta aralash feed: yangi (3 kun) birinchi, qolgani RAND(seed).
-            // Server allaqachon ko'rilgan (tarixga tushgan) va "Davom etish"da
-            // turgan kontentni yashirgan; bu yerda faqat qo'shimcha mahalliy
-            // filtr bor (reels'da ko'rilgan narsalar serverga o'tmagan bo'lishi
-            // mumkin).
+            // Bitta aralash feed: ko'rilmaganlar (yangi birinchi, qolgani
+            // RAND(seed)) boshida, ko'rilganlar oxirida.
             const grid = $('#homeFeed');
             grid.innerHTML = '';
-            const fresh = notSeen(d.feed || []);
+            const fresh = d.feed || [];
             grid.innerHTML = fresh.map(c => cardHTML(c, { series: true })).join('');
             bindFeedCards(grid);
             homeFeed.offset += (d.feed || []).length;
@@ -471,12 +467,8 @@
             homeFeed.done = !d.has_more || items.length === 0;
 
             const grid = $('#homeFeed');
-            let watched = [];
-            if (window.WCLib) { try { watched = window.WCLib.list('history') || []; } catch (e) {} }
-            const watchedIds = new Set(watched.map((x) => String(x.id)));
-            const fresh = items.filter((c) => !watchedIds.has(String(c.id)));
             grid.insertAdjacentHTML('beforeend',
-                fresh.map(c => cardHTML(c, { series: true })).join(''));
+                items.map(c => cardHTML(c, { series: true })).join(''));
             bindFeedCards(grid);
 
             const sentinel = $('#feedSentinel');

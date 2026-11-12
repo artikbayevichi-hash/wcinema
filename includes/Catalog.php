@@ -24,7 +24,8 @@ class Catalog {
         return Cache::get('catalog_categories', 60, function () {
             return $this->db()->fetchAll(
                 "SELECT c.id, c.name, c.slug,
-                        (SELECT COUNT(*) FROM content ct WHERE ct.category_id = c.id) AS count
+                        (SELECT COUNT(*) FROM content ct
+                          WHERE ct.category_id = c.id AND ct.status = 'published') AS count
                  FROM categories c
                  ORDER BY c.id"
             );
@@ -44,9 +45,10 @@ class Catalog {
         $limit = max(1, min(100, (int) $limit));
         return Cache::get('catalog_genres_' . $limit, 60, function () use ($limit) {
             return $this->db()->fetchAll(
-                "SELECT g.id, g.name, g.slug, COUNT(cg.content_id) AS count
+                "SELECT g.id, g.name, g.slug, COUNT(ct.id) AS count
                  FROM genres g
                  LEFT JOIN content_genres cg ON cg.genre_id = g.id
+                 LEFT JOIN content ct ON ct.id = cg.content_id AND ct.status = 'published'
                  GROUP BY g.id, g.name, g.slug
                  HAVING count > 0
                  ORDER BY count DESC, g.name
@@ -75,7 +77,10 @@ class Catalog {
         $offset = (int) ($opt['offset'] ?? 0);
         $sort   = $opt['sort'] ?? 'new';
 
-        $where  = ["1 = 1"];
+        // Qoralama (draft) va arxiv (archived) kontent katalogda umuman
+        // ko'rinmaydi - faqat admin panelda. Admin ro'yxatlari
+        // `content-admin.php` orqali to'g'ridan-to'g'ri ishlaydi.
+        $where  = ["c.status = 'published'"];
         $params = [];
 
         if (!empty($opt['category_slug'])) {
@@ -139,7 +144,7 @@ class Catalog {
     }
 
     public function countContent($opt = []) {
-        $where  = ["1 = 1"];
+        $where  = ["c.status = 'published'"];
         $params = [];
         if (!empty($opt['category_slug'])) {
             $where[] = 'cat.slug = ?';
@@ -207,34 +212,20 @@ class Catalog {
     // =========================================================================
 
     /**
-     * Bosh sahifa feedidan yashiriladigan kontent sharti (EXISTS ... ).
+     * Foydalanuvchi uchun "ko'rilgan" kontent sharti (EXISTS ... ).
      *
-     * Yagona qoida — kontent turidan qat'i nazar (kino, anime, multfilm,
-     * serial — hammasi bir xil ishlaydi):
-     *   · tugatilgan (`is_completed=1`) → yashiriladi
-     *     ("bir marta ko'rilganlar qayta chiqmasin");
-     *   · kontentning KAMIDA YARIMI ko'rilgan (`position_seconds` >=
-     *     davomiylikning yarmi) VA qolgan vaqt HOME_HIDE_REMAINING_SEC
-     *     dan ko'p bo'lsa → yashiriladi (hali ko'p qolgan).
-     *   · Boshlanmagan, ozgina boshlangan (yarmidan kam) yoki qolgan
-     *     vaqt kichik (≤ chegaraga) → feedda QOLADI.
-     *   · Davomiylik noma'lum (`duration_seconds<=0`) bo'lsa, hatto
-     *     qisman boshlangan kontent ham QOLADI — noma'lum qolgan vaqtni
-     *     yashirish uchun asos qilib bo'lmaydi.
-     *
-     * Nima uchun "yarmi" sharti: `pos > 0` ning o'zi yetarli emas —
-     * foydalanuvchi videoni bir-ikki soniya ochib ko'rgan bo'lsa ham
-     * (masalan `pos=1`) butun kontent yashirilib, feed bo'shab
-     * qolardi. Talab bo'yicha faqat SEZILARLI ko'rilgan va hali ko'p
-     * qolgan kontent lentadan chiqadi.
-     *
-     * Seriya/anime uchun alohida "istalgan progress yashiriladi" qoidasi
-     * YO'Q — u anime/multfilmlarni feeddan butunlay siqib chiqarardi.
-     * Barcha turlar bitta xolis qoidaga bo'ysunadi.
+     * Bosh sahifada endi hech narsa YASHIRILMAYDI — barcha filmlar
+     * ko'rinadi, faqat ko'rilganlari ro'yxat OXIRIGA o'tadi. Qoida
+     * kontent turidan qat'i nazar bir xil (kino, anime, multfilm, serial):
+     *   · tugatilgan (`is_completed=1`) → oxiriga;
+     *   · KAMIDA YARMI ko'rilgan (`position_seconds` >= davomiylikning
+     *     yarmi) VA qolgan vaqt HOME_HIDE_REMAINING_SEC dan ko'p → oxiriga.
+     *   · Boshlanmagan yoki ozgina boshlangan → boshida qoladi.
+     *   · Davomiylik noma'lum (`duration_seconds<=0`) → oxiriga o'tmaydi.
      *
      * @return array [sql-fragment, params]
      */
-    private function homeHiddenClause($userId) {
+    private function homeWatchedClause($userId) {
         $sql = "EXISTS (
             SELECT 1 FROM watch_progress wp
             WHERE wp.user_id = ? AND wp.content_id = c.id
@@ -251,8 +242,13 @@ class Catalog {
         return [$sql, [(int) $userId, HOME_HIDE_REMAINING_SEC]];
     }
 
+    /** Eski nom (moslik uchun). Endi "yashirish" emas — "oxiriga" ma'nosida. */
+    private function homeHiddenClause($userId) {
+        return $this->homeWatchedClause($userId);
+    }
+
     /**
-     * Foydalanuvchi uchun feeddan yashiriladigan kontent ID larini qaytaradi.
+     * Foydalanuvchi uchun "ko'rilgan" (feed oxiriga tushadigan) kontent ID lari.
      */
     public function homeHiddenIds($userId) {
         if (!$userId) {
@@ -269,11 +265,15 @@ class Catalog {
     }
 
     /**
-     * Bosh sahifa feedi: yangi (HOME_NEW_DAYS ichida, created_at DESC)
-     * birinchi, qolgani `RAND(seed)` bo'yicha aralash.
+     * Bosh sahifa feedi: BARCHA published filmlar ko'rinadi.
      *
-     * Sahifalash ikki segment ustida ishlaydi: avval yangi blok, so'ng
-     * aralash blok (offset yangilar sonidan oshganda eski blokka o'tadi).
+     * Tartib:
+     *   1) ko'rilmaganlar birinchi, ko'rilganlar oxirida;
+     *   2) ularning ichida yangi (HOME_NEW_DAYS ichida, created_at DESC),
+     *      so'ng qolganlari `RAND(seed)` bo'yicha aralash.
+     *
+     * Yagona ORDER BY ishlatiladi, shuning uchun LIMIT/OFFSET bilan
+     * sahifalash barqaror (seed bir xil bo'lsa takrorlanmaydi).
      */
     public function getHomeFeed($userId = 0, $limit = 0, $offset = 0, $seed = 0) {
         $limit  = $limit > 0 ? (int) $limit : HOME_PAGE_SIZE;
@@ -283,66 +283,34 @@ class Catalog {
             $seed = 1;
         }
 
-        [$hidden, $params] = $this->homeHiddenClause($userId);
+        [$watched, $params] = $this->homeWatchedClause($userId);
 
-        $select = "SELECT c.*, cat.name AS category_name, cat.slug AS category_slug,
-                          (SELECT COUNT(*) FROM episodes e WHERE e.content_id = c.id) AS episode_count,
-                          (SELECT e.duration FROM episodes e
-                            WHERE e.content_id = c.id AND e.duration > 0
-                            ORDER BY e.episode_number ASC, e.id ASC LIMIT 1) AS episode_duration
-                   FROM content c
-                   JOIN categories cat ON cat.id = c.category_id
-                   WHERE NOT ($hidden)";
+        $newCond = '(c.created_at >= (NOW() - INTERVAL ' . (int) HOME_NEW_DAYS . ' DAY))';
 
-        $newCond = 'c.created_at >= (NOW() - INTERVAL ' . (int) HOME_NEW_DAYS . ' DAY)';
+        $sql = "SELECT c.*, cat.name AS category_name, cat.slug AS category_slug,
+                       (SELECT COUNT(*) FROM episodes e WHERE e.content_id = c.id) AS episode_count,
+                       (SELECT e.duration FROM episodes e
+                         WHERE e.content_id = c.id AND e.duration > 0
+                         ORDER BY e.episode_number ASC, e.id ASC LIMIT 1) AS episode_duration,
+                       ($watched) AS is_watched
+                FROM content c
+                JOIN categories cat ON cat.id = c.category_id
+                WHERE c.status = 'published'
+                ORDER BY is_watched ASC,
+                         $newCond DESC,
+                         CASE WHEN $newCond THEN c.created_at END DESC,
+                         RAND($seed)
+                LIMIT $limit OFFSET $offset";
 
-        // Yangi segmentdagi ko'rinadigan kontent soni (offset hisobi uchun)
-        $row = $this->db()->fetchOne(
-            "SELECT COUNT(*) AS n FROM content c
-             JOIN categories cat ON cat.id = c.category_id
-             WHERE NOT ($hidden) AND $newCond",
-            $params
-        );
-        $newCount = (int) ($row['n'] ?? 0);
-
-        $rows = [];
-
-        // 1) Yangi blok: created_at DESC
-        $newSkip = max(0, $offset);
-        $newTake = min($limit, max(0, $newCount - $newSkip));
-        if ($newTake > 0) {
-            $rows = $this->db()->fetchAll(
-                "$select AND $newCond
-                 ORDER BY c.created_at DESC, c.id DESC
-                 LIMIT $newTake OFFSET $newSkip",
-                $params
-            );
-        }
-
-        // 2) Qolgan aralash blok: RAND(seed)
-        $oldTake = $limit - count($rows);
-        if ($oldTake > 0) {
-            $oldSkip = max(0, $offset - $newCount);
-            $rest = $this->db()->fetchAll(
-                "$select AND NOT ($newCond)
-                 ORDER BY RAND($seed)
-                 LIMIT $oldTake OFFSET $oldSkip",
-                $params
-            );
-            $rows = array_merge($rows, $rest);
-        }
-
-        return $rows;
+        return $this->db()->fetchAll($sql, $params);
     }
 
-    /** Bosh sahifa feedida jami ko'rinadigan kontent soni. */
+    /** Bosh sahifa feedidagi jami published kontent soni. */
     public function countHomeFeed($userId = 0) {
-        [$hidden, $params] = $this->homeHiddenClause($userId);
         $row = $this->db()->fetchOne(
             "SELECT COUNT(*) AS n FROM content c
              JOIN categories cat ON cat.id = c.category_id
-             WHERE NOT ($hidden)",
-            $params
+             WHERE c.status = 'published'"
         );
         return (int) ($row['n'] ?? 0);
     }
@@ -1298,7 +1266,7 @@ class Catalog {
              FROM watchlist w
              JOIN content c ON c.id = w.content_id
              JOIN categories cat ON cat.id = c.category_id
-             WHERE w.user_id = ?
+             WHERE w.user_id = ? AND c.status = 'published'
              ORDER BY w.created_at DESC
              LIMIT " . (int) $limit,
             [(int) $userId]
@@ -1365,6 +1333,7 @@ class Catalog {
              JOIN content c ON c.id = wp.content_id
              JOIN categories cat ON cat.id = c.category_id
              WHERE wp.user_id = ? AND wp.is_completed = 0 AND wp.position_seconds > 10
+               AND c.status = 'published'
              ORDER BY wp.updated_at DESC
              LIMIT " . (int) $limit,
             [(int) $userId]

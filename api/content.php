@@ -17,6 +17,16 @@ if (!$item) {
     fail('Kontent topilmadi', 404);
 }
 
+// Qoralama (draft) va arxiv (archived) kontentni faqat admin ko'radi
+// (watch.php dagi bilan bir xil qoida). Boshqa hamma uchun 404.
+if (($item['status'] ?? 'published') !== 'published') {
+    $isAdmin = false;
+    try { $isAdmin = (bool) $auth->isAdmin(); } catch (\Throwable $e) {}
+    if (!$isAdmin) {
+        fail('Kontent topilmadi', 404);
+    }
+}
+
 $episodes = $catalog->getEpisodes($item['id']);
 $genres   = $catalog->getContentGenres($item['id']);
 

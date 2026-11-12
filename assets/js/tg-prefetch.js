@@ -28,8 +28,10 @@
 
   var BASE = (w.APP && w.APP.base) || '';
   var GAP  = 500;                  // batchlar orasidagi tanaffus
-  var META_ITEMS = 20;
-  var META_BATCH = 4;
+  var META_ITEMS = 24;
+  var META_BATCH = 20;             // server batch: bitta so'rovda 20 ta hujjat
+  var WARM_KEY   = 'wc_tg_warm_ts'; // server keshi isitilgan vaqt
+  var WARM_EVERY = 10 * 60 * 1000;  // 10 daqiqada bir marta
 
   function conn() {
     return w.navigator && (w.navigator.connection || w.navigator.mozConnection || w.navigator.webkitConnection) || null;
@@ -66,11 +68,43 @@
     return new Promise(function (res, rej) {
       var t0 = Date.now();
       (function poll() {
-        if (w.TgStream && typeof w.TgStream.prefetchManyGram === 'function') return res(w.TgStream);
+        if (w.TgStream && (typeof w.TgStream.prefetchMany === 'function'
+            || typeof w.TgStream.prefetchManyGram === 'function')) return res(w.TgStream);
         if (Date.now() - t0 > timeoutMs) return rej(new Error('no TgStream'));
         setTimeout(poll, 400);
       })();
     });
+  }
+
+  // Server keshi oxirgi marta qachon isitilgan?
+  function warmRecently() {
+    try {
+      var t = parseInt(localStorage.getItem(WARM_KEY) || '0', 10) || 0;
+      return (Date.now() - t) < WARM_EVERY;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markWarm() {
+    try { localStorage.setItem(WARM_KEY, String(Date.now())); } catch (e) {}
+  }
+
+  // `api/tg-doc.php?warm=1` — javob DARHOL qaytadi, Telegram bilan ishlash
+  // esa SERVERDA, javobdan keyin davom etadi. Brauzer hech narsa kutmaydi.
+  //
+  // Natija: keyingi 30 daqiqa ichida HAR BIR foydalanuvchi uchun hujjat
+  // metama'lumoti ~10 ms da keladi — video birinchi bayti darhol boshlanadi.
+  function warmServer() {
+    var url = (BASE || '') + '/api/tg-doc.php?warm=1';
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var init = { credentials: 'same-origin', cache: 'no-store' };
+    if (ctl) {
+      init.signal = ctl.signal;
+      // Javob darhol keladi; 8 s — faqat osilib qolmaslik uchun.
+      setTimeout(function () { try { ctl.abort(); } catch (e) {} }, 8000);
+    }
+    return fetch(url, init).catch(function () {});
   }
 
   function loadList() {
@@ -92,26 +126,49 @@
 
     var T;
     try { T = await waitForTgStream(20000); } catch (e) { return; }
-    try { if (typeof T.hasSession === 'function' && !T.hasSession()) return; } catch (e) { return; }
 
     await waitIdle();
     if (videoBusy()) return;
+
+    // 1) SERVER keshini isitish — eng katta yutuq. Telegram'ga murojaat
+    //    serverda bo'ladi, brauzer esa javobni kutmaydi.
+    if (!warmRecently()) {
+      markWarm();
+      try { warmServer(); } catch (e) {}
+    }
 
     var items = [];
     try { items = await loadList(); } catch (e) { return; }
 
     // Ro'yxat ko'rishlar soni bo'yicha tartiblangan. Faqat metama'lumot
-    // keshlanadi; batch ichidagi parallel Telegram so'rovlari 4 tadan oshmaydi.
+    // keshlanadi; video baytlari yuklanmaydi.
     items = items.filter(function (it) {
       return it && it.channel && Number(it.post) > 0;
     }).slice(0, META_ITEMS);
+    if (!items.length) return;
 
-    for (var i = 0; i < items.length; i += META_BATCH) {
+    // 2) Serverdan BITTA so'rovda (GramJS bundle'siz) — tez yo'l.
+    var got = 0;
+    if (typeof T.prefetchMany === 'function') {
+      try { got = await T.prefetchMany(items); } catch (e) { got = 0; }
+    }
+
+    // 3) Zaxira: foydalanuvchining O'Z sessiyasi (GramJS). Faqat server
+    //    yo'li ishlamagan holatda — aks holda 5.4 MB bundle bekorga
+    //    yuklanardi.
+    if (got >= items.length) return;
+    try { if (typeof T.hasSession === 'function' && !T.hasSession()) return; } catch (e) { return; }
+    if (typeof T.prefetchManyGram !== 'function') return;
+
+    // Allaqachon keshlangan yozuvlarni `prefetchManyGram` o'zi tashlab
+    // yuboradi, shuning uchun ro'yxatni qayta filtrlamaymiz.
+    var rest = items;
+    for (var i = 0; i < rest.length; i += META_BATCH) {
       if (document.hidden || videoBusy()) break;
       try {
-        await T.prefetchManyGram(items.slice(i, i + META_BATCH));
+        await T.prefetchManyGram(rest.slice(i, i + META_BATCH));
       } catch (e) { /* bitta batch xato bo'lsa — keyingisi davom etadi */ }
-      if (i + META_BATCH < items.length) {
+      if (i + META_BATCH < rest.length) {
         await new Promise(function (r) { setTimeout(r, GAP); });
       }
     }

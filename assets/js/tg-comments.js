@@ -192,7 +192,9 @@
   //
   // Izohlar mavzusi qayerda ochiladi - bosh sahifaga bog'liq:
   //   reels.php  -> `api/reel-topic.php` (reels.id, reels.jadvali)
-  //   watch.php  -> `api/video-topic.php` (episodes.id, tg_topics jadvali)
+  //   watch.php  -> `api/video-topic.php` (content.id, tg_topics jadvali)
+//                 `id` sifatida episodes.id yuboriladi - server kontentni
+//                 o'zi aniqlaydi, shunda qismlar bitta mavzuni bo'lishadi.
   // Sahifa `window.APP.tgCommentsTopicApi` orqali yo'lni ko'rsatadi. Bu
   // standart qiymat bo'lmasa - reels moduli o'zgarishsiz ishlayveradi.
   var TOPIC_API   = (global.APP && global.APP.tgCommentsTopicApi) || 'api/reel-topic.php';

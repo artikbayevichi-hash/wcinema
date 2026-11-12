@@ -2,16 +2,17 @@
 // ============================================================================
 // TgTopics - Telegram forum-mavzulari registri (ko'rish sahifasi izohlari)
 // ============================================================================
-// Izohlar serverda saqlanmaydi: har bir video (episode) uchun Telegram forum
-// guruhida bitta mavzu ochiladi va izohlar o'sha mavzuda qoladi. Reels izohlari
-// shu qoidaning bir xil nusxasi - faqat kalit boshqa (`reels.id` o'rniga
-// `episodes.id`).
+// Izohlar serverda saqlanmaydi: har bir KONTENT uchun Telegram forum guruhida
+// bitta mavzu ochiladi va izohlar o'sha mavzuda qoladi. Serial/anime'ning
+// 1, 2, 3... qismlari bitta mavzuni bo'lishadi (`SCOPE_CONTENT`, kalit -
+// `content.id`). Reels izohlari shu qoidaning bir xil nusxasi - faqat kalit
+// boshqa (`reels.id`).
 //
 // Nima uchun `Reels::ensureTopic()` kengaytirilmadi, balki alohida klass?
 //   1) Reels moduli ishlab turibdi va testlarga asoslangan. Uni tegmasak,
 //      reels sahifasi hech qachon regressiyaga uchramaydi.
 //   2) Reels moduli `reels` jadvaliga bog'langan, ko'rish sahifasi esa
-//      `episodes` jadvaliga. Ikkalasi bir-birini bilmaydi.
+//      `content`/`episodes` jadvallariga. Ikkalasi bir-birini bilmaydi.
 //   3) `reels.tg_topic_id` ustuni allaqachon mavjud - yangi jadval o'shandan
 //      ajratilgan, shuning uchun mavzu raqamlari to'qnashmaydi.
 //
@@ -21,11 +22,21 @@
 
 class TgTopics
 {
-    /** Ko'rish sahifasi videolari (`episodes.id`). */
+    /** Ko'rish sahifasi videolari (`episodes.id`) - eski kalit. */
     const SCOPE_VIDEO = 'video';
 
+    /**
+     * Bitta kontent (serial/anime) uchun YAGONA mavzu (`content.id`).
+     *
+     * Nima uchun: ilgari har bir qism uchun alohida topic ochilardi. Anime'da
+     * 12 qism = 12 topic, izohlar tarqoq va Telegram'dagi ro'yxat ham uzun.
+     * Endi 1, 2, 3... qismlar BITTA mavzuni bo'lishadi - izohlar bir joyda
+     * yig'iladi (foydalanuvchi ham, moderatsiya ham oson).
+     */
+    const SCOPE_CONTENT = 'content';
+
     /** Ruxsat etilgan qamrovlar (SQL injection dan himoya). */
-    private static $scopes = [self::SCOPE_VIDEO];
+    private static $scopes = [self::SCOPE_VIDEO, self::SCOPE_CONTENT];
 
     private $db;
     private $ready = null;
@@ -109,6 +120,84 @@ class TgTopics
         return (int) $row['tg_topic_id'];
     }
 
+    /**
+     * Eski kalitdagi mavzuni yangi kalitga "ko'chirib olish".
+     *
+     * Nima uchun kerak: ilgari izohlar `episodes.id` bo'yicha ochilgan
+     * (`scope = video`). Endi kalit - `content.id` (`scope = content`).
+     * Agar shunchaki yangi kalit bilan qidirsak, mavjud Telegram mavzusi
+     * topilmaydi va bot DUBLIKAT topic ochadi. Shuning uchun yangi kalit
+     * uchun yozuv bo'lmasa, shu kontentning eski qism-mavzularidan birini
+     * (eng birinchi qismini) meros qilib olamiz.
+     *
+     * Hech narsa O'CHIRILMAYDI: faqat registrga yangi qator qo'shiladi.
+     *
+     * @param string $scope     Yangi qamrov (masalan self::SCOPE_CONTENT)
+     * @param int    $itemId    Yangi kalit (masalan content.id)
+     * @param string $fromScope Eski qamrov (self::SCOPE_VIDEO)
+     * @param int[]  $fromIds   Eski kalitlar (episodes.id ro'yxati)
+     *
+     * @return int|null Meros qilingan topic id (topilmasa null)
+     */
+    public function adopt($scope, $itemId, $fromScope, array $fromIds)
+    {
+        $scope     = $this->normScope($scope);
+        $fromScope = $this->normScope($fromScope);
+        $itemId    = (int) $itemId;
+        if ($scope === '' || $fromScope === '' || $itemId <= 0 || !$this->ready()) {
+            return null;
+        }
+
+        // 1) Yangi kalit allaqachon bor bo'lsa - uni qaytaramiz.
+        $existing = $this->topicId($scope, $itemId);
+        if ($existing) {
+            return $existing;
+        }
+
+        // 2) Eski kalitlardan birinchi topilgan mavzuni olamiz.
+        $ids = [];
+        foreach ($fromIds as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        if (!$ids) {
+            return null;
+        }
+        $in  = implode(',', array_fill(0, count($ids), '?'));
+        $row = $this->db->fetchOne(
+            "SELECT tg_topic_id, chat, url FROM tg_topics
+              WHERE scope = ? AND item_id IN ({$in})
+                AND tg_topic_id IS NOT NULL
+              ORDER BY id ASC LIMIT 1",
+            array_merge([$fromScope], $ids)
+        );
+        if (!$row || empty($row['tg_topic_id'])) {
+            return null;
+        }
+
+        // 3) Registrga ko'chiramiz (parallel so'rovda dublikat chiqmasin).
+        $topicId = (int) $row['tg_topic_id'];
+        try {
+            $this->db->query(
+                "INSERT IGNORE INTO tg_topics (scope, item_id, chat, tg_topic_id, url)
+                 VALUES (?, ?, ?, ?, ?)",
+                [
+                    $scope,
+                    $itemId,
+                    (string) ($row['chat'] ?? ''),
+                    $topicId,
+                    (string) ($row['url'] ?? $this->url($topicId)),
+                ]
+            );
+        } catch (Exception $e) {
+            error_log('TgTopics: mavzu ko\'chirilmadi - ' . $e->getMessage());
+        }
+
+        return $this->topicId($scope, $itemId) ?: $topicId;
+    }
+
     /** Mavzuning Telegram havolasi (web). */
     public function url($topicId)
     {
@@ -126,9 +215,9 @@ class TgTopics
     /**
      * Mavzuni ta'minlaydi: yo'q bo'lsa bot orqali ochadi va bazaga yozadi.
      *
-     * @param string $scope Masalan self::SCOPE_VIDEO
-     * @param int    $itemId episodes.id
-     * @param string $name   Mavzu sarlavhasi (kino nomi + qism)
+     * @param string $scope Masalan self::SCOPE_CONTENT
+     * @param int    $itemId content.id (serial/anime uchun umumiy kalit)
+     * @param string $name   Mavzu sarlavhasi (kontent nomi)
      *
      * @return array ['success'=>bool,'topic_id'=>int|null,'chat'=>string,
      *                'url'=>?string,'created'=>bool,'message'=>?string]

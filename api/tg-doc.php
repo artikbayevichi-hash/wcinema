@@ -196,10 +196,159 @@ function tgDocToOut($doc) {
 }
 
 // ---------------------------------------------------------------------------
+// Katalogdagi BARCHA (kanal, post) juftliklari — "isitish" uchun
+//
+// Nima uchun kerak: sovuq keshda bitta hujjatni yechish 3-4 soniya
+// (MadelineProto sessiyasi + RPC). Foydalanuvchi shu vaqtni video
+// ochilishida kutadi. Agar bosh sahifa ochilganda fonda BUTUN katalog
+// bir marta yechilsa — keyingi 30 daqiqa davomida HAR BIR foydalanuvchi
+// uchun javob ~10 ms bo'ladi (tez yo'l ishlaydi, GramJS umuman kerak emas).
+// ---------------------------------------------------------------------------
+function tgParseVideoUrl($u) {
+    $u = trim((string) $u);
+    if ($u === '') {
+        return null;
+    }
+    if (!preg_match('#^(?:https?://)?(?:www\.)?(?:t|telegram)\.me/([A-Za-z0-9_]+)/(\d+)#i', $u, $m)) {
+        return null;
+    }
+    $post = (int) $m[2];
+    if ($post <= 0) {
+        return null;
+    }
+    return ['ch' => $m[1], 'post' => $post];
+}
+
+/**
+ * Katalogdagi barcha video juftliklari (dublikatsiz, ko'rishlar bo'yicha).
+ * Faqat `published` kontent — qoralama/arxiv hech qachon isitilmaydi.
+ */
+function tgCatalogPairsAll($limit = 150) {
+    $limit = max(1, min(300, (int) $limit));
+    $out   = [];
+    $seen  = [];
+    try {
+        $db = Database::getInstance();
+        $rows = $db->fetchAll(
+            "SELECT e.video_url
+               FROM episodes e
+               JOIN content c ON c.id = e.content_id
+              WHERE c.status = 'published' AND e.video_url LIKE '%t.me/%'
+              ORDER BY c.views DESC, c.id DESC, e.episode_number ASC, e.id ASC
+              LIMIT {$limit}"
+        );
+        foreach ($rows as $r) {
+            $p = tgParseVideoUrl($r['video_url'] ?? '');
+            if (!$p) {
+                continue;
+            }
+            $key = $p['ch'] . '/' . $p['post'];
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = $p;
+        }
+        $rows = $db->fetchAll(
+            "SELECT video_url FROM reels
+              WHERE video_url LIKE '%t.me/%'
+              ORDER BY id DESC LIMIT 40"
+        );
+        foreach ($rows as $r) {
+            $p = tgParseVideoUrl($r['video_url'] ?? '');
+            if (!$p) {
+                continue;
+            }
+            $key = $p['ch'] . '/' . $p['post'];
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = $p;
+        }
+    } catch (\Throwable $e) {
+        return $out;
+    }
+    return $out;
+}
+
+// ---------------------------------------------------------------------------
 // Kirish parametrlari
 // ---------------------------------------------------------------------------
 $postsParam = trim((string) input('posts', '', 8000));
 $fresh      = isset($_GET['fresh']) && (string) $_GET['fresh'] === '1';
+$warm       = isset($_GET['warm']) && (string) $_GET['warm'] !== '0';
+
+// ===================================================================
+// ISITISh rejimi: ?warm=1
+// ===================================================================
+//
+// Javob DARHOL qaytadi (brauzer kutmaydi), kesh yangilash esa javobdan
+// KEYIN davom etadi (`ignore_user_abort` + `flush`). Shuning uchun bu
+// so'rov foydalanuvchi sahifasini sekinlashtirmaydi.
+if ($warm) {
+    @set_time_limit(0);
+    @ignore_user_abort(true);
+
+    $pairs = tgCatalogPairsAll(150);
+    $need  = [];
+    foreach ($pairs as $p) {
+        $c = $fresh ? null : tgDocCacheRead($p['ch'], $p['post']);
+        if ($c && (time() - (int) ($c['t'] ?? 0)) < TG_DOC_CACHE_TTL) {
+            continue;
+        }
+        $need[] = $p;
+    }
+
+    $payload = json_encode([
+        'success' => true,
+        'ok'      => true,
+        'warm'    => true,
+        'total'   => count($pairs),
+        'need'    => count($need),
+        't'       => time(),
+    ]);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Connection: close');
+    header('Content-Length: ' . strlen($payload));
+    while (ob_get_level() > 0) {
+        @ob_end_flush();
+    }
+    echo $payload;
+    @flush();
+    if (function_exists('fastcgi_finish_request')) {
+        @fastcgi_finish_request();
+    }
+
+    if (!$need) {
+        exit;
+    }
+
+    // Fon: butun katalog bo'yicha bitta sessiya + kanal boshiga bitta RPC.
+    try {
+        TgPull::sessionLockAcquire(2);       // band bo'lsa — kutmaymiz, keyin
+        $api  = TgPull::openBotSession();
+        $docs = TgPull::fetchDocInfos($api, $need);
+        foreach ($docs as $key => $res) {
+            if (empty($res['doc'])) {
+                continue;
+            }
+            $out = tgDocToOut($res['doc']);
+            if (!$out) {
+                continue;
+            }
+            list($c2, $p2) = explode('/', $key, 2);
+            if ($c2 !== '' && (int) $p2 > 0) {
+                tgDocCacheWrite($c2, (int) $p2, $out);
+            }
+        }
+    } catch (\Throwable $e) {
+        // Jim: isitish — yordamchi ish, xatosi foydalanuvchiga ko'rinmaydi.
+    } finally {
+        TgPull::sessionLockRelease();
+    }
+    exit;
+}
 
 // ===================================================================
 // BATCH rejimi: ?posts=kanal:post,kanal:post,...
