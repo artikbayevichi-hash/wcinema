@@ -429,31 +429,19 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         }
     }
 
-    // Poster DISKKA YOZILMAYDI.
+    // Poster DISKKA HAM, CDN MANZILIGA HAM AYLANTIRILMAYDI.
     //
-    // Ilgari bu yerda `downloadImage()` chaqirilib, rasm
-    // `uploads/posters/tg_*.jpg` ga saqlanardi. Endi poster xuddi video
-    // kabi Telegram'ning o'zidan ochiladi:
+    // Ilgari bu yerda `downloadImage()` rasmni `uploads/posters/` ga
+    // yozardi; keyin `TgResolve::image()` CDN manzilini olib, BAZAGA
+    // `https://cdn*.telesco.pe/file/...` yozilardi. Telegram CDN havolalari
+    // imzolangan va ~1 kunda o'ladi — natijada butun saytda posterlar
+    // ko'rinmay qolgan (2026-11: 13 tadan 12 tasi 404).
     //
-    //   • t.me havolasi  -> `TgResolve::image()` orqali CDN manzilga
-    //                       aylantiriladi (https://cdn*.telesco.pe/file/…)
-    //   • CDN manzili    -> o'zgartirilmasdan saqlanadi
-    //   • CDN topilmasa  -> t.me havolasi qoladi (uni `Catalog::posterSrc()`
-    //                       `api/tg-resolve.php?mode=img` proksisiga
-    //                       aylantiradi), ya'ni sayt baribir ishlaydi.
-    if (!empty($fields['poster'])) {
-        $posterHost = strtolower((string) parse_url((string) $fields['poster'], PHP_URL_HOST));
-        if (preg_match('#(^|\.)(t\.me|telegram\.me)$#i', $posterHost)) {
-            try {
-                $cdn = (new TgResolve())->image((string) $fields['poster']);
-                if (is_string($cdn) && preg_match('#^https?://#i', $cdn)) {
-                    $fields['poster'] = $cdn;
-                }
-            } catch (Throwable $e) {
-                error_log('[content-admin] Telegram poster: ' . $e->getMessage());
-            }
-        }
-    }
+    // Endi bazada BARQAROR `https://t.me/<kanal>/<post>` havolasi saqlanadi,
+    // uni ko'rsatish paytida `Catalog::posterSrc()` ->
+    // `api/tg-resolve.php?mode=img` 302 orqali har safar YANGI CDN
+    // manziliga aylantiradi (server keshi 6 soat). Ya'ni poster hech qachon
+    // "eskirib" qolmaydi va server diskiga hech narsa yozilmaydi.
 
     if ($action === 'create_content') {
         $fields['user_id'] = (int) $userId;

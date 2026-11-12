@@ -16,12 +16,19 @@
 class TgResolve {
 
     const TTL = 21600;               // kesh muddati: 6 soat
+    const FRESH_MIN = 60;            // `fresh` bilan ham 60 s ichida qayta so'ralmaydi
     const CACHE_FILE = 'uploads/tg_cache.json';
     const MAX_IMAGE_BYTES = 8388608; // poster rasm chegi: 8 MB
     const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-    /** t.me post manzilini ochadi: ['ok','image','video','title','has_video','has_post','embed_ok','reason','cached'] */
-    public function resolve($url) {
+    /**
+     * t.me post manzilini ochadi: ['ok','image','video','title','has_video','has_post','embed_ok','reason','cached']
+     *
+     * $fresh = true  — keshni chetlab o'tib qayta yechish (poster CDN manzili
+     * o'lgan bo'lsa kerak). Suiiste'moldan himoya: kesh yozilganiga
+     * FRESH_MIN soniyadan kam bo'lsa, baribir keshdan qaytariladi.
+     */
+    public function resolve($url, $fresh = false) {
         $bad = [
             'ok' => false, 'image' => null, 'video' => null,
             'title' => null, 'has_video' => false, 'has_post' => false,
@@ -46,7 +53,8 @@ class TgResolve {
         // v3: media_big ("Media is too big") aniqlash qo'shilgan (2026) — eski keshlar qayta to'ldiriladi. v2: embed-tahlil qo'shilgan.
         $key = sha1('v3|' . $url);
         $cached = $this->readCache($key);
-        if ($cached !== null) {
+        $age = $cached !== null ? time() - (int) ($cached['at'] ?? 0) : 0;
+        if ($cached !== null && (!$fresh || $age < self::FRESH_MIN)) {
             $cached['ok']     = !empty($cached['ok']);
             $cached['cached'] = true;
             return $cached;
@@ -274,8 +282,8 @@ class TgResolve {
     }
 
     /** Resolved rasm manzili (CDN) yoki null. */
-    public function image($url) {
-        $r = $this->resolve($url);
+    public function image($url, $fresh = false) {
+        $r = $this->resolve($url, $fresh);
         return $r['image'] ?? null;
     }
 

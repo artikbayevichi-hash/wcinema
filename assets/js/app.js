@@ -147,6 +147,40 @@
         } catch (e) { return ''; }
     }
 
+    // Poster proksisi (`api/tg-resolve.php?mode=img`) 302 bilan Telegram CDN
+    // manziliga o'tadi; CDN havolasi eskirsа rasm yuklanmay qoladi (404).
+    // Bunday holatda bir marta `fresh=1` bilan qayta urinamiz — server keshi
+    // yangilanadi va yangi CDN havolasi qaytadi. Ikkinchi urinish ham
+    // muvaffaqiyatsiz bo'lsa, rasmni olib tashlaymiz (SVG fon qoladi).
+    function posterRetry(img) {
+        const src = img.getAttribute('src') || '';
+        if (!src || img.dataset.wcRetry === '1' || src.indexOf('tg-resolve.php') === -1) {
+            img.remove();
+            return;
+        }
+        img.dataset.wcRetry = '1';
+        try {
+            const u = new URL(src, location.href);
+            u.searchParams.set('fresh', '1');
+            u.searchParams.set('r', String(Date.now()));
+            img.src = u.toString();
+        } catch (e) { img.remove(); }
+    }
+    window.wcPosterRetry = posterRetry;
+
+    // Umumiy tarmoq: boshqa shablonlarda (nav, qidiruv, chat) poster
+    // `<img onerror="this.remove()">` bilan chiziladi. Capture fazasida
+    // ushlab, proksi rasmini qayta urinamiz va inline `remove()` ni
+    // to'xtatamiz. Boshqa rasmlarga tegmaymiz.
+    document.addEventListener('error', function (ev) {
+        const img = ev.target;
+        if (!img || img.tagName !== 'IMG') return;
+        const src = img.getAttribute('src') || '';
+        if (src.indexOf('tg-resolve.php') === -1) return;
+        ev.stopPropagation();
+        posterRetry(img);
+    }, true);
+
     function cardHTML(c, opts) {
         opts = opts || {};
         const realPoster = (c.poster && !isSvgPoster(c.poster)) ? c.poster : '';
@@ -155,7 +189,7 @@
         const isFrame = !realPoster && !!frame;
         const poster = imgSrc
             ? `<img class="yt-img${isFrame ? ' yt-frame' : ''}" src="${esc(imgSrc)}" alt="${esc(c.title)}" loading="lazy" decoding="async"
-                   referrerpolicy="no-referrer" onerror="this.remove()">`
+                   referrerpolicy="no-referrer" onerror="window.wcPosterRetry?window.wcPosterRetry(this):this.remove()">`
             : '';
         const fallback = poster ? '' :
             `<div class="poster-fallback">${esc(c.category || '🎬')}</div>`;
@@ -521,7 +555,7 @@
         const poster = $('#contFloatPoster');
         if (poster) {
             poster.innerHTML = item.poster
-                ? `<img src="${esc(item.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`
+                ? `<img src="${esc(item.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="window.wcPosterRetry?window.wcPosterRetry(this):this.remove()">`
                 : '<span class="cont-float-ph">&#127916;</span>';
         }
         const t = $('#contFloatTitle');
