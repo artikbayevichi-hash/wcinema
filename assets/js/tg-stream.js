@@ -539,7 +539,20 @@
         return {
           // Serverdagi kesh vaqti (havola qachon yangilangan) — eskirishni
           // aniqlash uchun kerak. Yo'q bo'lsa — hozirgi vaqt.
-          t: Number(j.t) || Date.now(),
+          //
+          // DIQQAT: server `t` ni UNIX SONIYADA (10 xonali) beradi, brauzer
+          // esa hamma joyda MILLISEKUNDDA solishtiradi. Ilgari bu yerda
+          // qiymat o'zgartirilmasdan qo'yilardi va `docMetaGet()` yozuvni
+          // har doim "eskirgan" deb hisoblab tashlardi (Date.now() ~1.8e12
+          // minus 1.8e9 >> 30 daqiqa). Natijada har ochilishda `api/tg-doc.php`
+          // qayta so'ralar, `refreshDocLoc()` esa `fresh=1` bilan Telegram'ga
+          // qayta murojaat qilardi (3–8 s). Endi ikkala birlik ham ms.
+          t: (function (v) {
+            v = Number(v) || 0;
+            if (!v) return Date.now();
+            // 10 xonali (soniya) -> ms. 13 xonali (ms) o'z holicha qoladi.
+            return v > 1e11 ? v : v * 1000;
+          })(j.t),
           id: String(j.id),
           ah: String(j.ah),
           fr: String(j.fr || ''),
@@ -948,34 +961,50 @@
       //
       // 2) ODDIY NUSXA (zaxira) — eski brauzer, yoki .gz fayl yo'q bo'lsa.
       if (global.fetch && global.ReadableStream && global.Blob && global.URL) {
-        if (canGunzip()) {
-          return fetch(bundleGz(), { credentials: 'same-origin' })
-            .then(function (res) {
-              if (!res.ok || !res.body) throw new Error('gz yo q');
-              var total = Number(res.headers.get('Content-Length')) || 0;
-              var reader = res.body
-                .pipeThrough(new global.DecompressionStream('gzip'))
-                .getReader();
-              var chunks = [], got = 0;
-              return (function pump() {
-                return reader.read().then(function (r) {
-                  if (r.done) {
-                    return injectScript(
-                      URL.createObjectURL(new Blob(chunks, { type: 'text/javascript' }))
-                    );
-                  }
-                  chunks.push(r.value);
-                  got += r.value.length;
-                  if (onProgress) onProgress({ bytes: got, total: total });
-                  return pump();
-                });
-              })();
-            })
-            .catch(function () { return loadPlain(); });   // .gz ishlamadi
-        }
-        return loadPlain();
+        // MUHIM: Apache `.gz` faylni `Content-Encoding: gzip` bilan beradi,
+        // ya'ni brauzer javobni O'ZI yechib beradi. Uni yana
+        // `DecompressionStream('gzip')` ga uzatsak oqim buziladi ("incorrect
+        // header check"), natijada pastdagi `loadPlain()` ikkinchi marta
+        // 735 KB yuklaydi. Shuning uchun avval sarlavhani tekshiramiz:
+        //   Content-Encoding: gzip  -> tana oddiy JS (qayta ochilmaydi)
+        //   sarlavha yo'q           -> tana xom .gz (o'zimiz ochamiz)
+        return fetch(bundleGz(), { credentials: 'same-origin' })
+          .then(function (res) {
+            if (!res.ok || !res.body) throw new Error('gz yo q');
+            var enc = (res.headers.get('Content-Encoding') || '').toLowerCase();
+            var total = Number(res.headers.get('Content-Length')) || 0;
+            if (enc.indexOf('gzip') !== -1) {
+              return streamInject(res.body, total, onProgress);
+            }
+            if (!canGunzip()) throw new Error('gz ochilmaydi');
+            return streamInject(
+              res.body.pipeThrough(new global.DecompressionStream('gzip')),
+              total,
+              onProgress
+            );
+          })
+          .catch(function () { return loadPlain(); });   // .gz ishlamadi
       }
       return injectScript(bundleUrl());
+
+      // Oqimni Blob'ga yig'ib, skript sifatida ulaydi.
+      function streamInject(stream, total, progress) {
+        var reader = stream.getReader();
+        var chunks = [], got = 0;
+        return (function pump() {
+          return reader.read().then(function (r) {
+            if (r.done) {
+              return injectScript(
+                URL.createObjectURL(new Blob(chunks, { type: 'text/javascript' }))
+              );
+            }
+            chunks.push(r.value);
+            got += r.value.length;
+            if (progress) progress({ bytes: got, total: total });
+            return pump();
+          });
+        })();
+      }
 
       // Oddiy (siqilmagan) yuklash — har doim ishlaydi.
       function loadPlain() {
@@ -984,21 +1013,7 @@
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var total = Number(res.headers.get('Content-Length')) || 0;
             if (!res.body) return injectScript(bundleUrl());
-            var reader = res.body.getReader();
-            var chunks = [], got = 0;
-            return (function pump() {
-              return reader.read().then(function (r) {
-                if (r.done) {
-                  return injectScript(
-                    URL.createObjectURL(new Blob(chunks, { type: 'text/javascript' }))
-                  );
-                }
-                chunks.push(r.value);
-                got += r.value.length;
-                if (onProgress) onProgress({ bytes: got, total: total });
-                return pump();
-              });
-            })();
+            return streamInject(res.body, total, onProgress);
           })
           .catch(function () { return injectScript(bundleUrl()); });
       }

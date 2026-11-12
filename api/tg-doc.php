@@ -31,6 +31,8 @@
 //   oldindan yuklash uchun.
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
+// Kesh formati va o'qish/yozish — `watch.php` bilan BIR XIL (bitta manba).
+require_once __DIR__ . '/../includes/TgDocCache.php';
 
 // ---------------------------------------------------------------------------
 // CHIQISHNI TOZALASH
@@ -55,50 +57,14 @@ function apiFail($message, $status = 400) {
     fail($message, $status);
 }
 
-// Kesh format versiyasi. 2 = `file_reference` va atributlar TO'G'RI o'qiladi
-// (1-versiyada `fr` har doim bo'sh qolardi).
-const TG_DOC_CACHE_VER = 2;
-// `file_reference` muddati bilan bog'liq. 30 daqiqa: shu vaqt ichida
-// qayta ochilgan film/metadata uchun Telegram'ga UMUMAN murojaat bo'lmaydi
-// (ochilishdagi ~150 ms kechikish yo'qoladi). Eskirgan havola bo'lsa
-// brauzer FILE_REFERENCE_EXPIRED oladi va o'zi yangilaydi.
-const TG_DOC_CACHE_TTL = 1800;
+// Kesh formati/yo'li `includes/TgDocCache.php` da (watch.php ham shuni
+// o'qiydi). Bu yerda faqat shu endpointga tegishli chegara qoladi.
 // Bitta so'rovda nechta video (Telegram flood himoyasi uchun).
 const TG_DOC_MAX_BATCH  = 120;
 
 // ---------------------------------------------------------------------------
-// Kesh (disk)
+// Kesh (disk) — `includes/TgDocCache.php`
 // ---------------------------------------------------------------------------
-function tgDocCacheFile($ch, $post) {
-    $dir = dirname(__DIR__) . '/storage/tg-doc-cache';
-    return [$dir, $dir . '/' . sha1(strtolower($ch) . '/' . $post) . '.json'];
-}
-
-function tgDocCacheRead($ch, $post) {
-    list($dir, $file) = tgDocCacheFile($ch, $post);
-    if (!is_file($file)) {
-        return null;
-    }
-    $raw = @file_get_contents($file);
-    $j   = $raw ? json_decode($raw, true) : null;
-    if (!is_array($j) || empty($j['id']) || empty($j['fr'])
-        || (int) ($j['v'] ?? 0) !== TG_DOC_CACHE_VER) {
-        return null;
-    }
-    return $j;
-}
-
-function tgDocCacheWrite($ch, $post, $out) {
-    list($dir, $file) = tgDocCacheFile($ch, $post);
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0777, true);
-    }
-    $tmp = $file . '.' . getmypid() . '.tmp';
-    if (@file_put_contents($tmp, json_encode($out, JSON_UNESCAPED_UNICODE)) !== false) {
-        @rename($tmp, $file);      // atomik almashtirish
-        @chmod($file, 0644);
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Katalog: kanal bo'yicha ruxsatli (post) raqamlari

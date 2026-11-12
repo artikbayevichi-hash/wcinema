@@ -8,7 +8,8 @@
 //
 // DIQQAT: izohlar reels moduli bilan BIR XIL ishlaydi (tg-comments.js) -
 // farq faqat mavzu endpointi: reels uchun `api/reel-topic.php`
-// (`reels.id`), shu sahifa uchun `api/video-topic.php` (`episodes.id`).
+// (`reels.id`), shu sahifa uchun `api/video-topic.php` (kalit - `content.id`,
+// ya'ni serial/anime qismlari BITTA izohlar mavzusini bo'lishadi).
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
@@ -230,6 +231,46 @@ $WATCH = [
     'relatedPageSize' => RELATED_PAGE_SIZE,
 ];
 
+// ---------------------------------------------------------------------------
+// JORIY VIDEO METAMA'LUMOTI — HTML ICHIDA
+// ---------------------------------------------------------------------------
+// Video baytlari Telegram'dan to'g'ridan-to'g'ri brauzerga oqadi, lekin buning
+// uchun hujjatning `id / access_hash / file_reference / dc_id` qiymatlari
+// kerak. Ilgari brauzer ularni `api/tg-doc.php` dan alohida so'rov bilan
+// olardi — bu birinchi baytni bitta RTT + PHP ishga tushishiga kechiktirardi.
+//
+// Endi tayyor kesh yozuvi (30 daqiqa amal qiladi) to'g'ridan-to'g'ri sahifa
+// HTML'iga qo'shiladi. Qo'shimcha yuk YO'Q: `cli/tg-meta-warm.php` kataloguni
+// baribir fonda isitadi, bu yerda faqat diskdan o'qiladi (~1 ms, Telegram'ga
+// murojaat yo'q). Kesh bo'sh bo'lsa `tgDoc = null` — brauzer avvalgidek
+// endpointga murojaat qiladi.
+$WATCH['tgDoc'] = null;
+if (is_array($playback) && ($playback['type'] ?? '') === 'telegram'
+    && !empty($playback['channel']) && (int) ($playback['post'] ?? 0) > 0) {
+    require_once __DIR__ . '/includes/TgDocCache.php';
+    $tgCh   = (string) $playback['channel'];
+    $tgPost = (int) $playback['post'];
+    $tgDoc  = tgDocCacheRead($tgCh, $tgPost);
+    if ($tgDoc && (time() - (int) ($tgDoc['t'] ?? 0)) < TG_DOC_CACHE_TTL) {
+        $WATCH['tgDoc'] = [
+            // Brauzerdagi kalit: `<kanal>/<post>` (`tg-stream.js` bilan bir xil).
+            'key'  => $tgCh . '/' . $tgPost,
+            // Brauzer `t` ni MILLISEKUNDDA kutadi; serverda soniya.
+            't'    => (int) $tgDoc['t'] * 1000,
+            'id'   => (string) $tgDoc['id'],
+            'ah'   => (string) $tgDoc['ah'],
+            'fr'   => (string) $tgDoc['fr'],
+            'dc'   => (int) $tgDoc['dc'],
+            'size' => (int) $tgDoc['size'],
+            'mime' => (string) ($tgDoc['mime'] ?? ''),
+            'fn'   => (string) ($tgDoc['fn'] ?? ''),
+            'w'    => (int) ($tgDoc['w'] ?? 0),
+            'h'    => (int) ($tgDoc['h'] ?? 0),
+            'dur'  => (int) ($tgDoc['dur'] ?? 0),
+        ];
+    }
+}
+
 $NAV_ACTIVE = 'home';
 ?>
 <!DOCTYPE html>
@@ -281,14 +322,35 @@ $NAV_ACTIVE = 'home';
         `fetch(url, { credentials: 'same-origin' })` bilan oladi. Preload
         rejimi shunga mos kelmasa brauzer keshni ishlatmaydi.
 
+        `?v=` ham SHART: `bundleGz()` manzilga `window.__WCBUNDLEV`
+        (`.gz` faylning mtime'i, `includes/perf-head.php` da qo'yiladi)
+        qo'shadi. Versiya yozilmasa preload bir manzilga, `fetch` esa
+        boshqasiga ketadi va 735 KB ikki marta yuklanadi.
+
         CSS'lardan KEYIN qo'yilgan: uslublar render'ni bloklagani uchun
         ular birinchi bo'lib o'tishi kerak, aks holda sahifa ko'rinishi
         kechikadi. Bu sahifaga kirish uchun MTProto kaliti shart
-        (`includes/nav.php` dagi guard), ya'ni bundle BEKOR yuklanmaydi. */ ?>
+        (`includes/nav.php` dagi guard), ya'ni bundle BEKOR yuklanmaydi.
+
+        `fetchpriority="low"` — MUHIM: tez yo'l (metama'lumot keshi) ishlaganda
+        bu 718 KB umuman kerak emas. Yuqori prioritetda u video baytlaridan
+        oldin tarmoqni egallab, birinchi kadrni sekinlashtirardi. Endi u fon
+        rejimida, video va CSS/JS'dan KEYIN yuklanadi. */ ?>
     <?php if (!$mediaflowEnabled): ?>
-    <link rel="preload" as="fetch" crossorigin="anonymous"
-          href="<?php echo htmlspecialchars($WATCH['base'], ENT_QUOTES); ?>/assets/js/tg-client.bundle.js.gz">
+    <link rel="preload" as="fetch" crossorigin="anonymous" fetchpriority="low"
+          href="<?php echo htmlspecialchars($WATCH['base'], ENT_QUOTES); ?>/assets/js/tg-client.bundle.js.gz<?php echo !empty($__bundleV) ? '?v=' . (int) $__bundleV : ''; ?>">
     <?php endif; ?>
+    <?php /* Oqim zanjiri skriptlari pastda (nav va kontentdan keyin) turadi.
+             Preload ularni HTML parse bilan PARALLEL yuklaydi — pleer mount'i
+             bir necha yuz millisekundga erta boshlanadi. */ ?>
+    <link rel="preload" as="script" fetchpriority="high"
+          href="assets/js/tg-mtproto.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-mtproto.js') ?: 1; ?>">
+    <link rel="preload" as="script"
+          href="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>">
+    <link rel="preload" as="script"
+          href="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>">
+    <link rel="preload" as="script"
+          href="assets/player/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/player/player.js') ?: 1; ?>">
 </head>
 <body class="ig-shell watch-body">
 
@@ -536,6 +598,38 @@ $NAV_ACTIVE = 'home';
         miniApp: <?php echo json_encode($WATCH['miniApp']); ?>
     };
     window.WATCH = <?php echo json_encode($WATCH, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    // ------------------------------------------------------------------
+    // JORIY VIDEO METAMA'LUMOTINI LOKAL KESHGA DARHOL QO'YISH
+    // ------------------------------------------------------------------
+    // `watch.php` serverdagi keshdan (`window.WATCH.tgDoc`) tayyor
+    // metama'lumotni HTML ichiga qo'shadi. Uni `tg-stream.js` ishlatadigan
+    // localStorage formatiga (wc_tg_docmeta_v1) shu yerda — skriptlar
+    // yuklanishidan OLDIN — yozib qo'yamiz.
+    //
+    // Natija: `TgStream.prefetch()` birinchi `upload.getFile` so'rovini
+    // `api/tg-doc.php` javobini KUTMASDAN boshlaydi. Bu bitta HTTP
+    // yurish-yurish (RTT) + PHP ishga tushishini yo'q qiladi va birinchi
+    // baytni sezilarli erta yetkazadi. Kesh bo'sh bo'lsa `tgDoc` null —
+    // brauzer avvalgidek endpointdan so'raydi (hech narsa buzilmaydi).
+    (function () {
+        try {
+            var d = window.WATCH && window.WATCH.tgDoc;
+            if (!d || !d.key || !d.id || !d.fr) return;
+            var K = 'wc_tg_docmeta_v1';
+            var raw = localStorage.getItem(K);
+            var all = raw ? (JSON.parse(raw) || {}) : {};
+            // Brauzerdagi yozuv undan YANGIROQ bo'lsa — uni ustidan yozmaymiz
+            // (GramJS o'z akkaunti uchun tazaroq havola olgan bo'lishi mumkin).
+            var old = all[d.key];
+            if (old && (Number(old.t) || 0) >= (Number(d.t) || 0)) return;
+            all[d.key] = {
+                t: d.t, id: d.id, ah: d.ah, fr: d.fr, dc: d.dc,
+                size: d.size, mime: d.mime || '', fn: d.fn || '',
+                w: d.w || 0, h: d.h || 0, dur: d.dur || 0
+            };
+            localStorage.setItem(K, JSON.stringify(all));
+        } catch (e) { /* localStorage o'chirilgan / kvota to'lgan — jim */ }
+    })();
 </script>
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <?php /* Minimal MTProto klient (25 KB) — 5.4 MB GramJS bundle'ini video oqimi
@@ -582,11 +676,12 @@ $NAV_ACTIVE = 'home';
             var currentPlayback = (window.WATCH && window.WATCH.playback) || {};
             if (currentPlayback.type === 'telegram' && currentPlayback.channel
                 && currentPlayback.post && typeof window.TgStream.prefetch === 'function') {
-                // Faqat birinchi 128 KB ni RAM keshiga olamiz: kattaroq
-                // warm-up boshlanishni ushlab qolmasin. Qolgan 10 soniyalik
-                // bufer oqim davomida to'ldiriladi. Data Saver/2G da faqat
-                // metama'lumot olinadi.
-                var warmCurrentHead = 128 * 1024;
+                // Birinchi 1 MB ni oldindan olamiz — bu Telegram'ning bitta
+                // `upload.getFile` so'rovidagi eng katta hajm (1 MB blok
+                // chegarasi). Shu tufayli pleer mount bo'lganda birinchi
+                // so'rov oniy javob oladi, Telegram'ni kutmaydi. Data
+                // Saver/2G da faqat metama'lumot olinadi.
+                var warmCurrentHead = 1024 * 1024;
                 try {
                     var netInfo = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
                     if (netInfo && (netInfo.saveData || /(^|-)2g$/.test(String(netInfo.effectiveType || '')))) {
@@ -602,7 +697,11 @@ $NAV_ACTIVE = 'home';
                         // Fayl oxiridagi MP4 indeksini (moov) HOZIR yuklashni
                         // boshlaymiz — player mount bo'lishidan oldin. Brauzer
                         // indeksni so'raganda javob keshdan, bir zumda keladi.
-                        warmTail: warmCurrentHead > 0
+                        warmTail: warmCurrentHead > 0,
+                        // Olingan baytlarni Service Worker keshiga (diskka) ham
+                        // yozamiz. Cache API sahifa almashganda ham qoladi, shuning
+                        // uchun birinchi bo'lak keyingi ochilishda 0 ms da keladi.
+                        cacheSeed: warmCurrentHead > 0
                     }).catch(function () {
                         if (!window.TgStream.hasSession()) {
                             location.replace((window.APP && window.APP.base ? window.APP.base : '') + '/1stlogin.php');
