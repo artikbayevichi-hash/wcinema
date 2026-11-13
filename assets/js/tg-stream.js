@@ -242,7 +242,10 @@
   // eski yozuvlar yana 30 daqiqa ishlatilib, xato takrorlanardi.
   var DOC_META_KEY = 'wc_tg_docmeta_v2';
   try { localStorage.removeItem('wc_tg_docmeta_v1'); } catch (e) { /* jim */ }
-  var DOC_META_TTL = 30 * 60 * 1000;      // 30 daqiqa (file_reference ~24 soat yashaydi)
+  // 6 soat: `file_reference` ~24 soat yashaydi. TTL tugasa yoki eskirsa
+  // `FILE_REFERENCE_INVALID` javobi keladi va kod o'zi GramJS'ga o'tadi —
+  // ya'ni xavfsiz. Uzoq TTL esa qayta ochishda 6 s lik sovuq yo'lni yo'q qiladi.
+  var DOC_META_TTL = 6 * 60 * 60 * 1000;  // 6 soat
 
   function b64ToU8(b64) {
     try {
@@ -1820,6 +1823,9 @@
       try { ctl.postMessage({ type: 'seed', ok: canSeed() }); } catch (e) {}
       // MP4 indeksini (moov) DARHOL oldindan yuklashni boshlaymiz. Shu
       // tufayli brauzer indeksni so'raganda u allaqachon keshda bo'ladi.
+      // SW endi avval bosh baytlardan indeksning ANIQ o'rnini topadi
+      // (`mdat` tugagan joy) — shuning uchun bu xabar oqim bilan
+      // raqobatlashmaydi: ikkisi bir xil 512 KB bo'lakni bo'lishadi.
       var did = (S.loc && S.loc.id != null) ? S.loc.id
         : (S.doc && S.doc.id != null) ? S.doc.id : '';
       warmTail(S.size, did);

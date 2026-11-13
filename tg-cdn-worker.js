@@ -123,15 +123,30 @@ const FIRST_CHUNK = 2 * 1024 * 1024;
 // yana Telegram'ga uchta RTT ketardi (fayl "ochilmayotgan"dek tuyulardi).
 // 8 MB barcha o'lchangan holatlarni qoplaydi (baytlar keshga yoziladi,
 // keyingi ochishda Telegram'ga umuman murojaat bo'lmaydi).
-const TAIL_PREFETCH = 8 * 1024 * 1024;      // faylning oxiridan shuncha bayt
+const TAIL_PREFETCH = 8 * 1024 * 1024;      // zaxira: aniq oraliq topilmasa
 const TAIL_LANES = 8;                       // 8 × 512 KB = 4 MB bir raundda
-const TAIL_CACHE = new Map();               // size -> { start, bytes }
+const IDX_MAX = 8 * 1024 * 1024;            // indeks oynasining yuqori chegarasi
+const HOFF_KEEP = 256 * 1024;               // bosh baytlardan eslab qolinadigan qism
+const IDX_PAUSE_MS = 8000;                  // indeks kutilayotganda oqim tanaffusi
+
+// Kalit: `doc/size`. Ilgari faqat `size` edi — bir xil o'lchamdagi ikki
+// hujjat bir-birining indeksini ishlatib yuborishi mumkin edi.
+function tailKey(doc, size) { return (doc || '') + '/' + size; }
+
+const TAIL_CACHE = new Map();               // kalit -> { start, bytes }
 // Davom etayotgan prefetch promise'i. Nima uchun kerak: brauzer `moov` ni
 // zaxira tayyor bo'lishidan OLDIN so'rasa, ilgari o'sha 8 MB Telegram'dan
 // IKKINCHI marta tortilardi (prefetch + so'rov) — sekin va isrof. Endi
 // so'rov prefetch tugashini kutadi va baytlarni keshdan oladi.
-const TAIL_PROMISE = new Map();             // size -> Promise
+const TAIL_PROMISE = new Map();             // kalit -> Promise
 const TAIL_MAX_ENTRIES = 2;                 // RAMni cheklovchi
+
+// Indeks (moov) ANIQ oynasi: `{ start, len }` yoki `{ inHead: true }`.
+const IDX_WIN = new Map();
+// Bosh baytlar (0 dan boshlab, ketma-ket) — MP4 qutilarini yurish uchun.
+const HEAD_SEEN = new Map();
+// Bosh bayt kelishini kutayotganlar (sahifa `warmtail` ni erta yuboradi).
+const HEAD_WAIT = new Map();
 
 // `moov` boshdagi baytlarda bormi? MP4 qutilarini (box) boshidan yurib
 // tekshiramiz. `moov` topilsa — indeks allaqachon kelgan, demak.
@@ -156,6 +171,48 @@ function hasMoovInHead(bytes) {
     off += size;
   }
   return false;
+}
+
+// Indeks (`moov`) ANIQ qayerda? Bosh baytlardagi qutilarni yurib topamiz.
+//   { inHead: true }   — indeks fayl boshida (faststart);
+//   { start, len }     — indeks shu oraliqda (odatda `mdat` dan keyin);
+//   null               — aniqlab bo'lmadi (zaxira yo'l ishlaydi).
+//
+// NIMA UCHUN: ilgari fayl oxiridagi 8 MB "ko'r-ko'rona" olinardi. `moov`
+// 4–5 MB bo'lsa, 3–4 MB media baytlari behuda ketardi va sekin tarmoqda
+// birinchi kadr shuncha kechikardi. Endi faqat kerakli oraliq olinadi.
+function moovRegionInHead(bytes, size) {
+  if (!bytes || bytes.length < 16 || !(size > 0)) return null;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 0;
+  // Butun mavjud bo'lakni yurib chiqamiz: qutilarni sakrab o'tganimiz uchun
+  // bu bepul (faylning o'rtasidagi baytlar o'qilmaydi).
+  const limit = bytes.length;
+  while (off + 8 <= limit) {
+    let boxSize = dv.getUint32(off, false);
+    let hdr = 8;
+    const t = String.fromCharCode(
+      bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+    if (boxSize === 1) {
+      if (off + 16 > bytes.length) return null;       // 64-bit sarlavha kesilgan
+      boxSize = dv.getUint32(off + 8, false) * 4294967296 + dv.getUint32(off + 12, false);
+      hdr = 16;
+    } else if (boxSize === 0) {
+      // "fayl oxirigacha" — bundan keyin boshqa quti yo'q.
+      return t === 'moov' ? { inHead: true } : null;
+    }
+    if (boxSize < hdr || boxSize > size) return null;
+    if (t === 'moov') return { inHead: true };        // indeks boshda
+    if (t === 'mdat') {
+      // `mdat` — media baytlari (yuzlab MB). Indeks undan KEYIN turadi:
+      // shu sababli butun dumini emas, aynan `mdat` tugagan joydan o'qiymiz.
+      const start = off + boxSize;
+      if (start >= size) return null;
+      return { start: start, len: size - start };
+    }
+    off += boxSize;
+  }
+  return null;
 }
 
 // ============================================================================
@@ -319,62 +376,171 @@ function applyMp4Fix(doc, start, size, u8) {
   return u8;
 }
 
-// Faylning oxirini oldindan yuklab, keshga qo'yamiz.
+// Bosh baytlarni eslab qolamiz (0 dan boshlab KETMA-KET bo'laklar).
+function headNote(key, u8) {
+  if (!key || !u8 || !u8.length) return;
+  const cur = HEAD_SEEN.get(key);
+  if (!cur) {
+    HEAD_SEEN.set(key, u8.slice(0, HOFF_KEEP));
+  } else if (cur.length < HOFF_KEEP) {
+    const room = HOFF_KEEP - cur.length;
+    const take = u8.length <= room ? u8 : u8.subarray(0, room);
+    const out = new Uint8Array(cur.length + take.length);
+    out.set(cur, 0);
+    out.set(take, cur.length);
+    HEAD_SEEN.set(key, out);
+  } else {
+    return;                                 // allaqachon to'lgan
+  }
+  while (HEAD_SEEN.size > 8) HEAD_SEEN.delete(HEAD_SEEN.keys().next().value);
+  const w = HEAD_WAIT.get(key);
+  if (w && w.length) {
+    HEAD_WAIT.delete(key);
+    for (let i = 0; i < w.length; i++) { try { w[i](); } catch (e) { /* jim */ } }
+  }
+}
+
+// Bosh bayt kelishini kutamiz (chegara bilan). `warmtail` sahifadan oqim
+// boshlanishidan OLDIN kelishi mumkin — shunda 1200 ms kutamiz; kelmasa
+// o'zimiz o'qiymiz.
+function headWait(key, ms) {
+  const cur = HEAD_SEEN.get(key);
+  if (cur) return Promise.resolve(cur);
+  return new Promise(function (res) {
+    let arr = HEAD_WAIT.get(key);
+    if (!arr) { arr = []; HEAD_WAIT.set(key, arr); }
+    let done = false;
+    const fin = function () {
+      if (done) return;
+      done = true;
+      const i = arr.indexOf(fin);
+      if (i >= 0) arr.splice(i, 1);
+      const now = HEAD_SEEN.get(key);
+      if (now) res(now);
+      else res(null);
+    };
+    arr.push(fin);
+    setTimeout(fin, Math.max(50, ms || 1200));
+  });
+}
+
+// Indeks (moov) aniq oraliqini topamiz: avval bosh baytlardan (bepul),
+// bo'lmasa 512 KB lik BIRINCHI bo'lakni o'qiymiz — u baribir oqim uchun
+// kerak (kalit `chunkKey` bilan AYNAN bir xil), ya'ni ortiqcha trafik yo'q.
+async function indexRegion(size, doc) {
+  const key = tailKey(doc, size);
+  const known = IDX_WIN.get(key);
+  if (known) return known;
+  let reg = null;
+  const head = HEAD_SEEN.get(key) || await headWait(key, 1200);
+  if (head) reg = moovRegionInHead(head, size);
+  if (!reg) {
+    try {
+      const probe = await readWindow(doc, 0, Math.min(CHUNK, size));
+      if (probe && probe.length >= 16) {
+        headNote(key, probe);                 // keyingi safar bepul
+        reg = moovRegionInHead(probe, size);
+      }
+    } catch (e) { reg = null; }
+  }
+  if (reg && !reg.inHead) {
+    if (!(reg.len > 0)) reg = null;
+    else if (reg.len > IDX_MAX) reg = { start: size - IDX_MAX, len: IDX_MAX };
+  }
+  // Faqat ijobiy natijani eslaymiz: bosh baytlar keyinroq kelishi mumkin.
+  if (reg) {
+    IDX_WIN.set(key, reg);
+    while (IDX_WIN.size > 64) IDX_WIN.delete(IDX_WIN.keys().next().value);
+  }
+  return reg;
+}
+
+// Faylning oxirini (MP4 indeksini) oldindan yuklab, keshga qo'yamiz.
 // `doc` berilsa u DISK keshiga ham yoziladi — qayta ochishda indeks darhol
 // tayyor bo'ladi (RTT ham, Telegram trafigi ham tejaladi).
 function prefetchTail(size, doc) {
-  if (size <= TAIL_PREFETCH) return Promise.resolve(null);   // kichik faylda muammo yo'q
-  const ready = TAIL_CACHE.get(size);
-  if (ready && ready.bytes) return Promise.resolve(ready);    // allaqachon tayyor
-  if (TAIL_PROMISE.has(size)) return TAIL_PROMISE.get(size);  // davom etyapti
-  const start = size - TAIL_PREFETCH;
-  // Kesh kalitini oldindan band qilamiz — ikki marta yuklanmasin.
-  TAIL_CACHE.set(size, null);
-  const p = readRange(start, TAIL_PREFETCH, size, doc, TAIL_LANES).then(function (bytes) {
-    if (bytes && bytes.length) {
-      TAIL_CACHE.set(size, { start: start, bytes: bytes });
+  if (!(size > TAIL_PREFETCH)) return Promise.resolve(null);   // kichik fayl
+  const key = tailKey(doc, size);
+  const ready = TAIL_CACHE.get(key);
+  if (ready && ready.bytes) return Promise.resolve(ready);     // allaqachon tayyor
+  if (TAIL_PROMISE.has(key)) return TAIL_PROMISE.get(key);     // davom etyapti
+
+  const p = (async function () {
+    const reg = await indexRegion(size, doc);
+    if (reg && reg.inHead) return null;        // indeks boshda — kerak emas
+    let start, len;
+    if (reg) {
+      start = reg.start;
+      len = Math.min(reg.len, IDX_MAX);
     } else {
-      TAIL_CACHE.delete(size);
+      start = size - TAIL_PREFETCH;            // zaxira: ko'r-ko'rona dum
+      len = TAIL_PREFETCH;
     }
+    if (!(len > 0) || start < 0) return null;
+    const bytes = await readRange(start, len, size, doc, TAIL_LANES);
+    if (!bytes || !bytes.length) return null;
+    const it = { start: start, bytes: bytes };
+    TAIL_CACHE.set(key, it);
     while (TAIL_CACHE.size > TAIL_MAX_ENTRIES) {
       TAIL_CACHE.delete(TAIL_CACHE.keys().next().value);
     }
-    return TAIL_CACHE.get(size) || null;
-  }).catch(function () {
-    TAIL_CACHE.delete(size);
+    return it;
+  })().catch(function () {
     return null;
   }).then(function (v) {
-    if (TAIL_PROMISE.get(size) === p) TAIL_PROMISE.delete(size);
+    if (TAIL_PROMISE.get(key) === p) TAIL_PROMISE.delete(key);
     return v;
   });
-  TAIL_PROMISE.set(size, p);
+  TAIL_PROMISE.set(key, p);
   return p;
 }
 
 // So'ralgan oraliq tayyorlanishini KUTAMIZ (takroriy yuklash o'rniga).
-// Faqat prefetch oynasi ichidagi so'rovlar uchun; aks holda darhol `null`.
+// Faqat indeks oynasidagi so'rovlar uchun; aks holda darhol `null`.
 async function awaitTail(start, want, size, doc, ms) {
-  const p = TAIL_PROMISE.get(size);
+  const key = tailKey(doc, size);
+  const p = TAIL_PROMISE.get(key);
   if (!p) return null;
-  const win = size - TAIL_PREFETCH;
-  if (start < win || start + want > size) return null;
+  const reg = IDX_WIN.get(key);
+  if (reg && reg.inHead) return null;          // indeks boshda — kutmaymiz
+  if (reg && start < reg.start) return null;   // oynadan tashqarida
+  // Oyna hali noma'lum bo'lsa — faqat fayl oxiriga yaqin so'rovlarni
+  // kutamiz; o'rtadagi seek'ni ushlab turmaymiz.
+  if (!reg && start < size - IDX_MAX) return null;
   let timer = null;
   const timeout = new Promise(function (res) {
     timer = setTimeout(function () { res(null); }, Math.max(1000, ms || 6000));
   });
   try { await Promise.race([p, timeout]); } catch (e) { /* pastda keshdan tekshiramiz */ }
   if (timer) clearTimeout(timer);
-  return tailFromCache(start, want, size);
+  return tailFromCache(key, start, want);
 }
 
 // So'ralgan oraliq keshda bormi? (butunlay sig'ishi kerak)
-function tailFromCache(start, want, size) {
-  const c = TAIL_CACHE.get(size);
+function tailFromCache(key, start, want) {
+  const c = TAIL_CACHE.get(key);
   if (!c || !c.bytes) return null;
   const end = start + want;
   if (start < c.start || end > c.start + c.bytes.length) return null;
   const from = start - c.start;
   return c.bytes.subarray(from, from + want);
+}
+
+// Indeks yuklanmoqda bo'lsa, ketma-ket oqimni BIR oz to'xtatamiz: birinchi
+// kadr uchun indeks SHART, media baytlari esa keyin ham kerak. Shu bilan
+// sekin tarmoqda indeks tezroq keladi (oqim bilan raqobatlashmaydi).
+async function waitIndex(doc, size, ms) {
+  const key = tailKey(doc, size);
+  const p = TAIL_PROMISE.get(key);
+  if (!p) return;
+  const reg = IDX_WIN.get(key);
+  if (reg && reg.inHead) return;               // indeks boshda — kutish kerak emas
+  let timer = null;
+  const t = new Promise(function (res) {
+    timer = setTimeout(res, Math.max(1000, ms || IDX_PAUSE_MS));
+  });
+  try { await Promise.race([p, t]); } catch (e) { /* jim */ }
+  if (timer) clearTimeout(timer);
 }
 
 function noop() { /* bo'sh */ }
@@ -1584,6 +1750,9 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
     const take = u8.length <= room ? u8 : u8.subarray(0, room);
     headParts.push(take);
     headLen += take.length;
+    // Bosh baytlarni umumiy xaritaga ham beramiz: `indexRegion()` ular
+    // orqali indeksning ANIQ o'rnini qo'shimcha so'rovsiz topadi.
+    headNote(tailKey(cacheDoc, size), take);
   }
   function checkMoov() {
     if (moovChecked) return;
@@ -1595,7 +1764,6 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
       prefetchTail(size, cacheDoc);
     }
   }
-
   // --- R2 ga yuklash uchun prefiks baytlarini yig'ish -------------------
   // Faqat R2 bo'sh bo'lganda (Telegram'dan o'qilganda) va sahifa ruxsat
   // bergan bo'lsa. 5 MB xotira — faqat birinchi o'qish paytida.
@@ -1705,6 +1873,10 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
 
       // Moov hali aniqlanmagan bo'lsa (kichik prefiks) — hozir tekshiramiz.
       checkMoov();
+      // Indeks yuklanmoqda bo'lsa — ketma-ket oqimni bir oz to'xtatamiz:
+      // sekin tarmoqda ikkisi bir-biriga xalaqit bermasin.
+      await waitIndex(cacheDoc, size, IDX_PAUSE_MS);
+      if (dead) return;
 
       // ---- fayl oxirigacha (navbat to'lmasdan oldin to'xtaydi) -----------
       while (!dead && !err && off < size) {
@@ -1915,7 +2087,7 @@ self.addEventListener('fetch', (e) => {
     let bytes;
     // MP4 indeksi (moov) oldindan yuklangan bo'lishi mumkin — Telegram'ga
     // murojaat qilmasdan, shu zaxiradan qaytaramiz (1 RTT tejaladi).
-    let cached = tailFromCache(start, want, size);
+    let cached = tailFromCache(tailKey(cacheDoc, size), start, want);
     // Zaxira hali TAYYOR EMAS, lekin yuklanmoqda — kutamiz. Bu Telegram'ga
     // ikkinchi marta murojaat qilishning oldini oladi (moov 2× yuklanmaydi).
     if (!cached) {
