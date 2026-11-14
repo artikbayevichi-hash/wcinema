@@ -4,6 +4,8 @@
 
 # Bot token va DB paroli shu yerda
 .env
+.env.bak-*
+*.env.tmp
 
 # Yuklangan videolar (ularni repo'ga yuklash kerak emas)
 /uploads/

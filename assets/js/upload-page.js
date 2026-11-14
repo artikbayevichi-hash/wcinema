@@ -1,14 +1,23 @@
 /* ==========================================================================
-   upload-page.js — kontent yuklash sahifasi (Reels / Rasm post / Uzun video)
+   upload-page.js — kontent yuklash sahifasi (bosqichli, Instagram uslubi)
    --------------------------------------------------------------------------
-   Vazifalari:
-     1) Format tanlash (reel 9:16 · post 1:1 · video 16:9)
-     2) Fayl(lar)ni qabul qilish: tur, hajm va soni tekshiriladi
-     3) THUMBNAIL — klientda yaratiladi (serverda ffmpeg yo'q):
-          video → <video> dan kadr ajratilib canvas'ga chiziladi
-          image → o'z rasmi (server ham shuni preview qilib oladi)
-        Foydalanuvchi slider orqali boshqa kadrni tanlaydi.
-     4) Yuklash — XHR + progress; javobga qarab xabar/redirect
+   Bosqichlar:
+     1) Format + fayl      — format kartalari va fayl tanlash
+     2) Ko'rish             — preview va muqova (cover) kadrini tanlash
+     3) Beschak             — sarlavha, izoh, film bilan bog'lash
+     4) Yayinlash           — ko'rib chiqish + nashr
+
+   TEZKOR YUKLASH (2 bosqichli server oqimi):
+     · Fayl tanlanganda darhol `api/upload.php?stage=media` ga yuboriladi
+       va serverdagi "staging" papkasiga saqlanadi (token qaytariladi).
+     · 2- va 3-bosqichda foydalanuvchi caption yozadi — shu vaqt ichida
+       baytlar yo'ladi (foydalanuvchi yuklashni KUTMAYDIGAN bo'ladi).
+     · 4-bosqichda faqat metadata yuboriladi (`stage=publish`) va server
+       faylni Telegram kanalga joylaydi.
+
+   THUMBNAIL — klientda yaratiladi (serverda ffmpeg yo'q):
+     video → <video> dan kadr ajratilib canvas'ga chiziladi;
+     image → o'z rasmi.
    ========================================================================== */
 (function () {
     'use strict';
@@ -26,6 +35,7 @@
         video: 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov',
         image: 'image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif'
     };
+    var STEP_TITLES = { 1: 'Keyingi', 2: 'Keyingi', 3: 'Keyingi', 4: 'Yayinlash' };
 
     // ----------------------------------------------------------------- refs
     var drop    = document.getElementById('upDrop');
@@ -37,7 +47,6 @@
     var chip    = document.getElementById('srcChip');
     var cidEl   = document.getElementById('upContentId');
     var msg     = document.getElementById('upMsg');
-    var submit  = document.getElementById('upSubmit');
     var prog    = document.getElementById('upProgress');
     var bar     = document.getElementById('upBar');
     var progTxt = document.getElementById('upProgText');
@@ -50,6 +59,14 @@
     var thumbVal = document.getElementById('upThumbVal');
     var thumbRe  = document.getElementById('upThumbRe');
     var thumbTime = document.getElementById('upThumbTime');
+    var stageBox = document.getElementById('upStage');
+    var stageBar = document.getElementById('upStageBar');
+    var stageTxt = document.getElementById('upStageText');
+    var review   = document.getElementById('upReview');
+    var nextBtn  = document.getElementById('upNext');
+    var backBtn  = document.getElementById('upBack');
+    var stepEls  = document.querySelectorAll('#upSteps .up-step');
+    var panels   = document.querySelectorAll('.up-panel');
 
     var esc = function (s) {
         return String(s == null ? '' : s)
@@ -63,6 +80,7 @@
     };
 
     var state = {
+        step: 1,
         format: 'reel',
         files: [],
         poster: null,        // Blob (video kadr)
@@ -70,15 +88,46 @@
         width: 0,
         height: 0,
         duration: 0,
-        videoUrl: null
+        videoUrl: null,
+        picked: null,
+        // ---- bosqichli yuklash holati ----
+        upload: { xhr: null, token: '', pct: 0, done: false, error: '', size: 0 }
     };
 
     function showMsg(t, kind) {
+        if (!msg) return;
         msg.hidden = false;
         msg.textContent = t;
         msg.className = 'up-msg ' + (kind || '');
     }
-    function clearMsg() { msg.hidden = true; msg.textContent = ''; }
+    function clearMsg() { if (msg) { msg.hidden = true; msg.textContent = ''; } }
+
+    // =====================================================================
+    //  0) BOSQICHLAR
+    // =====================================================================
+    function paintSteps() {
+        stepEls.forEach(function (el) {
+            var n = parseInt(el.dataset.step, 10) || 0;
+            el.classList.toggle('is-active', n === state.step);
+            el.classList.toggle('is-done', n < state.step);
+        });
+        panels.forEach(function (p) {
+            p.hidden = (parseInt(p.dataset.panel, 10) || 0) !== state.step;
+        });
+        if (backBtn) backBtn.hidden = state.step === 1;
+        if (nextBtn) {
+            nextBtn.textContent = STEP_TITLES[state.step] || 'Keyingi';
+            nextBtn.disabled = false;
+        }
+        if (state.step === 4) paintReview();
+        // Sahifa yuqoriga — har bosqich boshida.
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+    }
+
+    function goStep(n) {
+        state.step = Math.max(1, Math.min(4, n));
+        paintSteps();
+    }
 
     // =====================================================================
     //  1) FORMAT
@@ -131,15 +180,13 @@
         if (strip) strip.innerHTML = '';
         if (info) info.hidden = true;
         if (drop) drop.classList.remove('has');
+        uploadReset();
         paintDrop();
     }
 
     // Yangi tanlangan fayllarni qabul qiladi.
-    //   · Ko'p rasmli rejimda (`append`) avvalgi tanlovga QO'SHILADI —
-    //     foydalanuvchi rasmlarni birma-bir tanlasa ham hammasi saqlanadi.
+    //   · Ko'p rasmli rejimda (`append`) avvalgi tanlovga QO'SHILADI.
     //   · Boshqa hollarda oldingi tanlov almashtiriladi.
-    // MUHIM: ilgari har chaqiriqda eski tanlov tozalanardi, shu sababli
-    // ikkinchi rasm tanlanganda birinchisi "o'rniga" paydo bo'lardi.
     function setFiles(list, append) {
         var f = FORMAT[state.format];
         var arr = Array.prototype.slice.call(list || []);
@@ -191,8 +238,6 @@
             added++;
         }
 
-        // Hech narsa qo'shilmadi (hammasi xato yoki takror) — mavjud
-        // tanlovni (agar bo'lsa) saqlab qolamiz.
         if (!state.files.length || !added) return;
 
         clearMsg();
@@ -204,6 +249,9 @@
             if (strip) strip.innerHTML = '';
             buildThumb(state.files[0]);
         }
+        // Fayl darhol serverga yuboriladi — foydalanuvchi caption yozayotgan
+        // paytda baytlar yo'ladi.
+        startUpload();
     }
 
     function paintFiles() {
@@ -234,7 +282,6 @@
     // --------------------------------------------- galereya (carousel) ko'rinishi
     function buildStrip() {
         if (!strip) return;
-        // Eski preview URL'larini bo'shatamiz (har qo'shishda qayta quriladi).
         strip.querySelectorAll('.up-strip-item').forEach(function (it) {
             if (it.dataset.url) URL.revokeObjectURL(it.dataset.url);
         });
@@ -250,7 +297,6 @@
                     ? '<button type="button" class="up-strip-x" title="Olib tashlash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
                     : '');
             strip.appendChild(item);
-            // Rasmni vaqtincha ko'rsatish uchun URL ni qaytarib qo'yamiz
             item.dataset.url = url;
             var x = item.querySelector('.up-strip-x');
             if (x) {
@@ -262,6 +308,7 @@
                     if (!state.files.length) { resetMedia(); return; }
                     buildStrip();
                     paintFiles();
+                    startUpload();          // fayl o'zgargani — qayta yuklaymiz
                 });
             }
         });
@@ -296,7 +343,6 @@
             state.width = v.videoWidth || 0;
             state.height = v.videoHeight || 0;
             state.duration = Math.round(v.duration || 0);
-            // Slider faqat 5 soniyadan uzun videolarda kerak.
             var sliderOk = state.duration > 5;
             if (thumbSeek) {
                 thumbSeek.disabled = !sliderOk;
@@ -317,15 +363,6 @@
         };
     }
 
-    /**
-     * Kadrni vaqt bo'yicha olib, canvas'ga chizadi.
-     *
-     * Nima uchun shunday: `preload` qanchalik katta bo'lmasin, kadr faqat
-     * `seeked`/`loadeddata` hodisasida tayyor bo'ladi. Shuning uchun bir necha
-     * hodisani bir vaqtda kuzatib, readyState tayyor bo'lishi bilan darhol
-     * chizamiz (va 6 soniyada muvaffaqiyatsiz bo'lsa preview'ni yashiramiz —
-     * server placeholder qo'yadi).
-     */
     function seekAndDraw(video, t) {
         var done = false;
         var t0 = Math.max(0, Math.min(t || 0, Math.max(0, (video.duration || 0) - 0.1)));
@@ -342,9 +379,6 @@
 
         if (thumbVal) thumbVal.textContent = fmtTime(t0);
         try {
-            // currentTime ni biroz o'zgartirish brauzerni kadrni
-            // yuklashga majbur qiladi (0 da turish ba'zi brauzerlarda
-            // hech qanday kadr bermaydi).
             video.currentTime = t0 < 0.05 ? 0.04 : t0;
         } catch (e) {
             finish();
@@ -361,12 +395,10 @@
         var vw = video.videoWidth || 1280;
         var vh = video.videoHeight || 720;
 
-        // Preview hajmi: har format uchun tegishli kadr.
         var SIZE = { '9:16': [1080, 1920], '1:1': [1080, 1080], '16:9': [1280, 720] };
         var box = SIZE[FORMAT[state.format].ratio] || SIZE['16:9'];
         var tw = box[0], th = box[1];
 
-        // "Cover" kesish: kadr to'liq qoplanadi, markazdan qirqiladi.
         var scale = Math.max(tw / vw, th / vh);
         var cw = vw * scale;
         var chh = vh * scale;
@@ -435,8 +467,6 @@
     }
     if (fileEl) fileEl.addEventListener('change', function () {
         setFiles(this.files, true);
-        // Input'ni bo'shatamiz — keyingi safar AYNI faylni qayta tanlash
-        // ham `change` hodisasini ishga tushirsin (galereyaga qo'shish).
         this.value = '';
     });
     ['dragenter', 'dragover'].forEach(function (ev) {
@@ -457,18 +487,209 @@
     }
 
     // =====================================================================
-    //  4) KONTENT QIDIRUVI (film bilan bog'lash)
+    //  4) BOSQICHLI YUKLASH (stage=media → stage=publish)
+    // =====================================================================
+    function uploadReset() {
+        if (state.upload.xhr) {
+            try { state.upload.xhr.abort(); } catch (e) {}
+        }
+        state.upload.xhr = null;
+        state.upload.token = '';
+        state.upload.pct = 0;
+        state.upload.done = false;
+        state.upload.error = '';
+        state.upload.size = 0;
+        if (stageBox) {
+            stageBox.hidden = true;
+            stageBox.classList.remove('is-done', 'is-err');
+        }
+        if (stageBar) stageBar.style.width = '0%';
+    }
+
+    function stagePaint(text, cls) {
+        if (!stageBox) return;
+        stageBox.hidden = false;
+        stageBox.classList.remove('is-done', 'is-err');
+        if (cls) stageBox.classList.add(cls);
+        if (stageTxt) stageTxt.textContent = text;
+    }
+
+    /** Faylni serverga yuboradi (staging) — foydalanuvchi yozayotgan paytda. */
+    function startUpload() {
+        if (!state.files.length) return;
+        uploadReset();
+
+        var fd = new FormData();
+        fd.append('format', state.format);
+        state.files.forEach(function (file) { fd.append('media[]', file); });
+        if (state.width)  fd.append('width', state.width);
+        if (state.height) fd.append('height', state.height);
+        if (state.duration) fd.append('duration', state.duration);
+        // MTProto (brauzer) foydalanuvchilarida PHP sessiyasi yo'q — server
+        // foydalanuvchini `tg_me` orqali aniqlaydi. Bu bosqichda ham kerak.
+        try {
+            var me = localStorage.getItem('wc_tg_me_v1');
+            if (me) fd.append('tg_me', me);
+        } catch (e) { /* localStorage yo'q */ }
+
+        var total = state.files.reduce(function (a, b) { return a + b.size; }, 0);
+        var xhr = new XMLHttpRequest();
+        state.upload.xhr = xhr;
+        xhr.open('POST', 'api/upload.php?stage=media');
+
+        stagePaint('Fayl serverga yuborilmoqda… 0%');
+
+        xhr.upload.onprogress = function (e) {
+            if (!e.lengthComputable) return;
+            var p = Math.min(100, e.loaded / e.total * 100);
+            state.upload.pct = p;
+            if (stageBar) stageBar.style.width = p.toFixed(0) + '%';
+            if (stageTxt) {
+                stageTxt.textContent = 'Fayl serverga yuborilmoqda… ' + p.toFixed(0) + '% · '
+                    + fmtMb(e.loaded) + ' / ' + fmtMb(e.total);
+            }
+        };
+
+        xhr.onload = function () {
+            var d = {};
+            try { d = JSON.parse(xhr.responseText); } catch (e) {}
+            state.upload.xhr = null;
+            if (xhr.status >= 200 && xhr.status < 300 && d.success && d.token) {
+                state.upload.token = d.token;
+                state.upload.done = true;
+                state.upload.size = d.size || total;
+                if (stageBar) stageBar.style.width = '100%';
+                stagePaint('✓ Fayl tayyor — endi sizga faqat "Yayinlash" qoladi', 'is-done');
+            } else {
+                state.upload.error = d.message || ('Xato ' + xhr.status);
+                stagePaint('✕ ' + state.upload.error, 'is-err');
+            }
+        };
+        xhr.onerror = function () {
+            state.upload.xhr = null;
+            state.upload.error = 'Ulanish xatosi';
+            stagePaint('✕ Ulanish xatosi — faylni qayta tanlang', 'is-err');
+        };
+        xhr.onabort = function () { state.upload.xhr = null; };
+
+        xhr.send(fd);
+    }
+
+    /** 4-bosqich uchun: nima nashr qilinayotganini ko'rsatadi. */
+    function paintReview() {
+        if (!review) return;
+        var f = FORMAT[state.format];
+        var thumb = state.posterUrl
+            ? '<img src="' + esc(state.posterUrl) + '" alt="">'
+            : (state.files[0] && /^image\//.test(state.files[0].type)
+                ? '<img src="' + esc(URL.createObjectURL(state.files[0])) + '" alt="">'
+                : '<span style="display:grid;place-items:center;height:100%;font-size:24px">'
+                  + f.icon + '</span>');
+
+        var meta = [];
+        meta.push(f.label + ' · ' + f.ratio);
+        if (state.files.length) {
+            var total = state.files.reduce(function (a, b) { return a + b.size; }, 0);
+            meta.push(fmtMb(total));
+        }
+        if (state.duration) meta.push(fmtTime(state.duration));
+        if (state.upload.done) {
+            meta.push(state.upload.error ? '✕ ' + state.upload.error : '✓ Fayl tayyor');
+        } else if (state.upload.pct) {
+            meta.push('Yuklanmoqda… ' + Math.round(state.upload.pct) + '%');
+        }
+        if (state.picked) meta.push('🎬 ' + state.picked.title);
+
+        review.innerHTML =
+            '<span class="up-review-thumb">' + thumb + '</span>'
+            + '<span class="up-review-body">'
+            + '<span class="up-review-title">' + esc((title && title.value) || (state.files[0] && state.files[0].name) || 'Reels') + '</span>'
+            + '<span class="up-review-meta">' + esc(meta.join(' · ')) + '</span>'
+            + '</span>';
+    }
+
+    /** Faylni Telegram kanalga yuborish + reels yozuvini yaratish. */
+    function publish() {
+        if (!state.upload.done) {
+            showMsg('✕ Fayl hali yuklanmagan. Biroz kutib turing yoki qayta tanlang.', 'err');
+            return;
+        }
+        if (!state.upload.token) {
+            showMsg('✕ Yuklash sessiyasi topilmadi. Faylni qayta tanlang.', 'err');
+            return;
+        }
+
+        var fd = new FormData();
+        fd.append('token', state.upload.token);
+        fd.append('title', title ? title.value : '');
+        fd.append('description', desc ? desc.value : '');
+        fd.append('content_id', cidEl ? cidEl.value : '');
+        if (state.width)  fd.append('width', state.width);
+        if (state.height) fd.append('height', state.height);
+        if (state.duration) fd.append('duration', state.duration);
+        if (state.poster) {
+            var ext = state.poster.type === 'image/png' ? 'png' : 'jpg';
+            fd.append('poster', state.poster, 'poster.' + ext);
+        }
+        try {
+            var me = localStorage.getItem('wc_tg_me_v1');
+            if (me) fd.append('tg_me', me);
+        } catch (e) { /* localStorage yo'q */ }
+
+        if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = 'Yuborilmoqda…'; }
+        if (prog) {
+            prog.hidden = false;
+            var pb = prog.querySelector('.up-progress-bar');
+            if (pb) pb.classList.add('is-indeterminate');
+        }
+        if (progTxt) progTxt.textContent = 'Telegram kanalga yuborilmoqda…';
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', 'api/upload.php?stage=publish');
+
+        xhr.onload = function () {
+            var d = {};
+            try { d = JSON.parse(xhr.responseText); } catch (e) {}
+            if (xhr.status >= 200 && xhr.status < 300 && d.success) {
+                if (progTxt) progTxt.textContent = '100%';
+                showMsg((d.carousel ? '✓ Galereya joylandi! ' : '✓ ')
+                    + (d.message || 'Joylandi!'), 'ok');
+                if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = '✓ Yuborildi'; }
+                setTimeout(function () {
+                    location.href = state.format === 'post' ? 'profile.php' : 'reels.php';
+                }, 1400);
+            } else {
+                if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Yayinlash'; }
+                var pb = prog && prog.querySelector('.up-progress-bar');
+                if (pb) pb.classList.remove('is-indeterminate');
+                if (prog) prog.hidden = true;
+                showMsg('✕ ' + (d.message || ('Xato ' + xhr.status)), 'err');
+            }
+        };
+        xhr.onerror = function () {
+            if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Yayinlash'; }
+            showMsg('✕ Ulanish xatosi. Internetni tekshirib, qayta urinib ko‘ring.', 'err');
+        };
+        xhr.ontimeout = function () {
+            if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Yayinlash'; }
+            showMsg('✕ Vaqt o‘tib ketdi. Qayta urinib ko‘ring.', 'err');
+        };
+
+        xhr.send(fd);
+    }
+
+    // =====================================================================
+    //  5) KONTENT QIDIRUVI (film bilan bog'lash)
     // =====================================================================
     var timer = null;
-    var picked = null;
 
     function clearPick() {
-        picked = null;
+        state.picked = null;
         if (cidEl) cidEl.value = '';
         if (chip) { chip.hidden = true; chip.innerHTML = ''; }
     }
     function pick(item) {
-        picked = item;
+        state.picked = item;
         if (cidEl) cidEl.value = item.id;
         if (results) results.hidden = true;
         if (title && !title.value.trim()) title.value = item.title || '';
@@ -523,7 +744,7 @@
             timer = setTimeout(function () { doSearch(q); }, 250);
         });
         search.addEventListener('focus', function () {
-            if (search.value.trim().length >= 1 && !picked) doSearch(search.value.trim());
+            if (search.value.trim().length >= 1 && !state.picked) doSearch(search.value.trim());
         });
     }
     document.addEventListener('click', function (e) {
@@ -531,87 +752,34 @@
     });
 
     // =====================================================================
-    //  5) YUKLASH
+    //  6) AMAL TUGMASI (Keyingi / Orqaga)
     // =====================================================================
-    form.addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        if (!state.files.length) {
-            showMsg('✕ Avval fayl tanlang', 'err');
-            return;
-        }
-        var f = FORMAT[state.format];
-
-        var fd = new FormData();
-        fd.append('format', state.format);
-        state.files.forEach(function (file) { fd.append('media[]', file); });
-        fd.append('title', title ? title.value : '');
-        fd.append('description', desc ? desc.value : '');
-        fd.append('content_id', cidEl ? cidEl.value : '');
-        if (state.width)  fd.append('width', state.width);
-        if (state.height) fd.append('height', state.height);
-        if (state.duration) fd.append('duration', state.duration);
-        if (state.poster) {
-            var ext = state.poster.type === 'image/png' ? 'png' : 'jpg';
-            fd.append('poster', state.poster, 'poster.' + ext);
-        }
-        try {
-            var me = localStorage.getItem('wc_tg_me_v1');
-            if (me) fd.append('tg_me', me);
-        } catch (e) { /* localStorage yo'q */ }
-
-        var total = state.files.reduce(function (a, b) { return a + b.size; }, 0);
-
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', 'api/upload.php');
-
-        submit.disabled = true;
-        submit.textContent = 'Yuklanmoqda…';
-        if (prog) prog.hidden = false;
-        if (bar) bar.style.width = '0%';
-        if (progTxt) progTxt.textContent = fmtMb(total);
-        showMsg(f.kind === 'image'
-            ? 'Rasmlar saqlanmoqda…'
-            : 'Video kanalga yuborilmoqda…');
-
-        xhr.upload.onprogress = function (e) {
-            if (!e.lengthComputable) return;
-            var p = Math.min(100, e.loaded / e.total * 100);
-            if (bar) bar.style.width = p.toFixed(0) + '%';
-            if (progTxt) progTxt.textContent = p.toFixed(0) + '% · '
-                + fmtMb(e.loaded) + ' / ' + fmtMb(e.total);
-        };
-
-        xhr.onload = function () {
-            var d = {};
-            try { d = JSON.parse(xhr.responseText); } catch (e) { /* bo'sh javob */ }
-            if (xhr.status >= 200 && xhr.status < 300 && d.success) {
-                if (bar) bar.style.width = '100%';
-                if (progTxt) progTxt.textContent = '100%';
-                showMsg((d.carousel ? '✓ Galereya joylandi! ' : '✓ ')
-                    + (d.message || 'Joylandi!'), 'ok');
-                submit.textContent = '✓ Yuborildi';
-                setTimeout(function () {
-                    location.href = state.format === 'post' ? 'profile.php' : 'reels.php';
-                }, 1400);
-            } else {
-                submit.disabled = false;
-                submit.textContent = 'Yuklash';
-                showMsg('✕ ' + (d.message || ('Xato ' + xhr.status)), 'err');
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function () {
+            clearMsg();
+            if (state.step === 1) {
+                if (!state.files.length) {
+                    showMsg('✕ Avval fayl tanlang', 'err');
+                    return;
+                }
+                if (state.upload.error) {
+                    showMsg('✕ ' + state.upload.error + ' — faylni qayta tanlang', 'err');
+                    return;
+                }
+                goStep(2);
+                return;
             }
-        };
-        xhr.onerror = function () {
-            submit.disabled = false;
-            submit.textContent = 'Yuklash';
-            showMsg('✕ Ulanish xatosi. Internetni tekshirib, qayta urinib ko‘ring.', 'err');
-        };
-        xhr.ontimeout = function () {
-            submit.disabled = false;
-            submit.textContent = 'Yuklash';
-            showMsg('✕ Vaqt o‘tib ketdi. Qayta urinib ko‘ring.', 'err');
-        };
-
-        xhr.send(fd);
-    });
+            if (state.step === 2) { goStep(3); return; }
+            if (state.step === 3) { goStep(4); return; }
+            publish();
+        });
+    }
+    if (backBtn) {
+        backBtn.addEventListener('click', function () {
+            if (state.step > 1) goStep(state.step - 1);
+        });
+    }
 
     paintDrop();
+    paintSteps();
 })();

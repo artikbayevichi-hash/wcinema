@@ -19,7 +19,40 @@
   'use strict';
 
   var doc = global.document;
+  // hls.js manbai.
+  //
+  // TUGATISH SABABI: avval hls.js faqat CHETDAGI CDN dan (jsdelivr) "play"
+  // bosilganda yuklanardi. Bu - aynan foydalanuvchi kutayotgan payt:
+  // ~620 KB + uchinchi tomon TLS handshake = 0.9-1.4 s. Agar CDN sekin
+  // yoki bloklangan bo'lsa (O'zbekistonda ba'zi provayderlarda jsdelivr
+  // sekin), HLS videolar umuman ochilmaydi.
+  //
+  // Telegram Web K nima qiladi? U hls.js ni o'z build'iga KIRITADI va
+  // `modulepreload` orqali sahifa ochilishidayin brauzer keshiga yuklaydi.
+  // Ya'ni "play" bosilganda hls.js ALLACHON tayyor.
+  //
+  // Biz ham shuni qilamiz:
+  //   1) `assets/vendor/hls.min.js` — lokal nusxa (o'z serverimizdan,
+  //      uchinchi tomonga so'rov yo'q, CDN bloklanishidan qat'i nazar).
+  //   2) `loadHls()` avval lokalni, keyin CDN ni sinab ko'radi.
+  //   3) Sahifada `<link rel="preload" as="script">` — bloklamaydi, lekin
+  //      ochilishda allaqachon keshda bo'ladi.
   var HLS_CDN = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js';
+
+  function hlsLocalUrl() {
+    // PHP bergan ANIQ manzil (preload bilan bir xil bo'lishi shart —
+    // aks holda brauzer faylni ikki marta yuklaydi).
+    if (global.__WC_HLS_URL) return global.__WC_HLS_URL;
+    var b = (global.APP && global.APP.base) || '';
+    if (b) return b + '/assets/vendor/hls.min.js';
+    // `APP` yo'q sahifalar: skriptning o'z joyidan hisoblaymiz
+    // (assets/<katalog>/player.js -> assets/vendor/hls.min.js).
+    var s = doc.currentScript;
+    if (s && s.src) {
+      return s.src.replace(/assets\/[^/]+\/[^/?]+(\?.*)?$/, 'assets/vendor/hls.min.js');
+    }
+    return 'assets/vendor/hls.min.js';
+  }
 
   var SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -145,16 +178,29 @@
   }
 
   // ---------------------------------------------------------- hls.js yuklash
+  //
+  // Avval: faqat CDN. Endi: avval LOKAL (o'z serverimiz), CDN faqat zaxira.
+  // Sabab — "play" bosilgan paytdagi har bir millisekund muhim (Telegram
+  // Web K modeli: pleyer tayyor bo'lishi uchun hech narsa kutmaydi).
   function loadHls(cb, fail) {
     if (global.Hls) { cb(global.Hls); return; }
     if (hlsPromise) { hlsPromise.then(cb, fail); return; }
     hlsPromise = new Promise(function (resolve, reject) {
-      var s = doc.createElement('script');
-      s.src = HLS_CDN;
-      s.async = true;
-      s.onload = function () { resolve(global.Hls); };
-      s.onerror = function () { reject(new Error('hls.js yuklanmadi')); };
-      doc.head.appendChild(s);
+      var urls = [hlsLocalUrl(), HLS_CDN];
+      var i = 0;
+      function next() {
+        if (i >= urls.length) { reject(new Error('hls.js yuklanmadi')); return; }
+        var s = doc.createElement('script');
+        s.src = urls[i++];
+        s.async = true;
+        s.onload = function () { resolve(global.Hls); };
+        s.onerror = function () {
+          s.parentNode && s.parentNode.removeChild(s);
+          next();
+        };
+        doc.head.appendChild(s);
+      }
+      next();
     });
     hlsPromise.then(cb, fail);
   }
@@ -718,13 +764,34 @@
       // Avtomatik sifat ekranga mos maksimal resolutiondan oshmasin.
       capLevelToPlayerSize: true,
       capLevelOnFPSDrop: true,
-      // Birinchi kadrni tezroq olish uchun boshlang‘ich buffer kichikroq.
-      maxBufferLength: 18,
-      maxMaxBufferLength: 36,
-      backBufferLength: 15,
-      // Auto rejim default bo‘lib qoladi; hls.js tarmoq va qurilmaga qarab
-      // eng xavfsiz boshlang‘ich levelni tanlaydi.
-      startLevel: -1,
+
+      // ===== TELEGRAM WEB K DAN KO'CHIRILGAN SOZLAMALAR =====
+      //
+      // Web K da hls.js shunday sozlanadi (uning `createVideo.js` dan):
+      //   startLevel: 0, testBandwidth: false,
+      //   maxBufferLength: 60, maxMaxBufferLength: 60, backBufferLength: 30,
+      //   maxBufferHole: 1, nudgeMaxRetry: 10000,
+      //   maxFragLookUpTolerance: 0.001
+      //
+      // Nima uchun:
+      //  * startLevel: 0 — eng PAST sifatdan boshlanadi. Birinchi segment
+      //    kichik bo'lgani uchun BIRINCHI KADR imkon qadar tez chiqadi.
+      //    Sifatni keyin ABR o'zi ko'taradi. Avval `startLevel: -1` edi —
+      //    bu "auto" degani: hls.js avval bandwidth test o'tkazadi
+      //    (qo'shimcha RTT + kechikish), keyin level tanlaydi.
+      //  * testBandwidth: false — o'sha test umuman o'tkazilmaydi.
+      //  * maxBufferLength: 60 — 60 soniya oldindan tayyor turadi.
+      //    Sekin tarmoqda "qotib qolish" (stall) kamayadi. Avval 18 s edi.
+      //  * maxBufferHole: 1 + nudgeMaxRetry: 10000 — buffer teshigi
+      //    paydo bo'lsa, hls.js judayam tiklanadi (Web K xuddi shunday).
+      startLevel: 0,
+      testBandwidth: false,
+      maxBufferLength: 60,
+      maxMaxBufferLength: 60,
+      backBufferLength: 30,
+      maxBufferHole: 1,
+      nudgeMaxRetry: 10000,
+      maxFragLookUpTolerance: 0.001,
       // Film hali yuklanayotgan bo'lsa (o'sib boruvchi playlist) hls.js uni "jonli"
       // deb hisoblab OXIRIDAN boshlardi - doim BOSHIDAN boshlaymiz.
       startPosition: 0,

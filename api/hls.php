@@ -119,7 +119,7 @@ function hlsSweep() {
     // Disk kvotasi: HLS_MAX_MB dan oshsa eng qadimgi tayyor keshlarni o'chiramiz
     $maxBytes = HLS_MAX_MB * 1024 * 1024;
     if ($total > $maxBytes && $done) {
-        uasort($done, function ($a, $b) { return $a['age'] <=> $b['age']; });
+        uasort($done, function ($a, $b) { return $b['age'] <=> $a['age']; });   // eng ESKI birinchi
         foreach ($done as $k => $d) {
             if ($total <= $maxBytes) {
                 break;
@@ -342,6 +342,10 @@ $status = is_array($meta) ? (string) ($meta['status'] ?? '') : '';
 // Playlist tayyor bo'lsa — darhol beramiz (hatto transkod davomida,
 // index.m3u8 o'sib boradi — HLS live rejim, progressiv o'ynaydi).
 if (is_file($playlist)) {
+    // Tomosha qilinayotgan tayyor video keshi "yangi" hisoblansin (faolsizlik TTL va kvota LRU uchun).
+    if ($status === 'done' && (time() - (int) @filemtime($metaFile)) > 600) {
+        @touch($metaFile);
+    }
     if ($json) {
         hlsJson(true, $playUrl);
     }

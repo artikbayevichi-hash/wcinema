@@ -1,0 +1,298 @@
+/* ==========================================================================
+   watch-dark.css - watch.php: QORA fonli bloklar + Ambient light
+   ==========================================================================
+   watch-yt.css'DAN KEYIN yuklanadi (faqat ustidan yozadi).
+   Qaytarish uchun watch.php dagi shu faylga havolani olib tashlash kifoya.
+
+   Qora (#000) qilingan joylar:
+     · QISMLAR paneli (sarlavha, qidiruv, ro'yxat);
+     · izoh yozish maydoni;
+     · stiker / emoji / GIF paneli;
+     · matn formatlash menyusi va "Saralash" menyusi.
+   ========================================================================== */
+
+/* Shu bloklar ichida mavjud o'zgaruvchilar qora palitraga o'tadi - shunda
+   ichidagi barcha elementlar (qatorlar, chiplar, kataklar) o'zi moslashadi. */
+.watch-page .watch-side-eps,
+.watch-page .watch-comments-wrap .reels-comments-form,
+.watch-page .watch-comments-wrap .reels-c-picker,
+.watch-page .watch-sort-menu,
+.watch-page .tg-fmt,
+.tg-fmt {
+    --bg-2:   #000;
+    --card:   #000;
+    --card-2: #0e0e0e;
+    --line:   #262626;
+    --yt-pill:   rgba(255, 255, 255, .08);
+    --yt-pill-h: rgba(255, 255, 255, .15);
+}
+
+/* ------------------------------------------------------------- QISMLAR */
+.watch-page .watch-side-eps {
+    background: #000;
+    border-color: #262626;
+}
+.watch-page .watch-side-eps .watch-side-head {
+    background: #000;
+    border-bottom-color: #262626;
+}
+.watch-page .watch-side-eps .watch-side-list { background: #000; }
+.watch-page .watch-side-eps .watch-ep-find { background: #0e0e0e; border-color: #262626; }
+.watch-page .watch-side-eps .watch-ep-find:focus-within { background: #000; }
+.watch-page .watch-side-eps .watch-side-count { background: #161616; }
+.watch-page .watch-ep:hover { background: #141414; }
+.watch-page .watch-ep.on { background: #1a1a1a; }
+.watch-page .watch-ep-thumb { background: #0e0e0e; }
+
+/* ------------------------------------------------------ IZOH YOZISH MAYDONI */
+.watch-page .watch-comments-wrap .reels-comments-form {
+    background: #000;
+    border-color: #2a2a2a;
+}
+.watch-page .watch-comments-wrap .reels-comments-form:focus-within {
+    background: #000;
+    border-color: var(--accent);
+}
+.watch-page .watch-comments-wrap .reels-comments-input {
+    background: transparent;
+    color: #fff;
+}
+
+/* -------------------------------------------------- STIKER / EMOJI / GIF PANELI */
+.watch-page .watch-comments-wrap .reels-c-picker {
+    background: #000;
+    border-color: #262626;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, .7);
+}
+.watch-page .watch-comments-wrap .reels-c-picker-tabs,
+.watch-page .watch-comments-wrap .reels-c-picker-panel,
+.watch-page .watch-comments-wrap .reels-c-picker-body,
+.watch-page .watch-comments-wrap .reels-c-emoji,
+.watch-page .watch-comments-wrap .reels-c-gif-body,
+.watch-page .watch-comments-wrap .reels-c-sticker-head,
+.watch-page .watch-comments-wrap .reels-c-gif-search,
+.watch-page .watch-comments-wrap .reels-c-sticker-sets {
+    background: #000;
+    border-color: #262626;
+}
+.watch-page .watch-comments-wrap .reels-c-sticker-search input,
+.watch-page .watch-comments-wrap .reels-c-gif-search input {
+    background: #0e0e0e;
+    border-color: #262626;
+    color: #fff;
+}
+.watch-page .watch-comments-wrap .reels-c-sticker-set {
+    background: #0e0e0e;
+    border-color: #262626;
+}
+.watch-page .watch-comments-wrap .reels-c-sticker-set:hover { background: #1a1a1a; }
+.watch-page .watch-comments-wrap .reels-c-sticker-set.on,
+.watch-page .watch-comments-wrap .reels-c-sticker-set.active,
+.watch-page .watch-comments-wrap .reels-c-sticker-set[aria-selected="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.watch-page .watch-comments-wrap .reels-c-sticker-item,
+.watch-page .watch-comments-wrap .reels-c-gif-item { background: #0e0e0e; }
+.watch-page .watch-comments-wrap .reels-c-sticker-item:hover { background: #1a1a1a; }
+
+/* --------------------------------------- FORMATLASH VA SARALASH MENYULARI */
+.tg-fmt,
+.watch-page .tg-fmt {
+    background: #000 !important;
+    border: 1px solid #262626 !important;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, .7) !important;
+}
+.watch-page .watch-sort-menu {
+    background: #000;
+    border-color: #262626;
+}
+
+/* ==========================================================================
+   AMBIENT LIGHT (watch-ambient.js)
+   Video rangiga mos yumshoq nur pleyer atrofida chiqadi.
+   ========================================================================== */
+.watch-main { position: relative; isolation: isolate; }
+/* Nur tavsiyalar ustuni ustida chiqib ketmasligi uchun */
+.watch-page .watch-side { position: relative; z-index: 1; }
+
+/* Miqdorlar sozlamalar panelidan keladi (watch-ambient.js):
+   --wamb-scale = tarqalish, --wamb-blur = xiralashtirish. */
+.wamb-canvas {
+    position: absolute;
+    left: 0; top: 0; width: 0; height: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 24px;
+    opacity: 0;
+    transform: scale(var(--wamb-scale, 1.4));
+    transform-origin: 50% 50%;
+    filter: blur(var(--wamb-blur, 56px)) saturate(1.9) brightness(var(--wamb-bright, 1));
+    transition: opacity .7s ease;
+    will-change: transform, opacity;
+}
+.wamb-canvas.show { opacity: var(--wamb-op, 1); }
+
+/* Butun sahifa bo'ylab yoyiladigan nur qatlami: chap panel, tavsiyalar va
+   pastki qismni ham yoritadi. U BARCHA kontent ORTIDA turadi (z-index: -1):
+   videolar, kartalar va matnlar nur ustida, ravshan holda qoladi.
+   Buning uchun yoqilganda body / yon panel foni shaffof bo'ladi (html foni
+   qora bo'lib qoladi). Bosishlarga to'sqinlik qilmaydi. */
+.wamb-layer {
+    display: none;
+    position: absolute;
+    left: 0; top: 0; width: 100%; height: 100vh;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: -1;
+}
+body.wamb-on .wamb-layer { display: block; }
+.wamb-layer .wamb-canvas { z-index: auto; }
+body.wamb-on,
+body.wamb-on.ig-shell { background: transparent; }
+body.wamb-on .ig-side { background: transparent; }
+
+/* To'liq ekran: nur video ORTIDA, butun ekranni to'ldiradi (qora yon
+   chiziqlar o'rnida rangli nur ko'rinadi). */
+.wamb-canvas.wamb-fs {
+    left: 0 !important; top: 0 !important;
+    width: 100% !important; height: 100% !important;
+    border-radius: 0;
+}
+.wamb-fs-host { isolation: isolate; }
+.wamb-fs-host:fullscreen,
+.wamb-fs-host:-webkit-full-screen,
+.wamb-fs-host .uzp,
+.wamb-fs-host video,
+.wamb-fs-host .uzp-video { background: transparent !important; }
+
+body.wamb-on .watch-main > .watch-player { position: relative; z-index: 1; }
+
+/* ⚙ tugmasi: faqat ikonka */
+.watch-page .watch-act.wamb-gear { padding: 0; width: 36px; justify-content: center; }
+.watch-page .watch-act.wamb-gear svg { fill: none; }
+.watch-page .watch-act.wamb-gear[aria-expanded="true"] { background: var(--yt-pill-h); }
+
+/* Tugma: faqat ikonka rangi (yoqilganda yorqin) */
+.watch-page .watch-act.wamb-btn svg { fill: none; }
+.watch-page .watch-act.wamb-btn.on { color: #ffd54a; }
+.watch-page .watch-act.wamb-btn.on svg { fill: none; stroke: #ffd54a; filter: drop-shadow(0 0 4px rgba(255, 213, 74, .6)); }
+
+/* Telefon va televizorda o'chiq */
+@media (max-width: 768px) {
+    .wamb-btn, .wamb-gear, .wamb-panel, .wamb-layer { display: none !important; }
+}
+html.tv-mode .wamb-canvas,
+html.tv-mode .wamb-layer,
+html.tv-mode .wamb-btn,
+html.tv-mode .wamb-gear,
+html.tv-mode .wamb-panel { display: none !important; }
+
+/* ==========================================================================
+   SOZLAMALAR PANELI (YouTube'dagi Ambient light kengaytmasi kabi)
+   ========================================================================== */
+.wamb-panel {
+    --wf: #fff;
+    --wf-dim: rgba(255, 255, 255, .28);
+    --wf-sec: rgba(255, 255, 255, .08);
+    position: fixed; z-index: 10050; width: 300px; overflow-y: auto;
+    padding: 0 0 8px; border-radius: 14px;
+    background: rgba(26, 26, 26, .82);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    backdrop-filter: blur(20px) saturate(1.5);
+    border: 1px solid rgba(255, 255, 255, .12);
+    box-shadow: 0 14px 44px rgba(0, 0, 0, .6);
+    color: var(--wf); font-size: 13px; line-height: 18px;
+    scrollbar-width: thin;
+}
+.wamb-panel[hidden] { display: none; }
+.wamb-panel[data-theme="dark"] {
+    background: #000; border-color: #262626;
+}
+.wamb-panel[data-theme="light"] {
+    --wf: #111; --wf-dim: rgba(0, 0, 0, .25); --wf-sec: rgba(0, 0, 0, .06);
+    background: rgba(255, 255, 255, .94); border-color: rgba(0, 0, 0, .12);
+    box-shadow: 0 14px 44px rgba(0, 0, 0, .35);
+}
+.wamb-sec {
+    margin-top: 6px; padding: 7px 14px;
+    background: var(--wf-sec);
+    font-size: 12px; font-weight: 700; letter-spacing: .02em;
+}
+.wamb-panel > .wamb-sec:first-child { margin-top: 0; border-radius: 14px 14px 0 0; }
+.wamb-row { padding: 12px 14px 4px; }
+.wamb-row-h {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 10px; margin-bottom: 9px; font-size: 13px;
+}
+.wamb-row-h b { font-weight: 600; font-variant-numeric: tabular-nums; opacity: .9; }
+.wamb-q {
+    display: inline-grid; place-items: center; width: 14px; height: 14px;
+    margin-left: 4px; border-radius: 50%; font-style: normal; font-size: 10px;
+    border: 1px solid var(--wf-dim); cursor: help; opacity: .8;
+}
+
+/* Slayder */
+.wamb-range {
+    -webkit-appearance: none; appearance: none;
+    display: block; width: 100%; height: 14px; margin: 0; padding: 0;
+    background: transparent; cursor: pointer; --p: 0%;
+}
+.wamb-range:focus { outline: none; }
+.wamb-range::-webkit-slider-runnable-track {
+    height: 3px; border-radius: 2px;
+    background: linear-gradient(to right, var(--wf) var(--p), var(--wf-dim) var(--p));
+}
+.wamb-range::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; margin-top: -5px; border-radius: 50%;
+    background: var(--wf); border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+}
+.wamb-range::-moz-range-track { height: 3px; border-radius: 2px; background: var(--wf-dim); }
+.wamb-range::-moz-range-progress { height: 3px; border-radius: 2px; background: var(--wf); }
+.wamb-range::-moz-range-thumb {
+    width: 13px; height: 13px; border: 0; border-radius: 50%; background: var(--wf);
+}
+.wamb-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(42, 171, 238, .45); }
+.wamb-ticks {
+    display: flex; justify-content: space-between; margin-top: 6px;
+    font-size: 11px; opacity: .7;
+}
+
+/* Yoqilgan [G] */
+.wamb-row-sw {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 14px; padding-bottom: 6px;
+}
+.wamb-row-sw kbd {
+    margin-left: 4px; padding: 1px 5px; border-radius: 4px; font: inherit; font-size: 11px;
+    border: 1px solid var(--wf-dim); opacity: .8;
+}
+.wamb-switch {
+    position: relative; width: 40px; height: 22px; padding: 0; border: 0;
+    border-radius: 11px; cursor: pointer; background: var(--wf-dim);
+    transition: background .18s ease;
+}
+.wamb-switch::after {
+    content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+    transition: transform .18s ease;
+}
+.wamb-switch.on { background: #0a84ff; }
+.wamb-switch.on::after { transform: translateX(18px); }
+.wamb-switch:focus-visible { outline: 2px solid #2aabee; outline-offset: 2px; }
+
+.wamb-row-end { padding-top: 8px; padding-bottom: 4px; }
+.wamb-reset {
+    width: 100%; height: 32px; border: 0; border-radius: 16px; cursor: pointer;
+    background: var(--wf-sec); color: var(--wf); font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.wamb-reset:hover { filter: brightness(1.25); }
+
+@media (prefers-reduced-motion: reduce) {
+    .wamb-switch, .wamb-switch::after { transition: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wamb-canvas { transition: none; }
+}

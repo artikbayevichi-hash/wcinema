@@ -54,6 +54,20 @@ class Uploader
     /** Poster (thumbnail) saqlanadigan papka */
     const THUMBS_DIR = UPLOAD_DIR . 'thumbnails';
 
+    /**
+     * Vaqtinchalik "staging" papkasi.
+     *
+     * Nima uchun: fayl 1-bosqichda (tanlash paytida) darhol serverga
+     * yuklanadi va shu papkaga saqlanadi. Foydalanuvchi 2- va 3-bosqichda
+     * yozadi — shu vaqt ichida baytlar yo'ladi. 4-bosqichda server faylni
+     * Telegram kanalga joylaydi. Shu tariqa foydalanuvchi yuklashni
+     * KO'RMASDAN kutadi.
+     */
+    const STAGE_DIR = UPLOAD_DIR . 'staging';
+
+    /** Staging fayllari maksimal yoshi (soat) — tashlab qilinmagan yuklashlar */
+    const STAGE_TTL_HOURS = 2;
+
     public function __construct(?Database $db = null)
     {
         $this->db = $db ?: Database::getInstance();
@@ -78,7 +92,6 @@ class Uploader
     // ==================================================================
     //  1) ASOSIY KIRISH
     // ==================================================================
-
     /**
      * Kontentni yaratadi.
      *
@@ -110,6 +123,222 @@ class Uploader
     }
 
     // ==================================================================
+    //  1b) BOSQICHLI YUKLASH (staging → publish)
+    // ------------------------------------------------------------------
+    //  Ikki qadam:
+    //    stageMedia()   — fayl serverga keladi va vaqtinchalik saqlanadi
+    //                     (foydalanuvchi shu vaqtda beshak yozadi);
+    //    publishStaged() — metadata yuboriladi, fayl Telegram'ga joylanadi.
+    // ==================================================================
+
+    /**
+     * Fayl(lar)ni vaqtinchalik saqlaydi va token qaytaradi.
+     *
+     * @return array{success:bool, message?:string, token?:string, size?:int}
+     */
+    public static function stageMedia($userId, $format, array $files, array $opts = [])
+    {
+        $userId = (int) $userId;
+        if ($userId <= 0) {
+            return ['success' => false, 'message' => 'Foydalanuvchi aniqlanmadi'];
+        }
+        $format = self::normFormat($format);
+        if ($format === null) {
+            return ['success' => false, 'message' => 'Format noto‘g‘ri (reel / post / video)'];
+        }
+        $files = self::normFiles($files);
+        if (!$files) {
+            return ['success' => false, 'message' => 'Fayl tanlanmagan'];
+        }
+
+        $isPost = ($format === 'post');
+        if ($isPost) {
+            $limit    = self::MAX_IMAGE_MB * 1024 * 1024;
+            $allowExt = self::IMAGE_EXT;
+            $allowMime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+            if (count($files) > self::MAX_POST_MEDIA) {
+                return ['success' => false, 'message' =>
+                    'Galereyada ko‘pi bilan ' . self::MAX_POST_MEDIA . ' ta rasm bo‘lishi mumkin'];
+            }
+        } else {
+            $limit    = ($format === 'reel' ? self::MAX_REEL_MB : self::MAX_VIDEO_MB) * 1024 * 1024;
+            $allowExt = self::VIDEO_EXT;
+            $allowMime = [
+                'video/mp4', 'video/webm', 'video/quicktime',
+                'application/octet-stream', 'video/x-m4v', 'video/x-matroska',
+            ];
+            if (count($files) > 1) {
+                $files = array_slice($files, 0, 1);
+            }
+        }
+
+        // Avval hammasini tekshiramiz — xato bo'lsa hech narsa saqlanmaydi.
+        foreach ($files as $i => $f) {
+            $err = self::checkFile($f, $limit, $allowExt, $allowMime, $isPost ? 'rasm' : 'video');
+            if ($err !== null) {
+                return ['success' => false, 'message' => 'Fayl #' . ($i + 1) . ': ' . $err];
+            }
+        }
+
+        self::ensureStageDir();
+        self::purgeOldStages();
+
+        $token = bin2hex(random_bytes(10));
+        $dir   = self::STAGE_DIR . '/' . $token;
+        if (!@mkdir($dir, 0700, true)) {
+            return ['success' => false, 'message' => 'Vaqtinchalik papka yaratib bo‘lmadi'];
+        }
+
+        $items = [];
+        $total = 0;
+        foreach ($files as $i => $f) {
+            // Kengaytma SAQLANMAYDI — fayl to'g'ridan-to'g'ri ochilmasligi uchun
+            // (papka .htaccess bilan ham yopilgan).
+            $name = 'm' . $i . '_' . substr(bin2hex(random_bytes(6)), 0, 12);
+            $path = $dir . '/' . $name;
+            if (!@move_uploaded_file($f['tmp_name'], $path)) {
+                self::removeStage($dir);
+                return ['success' => false, 'message' => 'Faylni saqlab bo‘lmadi'];
+            }
+            @chmod($path, 0600);
+            $total += (int) $f['size'];
+            $items[] = [
+                'file' => $path,
+                'name' => (string) $f['name'],
+                'type' => (string) $f['type'],
+                'size' => (int) $f['size'],
+            ];
+        }
+
+        $meta = [
+            'user_id'  => $userId,
+            'format'   => $format,
+            'items'    => $items,
+            'width'    => (int) ($opts['width'] ?? 0),
+            'height'   => (int) ($opts['height'] ?? 0),
+            'duration' => (int) ($opts['duration'] ?? 0),
+            'created'  => time(),
+        ];
+        @file_put_contents($dir . '/meta.json', json_encode($meta, JSON_UNESCAPED_UNICODE));
+
+        return [
+            'success' => true,
+            'token'   => $token,
+            'size'    => $total,
+            'files'   => count($items),
+        ];
+    }
+
+    /**
+     * Staging'dagi fayldan reels yaratadi va staging'ni tozalaydi.
+     *
+     * @return array{success:bool, message?:string, ...}
+     */
+    public static function publishStaged($userId, $token, array $opts = [])
+    {
+        $userId = (int) $userId;
+        $token  = (string) $token;
+        if ($userId <= 0) {
+            return ['success' => false, 'message' => 'Foydalanuvchi aniqlanmadi'];
+        }
+        if (!preg_match('/^[a-f0-9]{20}$/', $token)) {
+            return ['success' => false, 'message' => 'Yuklash tokeni noto‘g‘ri'];
+        }
+        $dir      = self::STAGE_DIR . '/' . $token;
+        $metaFile = $dir . '/meta.json';
+        if (!is_dir($dir) || !is_file($metaFile)) {
+            return ['success' => false, 'message' =>
+                'Yuklangan fayl topilmadi (muddati tug‘gan bo‘lishi mumkin). Qayta tanlang.'];
+        }
+        $meta = json_decode((string) @file_get_contents($metaFile), true);
+        if (!is_array($meta) || (int) ($meta['user_id'] ?? 0) !== $userId) {
+            self::removeStage($dir);
+            return ['success' => false, 'message' => 'Yuklash topilmadi'];
+        }
+        if (time() - (int) ($meta['created'] ?? 0) > self::STAGE_TTL_HOURS * 3600) {
+            self::removeStage($dir);
+            return ['success' => false, 'message' => 'Yuklash vaqti tug‘di. Qayta tanlang.'];
+        }
+
+        $format = self::normFormat((string) ($meta['format'] ?? ''));
+        $items  = is_array($meta['items'] ?? null) ? $meta['items'] : [];
+        $files  = [];
+        foreach ($items as $it) {
+            $path = (string) ($it['file'] ?? '');
+            if ($path === '' || !is_file($path)) continue;
+            $files[] = [
+                'name'     => (string) ($it['name'] ?? 'media'),
+                'type'     => (string) ($it['type'] ?? ''),
+                'tmp_name' => $path,
+                'error'    => UPLOAD_ERR_OK,
+                'size'     => (int) ($it['size'] ?? filesize($path)),
+            ];
+        }
+        if (!$files || $format === null) {
+            self::removeStage($dir);
+            return ['success' => false, 'message' => 'Yuklangan fayl topilmadi'];
+        }
+
+        $opts['staged']   = true;
+        $opts['width']    = (int) ($opts['width']    ?: ($meta['width'] ?? 0));
+        $opts['height']   = (int) ($opts['height']   ?: ($meta['height'] ?? 0));
+        $opts['duration'] = (int) ($opts['duration'] ?: ($meta['duration'] ?? 0));
+
+        $result = (new self())->create($userId, $format, $files, $opts);
+        self::removeStage($dir);
+        return $result;
+    }
+
+    /** Staging papkasini yaratadi va to'g'ridan-to'g'ri ochilishini taqiqlaydi. */
+    private static function ensureStageDir()
+    {
+        if (!is_dir(self::STAGE_DIR)) {
+            @mkdir(self::STAGE_DIR, 0700, true);
+        }
+        $ht = rtrim(self::STAGE_DIR, '/\\') . '/.htaccess';
+        if (is_dir(self::STAGE_DIR) && !is_file($ht)) {
+            @file_put_contents($ht, "Options -Indexes\nRequire all denied\n");
+        }
+    }
+
+    /** Eskirgan staging papkalarini o'chiradi (foydalanuvchi chiqib ketgan bo'lsa). */
+    private static function purgeOldStages()
+    {
+        $dir = self::STAGE_DIR;
+        if (!is_dir($dir)) return;
+        $ttl = self::STAGE_TTL_HOURS * 3600;
+        foreach ((array) @scandir($dir) as $entry) {
+            if ($entry === '.' || $entry === '..' || $entry === '.htaccess') continue;
+            $path = $dir . '/' . $entry;
+            if (!is_dir($path)) continue;
+            $created = (int) @filemtime($path);
+            if ($created > 0 && (time() - $created) > $ttl) {
+                self::removeStage($path);
+            }
+        }
+    }
+
+    /** Staging papkasini butunlay o'chiradi. */
+    private static function removeStage($dir)
+    {
+        $dir = (string) $dir;
+        if ($dir === '' || !is_dir($dir)) return;
+        // Faqat STAGE_DIR ichidagi papkalarni o'chiramiz (yo'l tekshiruvi).
+        $base = rtrim(self::STAGE_DIR, '/\\');
+        if (strpos($dir, $base . '/') !== 0) return;
+        foreach ((array) @scandir($dir) as $entry) {
+            if ($entry === '.' || $entry === '..') continue;
+            $path = $dir . '/' . $entry;
+            if (is_dir($path)) {
+                @rmdir($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
+    // ==================================================================
     //  2) RASM POST (single / carousel)
     // ==================================================================
 
@@ -131,7 +360,7 @@ class Uploader
 
         $saved = [];   // saqlangan fayllar (xato bo'lsa tozalash uchun)
         foreach ($files as $i => $f) {
-            $err = self::checkFile($f, $limit, $allowExt, $allowMime, 'rasm');
+            $err = self::checkFile($f, $limit, $allowExt, $allowMime, 'rasm', !empty($opts['staged']));
             if ($err !== null) {
                 self::cleanup($saved);
                 return ['success' => false, 'message' => 'Fayl #' . ($i + 1) . ': ' . $err];
@@ -142,7 +371,13 @@ class Uploader
             $ext  = in_array($ext, self::IMAGE_EXT, true) ? $ext : 'jpg';
             $name = self::uniqueName($f['name'], $ext);
             $dest = self::POSTS_DIR . '/' . $name;
-            if (!@move_uploaded_file($f['tmp_name'], $dest)) {
+            // Staging'dan kelgan fayl `move_uploaded_file` bilan
+            // ko'chirilmaydi (u allaqachon yuklangan emas) — shuning uchun
+            // oddiy `copy` ishlatiladi.
+            $moved = !empty($opts['staged'])
+                ? @copy($f['tmp_name'], $dest)
+                : @move_uploaded_file($f['tmp_name'], $dest);
+            if (!$moved) {
                 self::cleanup($saved);
                 return ['success' => false, 'message' => 'Faylni saqlab bo‘lmadi'];
             }
@@ -255,7 +490,7 @@ class Uploader
         $err = self::checkFile($file, $limit, self::VIDEO_EXT, [
             'video/mp4', 'video/webm', 'video/quicktime',
             'application/octet-stream', 'video/x-m4v', 'video/x-matroska',
-        ], 'video');
+        ], 'video', !empty($opts['staged']));
         if ($err !== null) {
             return ['success' => false, 'message' => $err];
         }
@@ -299,7 +534,12 @@ class Uploader
             }
         } finally {
             FastStart::cleanup($prepared);
-            @unlink($file['tmp_name']);
+            // Staging fayli bo'lsa o'chirilmaydi — xato yuz berganida
+            // foydalanuvchi "Qayta yuborish" tanlay olsin (staging papkasi
+            // muddati tugagach tozalanadi).
+            if (empty($opts['staged'])) {
+                @unlink($file['tmp_name']);
+            }
         }
 
         if (!$res || empty($res['result']['message_id'])) {
@@ -487,7 +727,7 @@ class Uploader
     /**
      * Bitta faylni tekshiradi. Xato bo'lsa xabar qaytaradi, aks holda null.
      */
-    public static function checkFile($f, $maxBytes, array $allowExt, array $allowMime, $kindLabel)
+    public static function checkFile($f, $maxBytes, array $allowExt, array $allowMime, $kindLabel, $staged = false)
     {
         if (!isset($f['error']) || is_array($f['error'])) {
             return 'Fayl yuklanmagan';
@@ -506,7 +746,18 @@ class Uploader
                 return 'Yuklashda xatolik';
         }
         $tmp = (string) ($f['tmp_name'] ?? '');
-        if ($tmp === '' || !is_uploaded_file($tmp)) {
+        if ($tmp === '') {
+            return 'Yuklangan fayl topilmadi';
+        }
+        if ($staged) {
+            // Staging'dagi fayl allaqachon "uploaded" emas — shuning uchun
+            // is_uploaded_file() doim false qaytaradi. Buning o'rniga
+            // fayl staging papkasida mavjudligi tekshiriladi.
+            $base = rtrim(self::STAGE_DIR, '/\\');
+            if (!is_file($tmp) || strpos(str_replace('\\', '/', $tmp), str_replace('\\', '/', $base) . '/') !== 0) {
+                return 'Yuklangan fayl topilmadi';
+            }
+        } elseif (!is_uploaded_file($tmp)) {
             return 'Yuklangan fayl topilmadi';
         }
         $size = (int) ($f['size'] ?? 0);

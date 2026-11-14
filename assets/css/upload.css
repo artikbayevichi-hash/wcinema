@@ -172,3 +172,156 @@
 .tv-mode .up-strip-item { width: 120px; height: 120px; }
 .tv-mode .up-thumb-btn { padding: 11px 16px; font-size: 14px; }
 .tv-mode .up-thumb-title { font-size: 15px; }
+
+/* ==========================================================================
+   BOSQICHLI OYNA (Instagram uslubi)
+   --------------------------------------------------------------------------
+   4 ta bosqich: Format → Ko'rish → Beschak → Yayinlash.
+   Yuqorida segment indikator, pastda yopishgan amal tugmasi (sticky).
+   ========================================================================== */
+.up-steps {
+    display: flex; gap: 6px;
+    max-width: 720px; margin: 0 auto;
+    padding: 16px 14px 0;
+}
+.up-step { flex: 1 1 0; min-width: 0; }
+.up-step-bar {
+    display: block; height: 3px; border-radius: 999px;
+    background: var(--card-2); overflow: hidden;
+}
+.up-step-bar b {
+    display: block; height: 100%; width: 0;
+    background: var(--accent);
+    transition: width .28s ease;
+}
+.up-step-label {
+    display: block; margin-top: 7px;
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.up-step.is-done .up-step-bar b { width: 100%; }
+.up-step.is-active .up-step-bar b { width: 45%; }
+.up-step.is-active .up-step-label { color: var(--text); }
+
+.up-steps-card { text-align: left; }
+.up-panel[hidden] { display: none; }
+.up-panel-title { font-size: 18px; font-weight: 800; letter-spacing: -.01em; text-align: left; }
+.up-panel-sub {
+    margin: 5px 0 16px; font-size: 13px; line-height: 1.45;
+    color: var(--muted); text-align: left;
+}
+
+/* ---- Pastdagi amal tugmalari (sticky) ---- */
+.up-actions {
+    position: sticky; bottom: 0; z-index: 30;
+    display: flex; gap: 10px;
+    max-width: 720px; margin: 0 auto;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: rgba(13, 15, 20, .93);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+}
+.up-act-next {
+    flex: 1 1 auto; min-height: 46px; padding: 0 18px;
+    border: 0; border-radius: 999px;
+    background: var(--accent); color: #fff;
+    font: inherit; font-size: 15px; font-weight: 700;
+    cursor: pointer;
+    transition: transform .12s ease, opacity .15s ease;
+}
+.up-act-next:active { transform: scale(.98); }
+.up-act-next:disabled { opacity: .5; cursor: not-allowed; }
+.up-act-back {
+    flex: 0 0 auto; min-height: 46px; padding: 0 18px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: transparent; color: var(--text);
+    font: inherit; font-size: 14px; font-weight: 700;
+    cursor: pointer;
+}
+.up-act-back:hover { background: var(--card); }
+
+/* ---- Ko'rish bosqichi: muqova kadrini tanlash ---- */
+.up-thumb-head { order: 3; margin-top: 12px; }
+.up-thumb { text-align: center; }
+.up-thumb-title { font-size: 12.5px; font-weight: 800; color: var(--muted); }
+
+/* ---- Yuklash progressi (nashr bosqichida — server javobini kutamiz) ---- */
+.up-progress-bar.is-indeterminate span {
+    width: 38% !important;
+    animation: upIndet 1.1s ease-in-out infinite;
+}
+@keyframes upIndet {
+    0%   { margin-left: -38%; }
+    100% { margin-left: 100%; }
+}
+
+/* ---- Yuklash holati (fayl serverga yuborilmoqda) ---- */
+.up-stage { margin-top: 14px; text-align: left; }
+.up-stage[hidden] { display: none; }
+.up-stage-bar {
+    height: 6px; border-radius: 999px;
+    background: var(--card-2); overflow: hidden;
+}
+.up-stage-bar span {
+    display: block; height: 100%; width: 0;
+    background: var(--accent);
+    transition: width .2s ease;
+}
+.up-stage.is-done .up-stage-bar span { background: var(--ok); }
+.up-stage.is-err  .up-stage-bar span { background: var(--accent-2); }
+.up-stage-text { margin-top: 7px; font-size: 12.5px; color: var(--muted); }
+.up-stage.is-done .up-stage-text { color: var(--ok); }
+.up-stage.is-err  .up-stage-text { color: #ff9a9a; }
+
+/* ---- 4-bosqich: ko'rib chiqish (review) ---- */
+.up-review {
+    display: flex; gap: 13px; align-items: center;
+    padding: 12px; text-align: left;
+    border: 1px solid var(--line); border-radius: 14px;
+    background: var(--card);
+}
+.up-review-thumb {
+    flex: 0 0 auto; width: 58px; height: 86px;
+    border-radius: 10px; overflow: hidden; background: var(--card-2);
+}
+.up-review-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.up-review-body { min-width: 0; }
+.up-review-title {
+    font-size: 14.5px; font-weight: 700; line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.up-review-meta { margin-top: 5px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* ---- Film tanlash (katalogdan) ---- */
+.src-pick { position: relative; }
+.src-results {
+    position: absolute; z-index: 40; left: 0; right: 0;
+    top: calc(100% + 4px);
+    background: #12151d; border: 1px solid #262b38; border-radius: 10px;
+    max-height: 290px; overflow: auto;
+    box-shadow: 0 12px 30px rgba(0,0,0,.55);
+}
+.src-results button {
+    display: flex; gap: 10px; align-items: center;
+    width: 100%; padding: 8px 10px; background: none; border: 0;
+    color: #e7ebf3; text-align: left; cursor: pointer;
+}
+.src-results button:hover { background: #1c2130; }
+.src-results img {
+    width: 34px; height: 48px; object-fit: cover;
+    border-radius: 6px; background: #0b0d13; flex-shrink: 0;
+}
+.src-results .t { font-size: 13px; font-weight: 600; }
+.src-results .s { font-size: 11px; color: #8b95a8; }
+.src-results .empty { padding: 12px; color: #8b95a8; font-size: 12.5px; }
+.src-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 8px; padding: 6px 11px; border-radius: 999px;
+    background: #1c2130; font-size: 13px;
+}
+.src-chip button {
+    background: none; border: 0; color: #ff9a9a;
+    cursor: pointer; font-size: 15px; line-height: 1;
+}

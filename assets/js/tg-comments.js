@@ -1643,6 +1643,22 @@
     });
   }
 
+  // Saqlangan GIF (Document) yuborish — stiker bilan bir xil usul:
+  // hujjat InputMediaDocument sifatida ulashiladi (qayta yuklash kerak emas).
+  function sendGifDoc(doc) {
+    var Api = A();
+    S.expandRoot = S.replyTo || 0;
+    var inputDoc = new Api.InputDocument({
+      id: doc.id,
+      accessHash: doc.accessHash,
+      fileReference: doc.fileReference
+    });
+    var media = new Api.InputMediaDocument({ id: inputDoc });
+    return sendMediaRaw(media, '').then(function () {
+      reportNotify('media', ''); finishReply(); bumpCount(S.topicId, 1); return reload();
+    });
+  }
+
   // Ovozli xabar (voice) - `tg-voice.js` yozib beradi, Telegram'ga shu
   // yerda yuklanadi. `DocumentAttributeAudio { voice: true }` atributi bilan
   // "ovozli xabar" ko'rinishida saqlanadi.

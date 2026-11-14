@@ -1034,7 +1034,9 @@
     S.viewed = true;
     // MTProto (PHP sessiyasi yo'q) uchun ko'rish tarixini mahalliy saqlaymiz:
     // profilning "Tarix" yorlig'i aynan shu localStorage'dan o'qiydi.
-    if (!W.loggedIn) mirrorLib('history', true);
+    // "Tomosha qilingan" chipi ham shu ro'yxatdan foydalanadi, shuning uchun
+    // PHP sessiyali foydalanuvchida ham mahalliy nusxa yuritiladi.
+    mirrorLib('history', true);
     var body = new URLSearchParams();
     body.set('id', D.id);
     var tg = tgUserId();
@@ -1103,6 +1105,246 @@
   //   · 🎩 "1-fasl · 1-qism" YO'QOLDI (kinomanba saytdan olib tashlandi);
   //   · ★ reyting va yil kanal qatoriga ko'chdi ("Obuna" tugmasi o'rniga);
   //   · ko'rish + vaqt ikkinchi qatorda qoldi — YouTube'dagi kabi.
+  // ======================================================= YOUTUBE QATLAMI
+  // Tavsif matnini (ta'rif kartasi ichida) ko'rsatish. Avval foydalanuvchi
+  // so'rovi bilan o'chirilgan edi - shu sabab false.
+  var SHOW_DESC = false;
+
+  /* Ta'rif kartasi bosilganda kengayadi (YouTube'dagi "...yana"). */
+  function initDescToggle(d) {
+    if (!d || d._ytBound) return;
+    d._ytBound = true;
+    function toggle(ev) {
+      if (ev && ev.target && ev.target.closest && ev.target.closest('a')) return;
+      if (!d.classList.contains('has-more')) return;
+      var open = d.classList.toggle('open');
+      d.setAttribute('aria-expanded', open ? 'true' : 'false');
+      var b = el('watchDescBody');
+      if (b) b.hidden = !open;
+    }
+    d.addEventListener('click', toggle);
+    d.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(ev); }
+    });
+  }
+
+  /* "Obuna bo'lish" tugmasi. Kanal bitta (SITE_NAME), shuning uchun holat
+     brauzerda (localStorage) saqlanadi; bosilganda tugma "Obunada" bo'ladi. */
+  var SUB_KEY = 'wc_channel_sub_v1';
+  function isSubscribed() {
+    try { return localStorage.getItem(SUB_KEY) === '1'; } catch (e) { return false; }
+  }
+  function paintSubscribe(b) {
+    var on = isSubscribed();
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.innerHTML = on
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg><span>Obunada</span>'
+      : '<span>Obuna bo‘lish</span>';
+  }
+  function initSubscribe() {
+    var b = el('watchSubBtn');
+    if (!b) return;
+    paintSubscribe(b);
+    if (b._ytBound) return;
+    b._ytBound = true;
+    b.addEventListener('click', function () {
+      var on = !isSubscribed();
+      try { localStorage.setItem(SUB_KEY, on ? '1' : '0'); } catch (e) {}
+      paintSubscribe(b);
+      toast(on ? 'Kanalga obuna bo‘ldingiz' : 'Obuna bekor qilindi');
+    });
+  }
+
+  /* Tavsiyalar chiplari: Hammasi / Yangi / Tomosha qilingan.
+     Filtr faqat ko'rinishni o'zgartiradi (kartalar DOM'da qoladi), shuning
+     uchun lazy load bilan kelgan yangi kartalarga ham qayta qo'llanadi. */
+  var recFilter = 'all';
+  function recSeen(id) {
+    try { return !!(global.WCLib && global.WCLib.has('history', Number(id))); } catch (e) { return false; }
+  }
+  function applyRecFilter() {
+    var list = el('watchSideRecList');
+    if (!list) return;
+    var rows = list.querySelectorAll('.watch-rec');
+    var shown = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i], ok = true;
+      if (recFilter === 'new')  ok = r.getAttribute('data-new') === '1';
+      if (recFilter === 'seen') ok = recSeen(r.getAttribute('data-id'));
+      r.hidden = !ok;
+      if (ok) shown++;
+    }
+    var emp = list.querySelector('.watch-side-empty.f');
+    if (!shown && rows.length) {
+      if (!emp) {
+        emp = document.createElement('div');
+        emp.className = 'watch-side-empty f';
+        list.appendChild(emp);
+      }
+      emp.textContent = recFilter === 'seen'
+        ? 'Hali hech narsa tomosha qilinmagan'
+        : 'Hozircha yangi kontent yo‘q';
+    } else if (emp) { emp.remove(); }
+  }
+  function initRecChips() {
+    var box = el('watchChips');
+    if (!box || box._ytBound) return;
+    box._ytBound = true;
+    box.addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('.watch-chip-f');
+      if (!b) return;
+      recFilter = b.getAttribute('data-f') || 'all';
+      var all = box.querySelectorAll('.watch-chip-f');
+      for (var i = 0; i < all.length; i++) {
+        var on = all[i] === b;
+        all[i].classList.toggle('on', on);
+        all[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+      applyRecFilter();
+      // Filtrdan keyin ro'yxat qisqa qolsa, keyingi sahifani yuklaymiz.
+      if (S.relMore && recMoreNear()) loadMoreRelated();
+    });
+  }
+
+  /* Izohlarni saralash (YouTube "Saralash"): yangi / eng yaxshi / eski.
+     tg-comments.js ro'yxatni o'zi qayta chizadi, shuning uchun
+     MutationObserver bilan tartib qayta qo'llanadi. */
+  var cSort = 'new';
+  function cLikeNum(node) {
+    var n = node.querySelector('.reels-c-like-n');
+    if (!n) return 0;
+    var s = String(n.textContent || '').trim().toUpperCase().replace(',', '.');
+    var v = parseFloat(s) || 0;
+    if (/K$/.test(s)) v *= 1e3;
+    if (/M$/.test(s)) v *= 1e6;
+    return v;
+  }
+  function applyCommentSort() {
+    var list = el('commentsList');
+    if (!list) return;
+    var kids = [].slice.call(list.children).filter(function (k) {
+      return k.classList && k.classList.contains('reels-c-thread');
+    });
+    if (kids.length < 2) return;
+    if (!kids[0]._ytIdx) kids.forEach(function (k, i) { if (!k._ytIdx) k._ytIdx = i + 1; });
+    var sorted = kids.slice();
+    if (cSort === 'top') {
+      sorted.sort(function (a, b) { return (cLikeNum(b) - cLikeNum(a)) || (a._ytIdx - b._ytIdx); });
+    } else if (cSort === 'old') {
+      sorted.sort(function (a, b) { return b._ytIdx - a._ytIdx; });
+    } else {
+      sorted.sort(function (a, b) { return a._ytIdx - b._ytIdx; });
+    }
+    var same = sorted.every(function (k, i) { return k === kids[i]; });
+    if (same) return;
+    var anchor = kids[kids.length - 1].nextSibling;
+    sorted.forEach(function (k) { list.insertBefore(k, anchor); });
+  }
+  function initCommentSort() {
+    var btn = el('watchSortBtn'), menu = el('watchSortMenu');
+    var list = el('commentsList');
+    if (!btn || !menu || btn._ytBound) return;
+    btn._ytBound = true;
+    function close() { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      menu.hidden = !menu.hidden;
+      btn.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+    });
+    menu.addEventListener('click', function (ev) {
+      var it = ev.target.closest && ev.target.closest('.watch-sort-item');
+      if (!it) return;
+      cSort = it.getAttribute('data-sort') || 'new';
+      [].forEach.call(menu.querySelectorAll('.watch-sort-item'), function (x) {
+        x.classList.toggle('on', x === it);
+      });
+      close();
+      applyCommentSort();
+    });
+    document.addEventListener('click', function (ev) {
+      if (!menu.hidden && !(ev.target.closest && ev.target.closest('#watchSort'))) close();
+    });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') close(); });
+    if (list && typeof global.MutationObserver === 'function') {
+      var busy = false;
+      new global.MutationObserver(function () {
+        if (busy) return;
+        busy = true;
+        // Yangi kelgan (indekssiz) ustunlarni oldin belgilab olamiz.
+        var kids = [].slice.call(list.children).filter(function (k) {
+          return k.classList && k.classList.contains('reels-c-thread');
+        });
+        kids.forEach(function (k, i) { if (!k._ytIdx) k._ytIdx = i + 1; });
+        if (cSort !== 'new') applyCommentSort();
+        busy = false;
+      }).observe(list, { childList: true });
+    }
+  }
+
+  /* Izoh yozish joyi yonidagi avatar: foydalanuvchining PROFIL RASMI
+     (izohlardagi bilan bir xil manba: saytga yuklangan rasm -> Telegram rasmi).
+     Rasm bo'lmasa bosh harf, ism ham yo'q bo'lsa odam belgisi. */
+  function initComposerAvatar() {
+    var a = el('watchCav');
+    if (!a) return;
+    var TG = global.TGComments;
+    var meId = '', meName = '';
+    function ident() {
+      try {
+        var raw = tgMeRaw();
+        if (raw) {
+          var m = JSON.parse(raw);
+          meId = String(m.id || '');
+          meName = String(m.firstName || m.username || '').trim();
+        }
+      } catch (e) {}
+      if (!meName && W.user && (W.user.name || W.user.username)) {
+        meName = String(W.user.name || W.user.username);
+      }
+    }
+    function letter() {
+      a.textContent = meName ? meName.charAt(0).toUpperCase() : '';
+      a.classList.toggle('anon', !meName);
+    }
+    function showPhoto(url) {
+      a.classList.remove('anon');
+      a.textContent = '';
+      var im = document.createElement('img');
+      im.alt = '';
+      im.referrerPolicy = 'no-referrer';
+      im.onerror = function () { letter(); };
+      im.src = url;
+      a.appendChild(im);
+    }
+    function paint() {
+      ident();
+      var photo = '';
+      try { photo = (TG && TG.currentUserPhoto && TG.currentUserPhoto()) || ''; } catch (e) {}
+      if (photo) { showPhoto(photo); return; }
+      letter();
+    }
+    paint();
+    // Saytga yuklangan rasm serverdan keyin keladi (izohlardagi kabi).
+    if (TG && TG.loadNames && meId) {
+      try {
+        TG.loadNames([meId]).then(function () {
+          if (a.querySelector('img')) return;
+          var h = TG.avatarHtml(meId, meName) || '';
+          var mm = /src="([^"]+)"/.exec(h);
+          if (mm) {
+            var d = document.createElement('textarea');
+            d.innerHTML = mm[1];            // &amp; kabilarni qaytaramiz
+            showPhoto(d.value);
+          }
+        });
+      } catch (e) {}
+    }
+    // Boshqa oynada/sahifada rasm o'zgarsa yoki login bo'lsa yangilanadi.
+    global.addEventListener('storage', paint);
+    global.addEventListener('focus', paint);
+  }
+
   function renderHead() {
     var t = el('watchTitle');
     var e = curEp();
@@ -1132,10 +1374,10 @@
     if (sub) {
       var views = Number(D.views) || 0;
       var parts = [];
-      parts.push('<span class="watch-chip">\u{1F4E5} '
-        + (views > 0 ? fmtViews(views) + ' ko‘rildi' : 'Yangi') + '</span>');
+      parts.push('<span class="watch-stat"><b>'
+        + (views > 0 ? fmtViews(views) + ' ko‘rildi' : 'Yangi') + '</b></span>');
       var ago = fmtAgo(D.added_at || D.created_at);
-      if (ago) parts.push('<span>' + esc(ago) + '</span>');
+      if (ago) parts.push('<span class="watch-stat"><b>' + esc(ago) + '</b></span>');
       sub.innerHTML = parts.join('');
     }
 
@@ -1164,7 +1406,27 @@
     // olib tashlash kifoya.
     var d = el('watchDesc');
     if (!d) return;
-    d.hidden = true;
+    // YouTube "ta'rif kartasi": doim ko'rinadi (ko'rishlar + vaqt + reyting/yil).
+    // Tavsif matni/janrlar esa SHOW_DESC bayrog'i bilan boshqariladi.
+    d.hidden = false;
+    var descTxt = SHOW_DESC ? String(D.description || '').trim() : '';
+    var descGen = SHOW_DESC ? (S.genres || []) : [];
+    var dBody = el('watchDescBody');
+    if (dBody) {
+      var h = '';
+      if (descTxt) h += '<p class="watch-desc-txt">' + esc(descTxt).replace(/\n/g, '<br>') + '</p>';
+      if (descGen.length) {
+        h += '<div class="watch-desc-genres">' + descGen.map(function (x) {
+          return '<a href="index.php?g=' + encodeURIComponent(x.slug || '') + '">'
+            + esc(x.name) + '</a>';
+        }).join('') + '</div>';
+      }
+      dBody.innerHTML = h;
+      d.classList.toggle('has-more', !!h);
+      dBody.hidden = !h || !d.classList.contains('open');
+    }
+    initDescToggle(d);
+    initSubscribe();
     return;
     var desc = String(D.description || '').trim();
     var genres = S.genres || [];
@@ -1835,10 +2097,11 @@
 
   function epRow(e) {
     var on = Number(e.id) === Number(S.selectedId);
+    // Sarlavha "Qism N" bo'lgani uchun takrorlamaymiz: ostida faqat davomiylik,
+    // joriy qismda esa "Hozir ijro etilmoqda".
     var meta = [];
-    if (e.duration) meta.push(fmtTime(e.duration));
-    if (e.title) meta.push(esc(e.title));
-    if (on) meta.push('<span class="watch-ep-seen">&#9654; Hozir</span>');
+    if (on) meta.push('<span class="watch-ep-seen">Hozir ijro etilmoqda</span>');
+    else if (e.duration) meta.push(fmtTime(e.duration));
     return '<button type="button" class="watch-ep' + (on ? ' on' : '') + '" data-ep="' + esc(e.id) + '">'
       + '<span class="watch-ep-num">' + esc(e.number || e.id) + '</span>'
       + '<span class="watch-ep-thumb">'
@@ -1858,13 +2121,19 @@
     meta.push(Number(c.views) > 0 ? fmtViews(c.views) + ' ko‘rildi' : 'Yangi');
     var ago = fmtAgo(c.added_at || c.created_at);
     if (ago) meta.push(ago);
-    return '<a class="watch-rec" href="' + esc(base + '/watch.php?c=' + c.id) + '">'
+    // "Yangi" belgisi: 3 kundan yangi qo'shilganlarga (YouTube'dagi kabi).
+    var ts = Date.parse(String(c.added_at || c.created_at || '').replace(' ', 'T'));
+    var isNew = !isNaN(ts) && (Date.now() - ts) < 3 * 86400 * 1000;
+    return '<a class="watch-rec" data-id="' + esc(c.id) + '" data-new="' + (isNew ? '1' : '0') + '"'
+      + ' href="' + esc(base + '/watch.php?c=' + c.id) + '">'
       + '<span class="watch-rec-thumb">'
       +   thumbInner(c)
+      +   (isNew ? '<span class="watch-rec-new">Yangi</span>' : '')
       +   (Number(c.duration) > 0 ? '<span class="watch-ep-dur">' + fmtTime(c.duration) + '</span>' : '')
       + '</span>'
       + '<span class="watch-rec-text">'
       +   '<span class="watch-rec-ttl">' + esc(c.title) + '</span>'
+      +   '<span class="watch-rec-ch">' + esc(W.siteName || 'W CINEMA') + '</span>'
       +   '<span class="watch-rec-meta">' + meta.join(' · ') + '</span>'
       + '</span></a>';
   }
@@ -1921,6 +2190,7 @@
         ? S.related.map(recRow).join('')
         : '<div class="watch-side-empty">Hozircha tavsiya yo\u2018q</div>';
     }
+    applyRecFilter();
     syncRecMore();
   }
 
@@ -1955,6 +2225,7 @@
           var empty = recList.querySelector('.watch-side-empty');
           if (empty) empty.remove();
           recList.insertAdjacentHTML('beforeend', fresh.map(recRow).join(''));
+          applyRecFilter();
         }
       })
       .catch(function () {
@@ -2409,6 +2680,9 @@
     bindEpMobileUI();
     initRecObserver();
     initComments();
+    initRecChips();
+    initCommentSort();
+    initComposerAvatar();
 
     // Qism almashtirilganda skroll yuqoriga qaytadi.
     global.addEventListener('popstate', function () {

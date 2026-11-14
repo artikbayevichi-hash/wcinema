@@ -2347,10 +2347,11 @@
   // GramJS yo'li (fallback). `upload.GetFile` — to'liq SDK orqali.
   function readOnceGram(offset, length, cap, ctx, loc, dc, skip, aligned, want, hid) {
     if (!S.client || !S.T) {
-      // Tez yo'l (tg-mtproto.js) Telegram CDN fayllarini o'qiy olmaydi va GramJS'ga
-      // o'tadi - lekin tez yo'lda GramJS bundle'i umuman yuklanmagan bo'ladi.
-      // Ilgari shu yerda darhol "Telegram SDK yuklanmagan" xatosi chiqib, video
-      // ochilmasdi. Endi SDK'ni shu paytda (bir marta) yuklab, so'rovni takrorlaymiz.
+      // GramJS — zaxira yo'l. Bu yerga tez yo'l ishlamaganda tushamiz
+      // (masalan, DC uchun auth_key yo'q, FILE_MIGRATE yoki media klaster
+      // rad etilgan). GramJS bundle'i oldindan yuklanmagan bo'lsa — bir marta
+      // yuklab, so'rovni takrorlaymiz; ilgari shu yerda darhol "SDK
+      // yuklanmagan" xatosi chiqib, video umuman ochilmasdi.
       var gl = S.gramLoad || (S.gramLoad = ensureSession(silentView(), { fastPlayback: true }).then(
         function (c) { S.gramLoad = null; return c; },
         function (e) { S.gramLoad = null; throw e; }
@@ -2540,6 +2541,9 @@
     return (function () {
       // Wi-Fi/ethernet'da 6 ta parallel so'rov (yuqori RTT'ni yopish uchun),
       // mobil internetda 4 ta — trafik va flood chegarasi tejamkor bo'lsin.
+      // So'rovlar bitta WebSocket'da ketma-ket oqib qolmasligi uchun tez
+      // klient ularni 3 ta alohida ulanishga (media klaster) taqsimlaydi —
+      // Telegram Web K ham yuklab olishda 3 ta ulanish ishlatadi.
       var LANES = canSeed() ? 6 : 4;   // bir vaqtda nechta so'rov
 
       // Oraliqni reja bo'laklariga bo'lamiz — har biri bitta blok ichida.
@@ -3529,7 +3533,7 @@
 
     node.innerHTML =
       '<div class="udp-player" data-udp data-udp-config=\'' + cfg + '\'>'
-      + '<video id="playerVideo" playsinline preload="metadata" fetchpriority="high"'
+      + '<video id="playerVideo" playsinline preload="auto" fetchpriority="high"'
       + (opts.poster ? ' poster="' + esc(opts.poster) + '"' : '')
       + ' src="' + esc(url) + '"></video>'
       + '</div>'

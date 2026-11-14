@@ -24,7 +24,8 @@
  *   • Ishlamasa — `tg-stream.js` avvalgi GramJS yo'liga qaytadi (fallback).
  *
  * ESHIM: Telegram DC'ga WebSocket orqali ulanadi (trafik sayt serveridan
- *   o'tmaydi!). Manzil: wss://<dc>.web.telegram.org:443/apiws
+ *   o'tmaydi!). Manzil: wss://<dc>-1.web.telegram.org:443/apiws (media
+ *   klaster; ishlamasa — wss://<dc>.web.telegram.org:443/apiws).
  * ============================================================================
  */
 (function (global) {
@@ -633,16 +634,32 @@
     const DC_HOSTS = { 1: 'pluto', 2: 'venus', 3: 'aurora', 4: 'vesta', 5: 'flora' };
     const WS_PORT = 443;
 
-    function dcHost(dcId) {
+    /**
+     * DC manzili. `media` — Telegram'ning fayl (media) klasteri:
+     * `<dc>-1.web.telegram.org`. Telegram Web K ham, GramJS ham yuklab olishni
+     * aynan shu klasterga yuboradi (u fayl trafigi uchun ajratilgan, auth_key
+     * o'sha DC'ning o'zi — `-1` faqat boshqa frontend).
+     */
+    function dcHost(dcId, media) {
         const h = DC_HOSTS[dcId];
         if (!h) throw new Error('Noma\'lum DC: ' + dcId);
-        return h + '.web.telegram.org';
+        return h + (media ? '-1' : '') + '.web.telegram.org';
     }
+
+    // `msg_id` bitta auth_key uchun YAGONA va o'sib boruvchi bo'lishi shart.
+    // Bir nechta WebSocket (havza) bir xil kalitdan foydalanadi, shuning uchun
+    // hisoblagich ulanish ichida emas — modulda umumiy: Telegram Web K ham
+    // barcha "networker"lar uchun bitta generator ishlatadi. Aks holda bir
+    // millisekundda yuborilgan ikkita so'rov bir xil msg_id olib, server
+    // ularni dublikat deb qaytarishi (yoki javoblarni aralashtirishi) mumkin.
+    let sharedMsgId = 0n;
 
     function MtConnection(opts) {
         this.authKey = opts.authKey;
         this.keyId = opts.keyId;               // 8 bayt
         this.dcId = opts.dcId;
+        this.media = !!opts.media;              // media klaster (`-1`) manzili
+        this.onMediaBroken = opts.onMediaBroken || null;
         this.salt = new Uint8Array(8);         // server salt (javobdan yangilanadi)
         this.sessionId = randomBytes(8);
         this.seqNo = 0;
@@ -650,10 +667,12 @@
         this.pending = new Map();
         this.buf = new Uint8Array(0);
         this.ws = null;
+        this.host = null;
         this.ready = false;
         this.closed = false;
         this.encryptor = null;
         this.decryptor = null;
+        this._connecting = null;
     }
 
     MtConnection.prototype._nextMsgId = function () {
@@ -661,7 +680,10 @@
         const sec = Math.floor(now);
         const frac = Math.floor((now - sec) * 4294967296) & ~3;
         let id = (BigInt(sec) << 32n) | BigInt(frac >>> 0);
-        if (id <= this.lastMsgId) id = this.lastMsgId + 4n;
+        if (id <= sharedMsgId) id = sharedMsgId + 4n;
+        sharedMsgId = id;
+        // `request()` shu ulanishning oxirgi msg_id'si bo'yicha javobni
+        // topadi (pending map), shuning uchun nusxasini saqlaymiz.
         this.lastMsgId = id;
         return id;
     };
@@ -746,11 +768,42 @@
 
     MtConnection.prototype.connect = function () {
         if (this.ready) return Promise.resolve(this);
+        if (this._connecting) return this._connecting;
+        const self = this;
+        // Media klaster (`-1`) avval, u ishlamasa — DC'ning oddiy manzili.
+        const hosts = [];
+        try {
+            if (this.media) hosts.push(dcHost(this.dcId, true));
+            hosts.push(dcHost(this.dcId, false));
+        } catch (e) {
+            return Promise.reject(e);
+        }
+        let idx = 0;
+        const attempt = function () {
+            return self._open(hosts[idx++]).catch(function (e) {
+                if (idx >= hosts.length) throw e;
+                self.media = false;
+                if (self.onMediaBroken) { try { self.onMediaBroken(); } catch (x) {} }
+                return attempt();
+            });
+        };
+        this._connecting = attempt().then(function (v) {
+            self._connecting = null;
+            return v;
+        }, function (e) {
+            self._connecting = null;
+            throw e;
+        });
+        return this._connecting;
+    };
+
+    MtConnection.prototype._open = function (host) {
+        if (this.ready) return Promise.resolve(this);
         const self = this;
         return new Promise(function (resolve, reject) {
             let url;
             try {
-                url = 'wss://' + dcHost(self.dcId) + ':' + WS_PORT + '/apiws';
+                url = 'wss://' + host + ':' + WS_PORT + '/apiws';
             } catch (e) {
                 reject(e);
                 return;
@@ -775,15 +828,23 @@
             }, 15000);
             ws.onerror = function () {
                 const error = new Error('WebSocket xatosi');
+                // Qaysi manzil uzilganini bilish uchun (media klasterga
+                // fallback qarori shunga bog'liq).
+                error.host = self.host || host;
                 if (!settled) fail(error);
                 else self._failAll(error);
             };
             ws.onclose = function () {
-                if (!settled) fail(new Error('WebSocket yopildi'));
-                else {
+                if (!settled) {
+                    const e0 = new Error('WebSocket yopildi');
+                    e0.host = host;
+                    fail(e0);
+                } else {
                     self.closed = true;
                     self.ready = false;
-                    self._failAll(new Error('Telegram WebSocket uzildi'));
+                    const e1 = new Error('Telegram WebSocket uzildi');
+                    e1.host = self.host || host;
+                    self._failAll(e1);
                 }
             };
             ws.onopen = function () {
@@ -810,6 +871,7 @@
                     self.decryptor = dec;
                     ws.send(header.buffer);
                     self.ws = ws;
+                    self.host = host;
                     self.ready = true;
                     if (!settled) {
                         settled = true;
@@ -853,7 +915,9 @@
         while (merged.length - off >= 4) {
             const len = new DataView(merged.buffer, merged.byteOffset + off, 4).getInt32(0, true);
             if (len < 24 || len > (1 << 24) + 1024) {
-                this._failAll(new Error('Noto\'g\'ri paket uzunligi: ' + len));
+                const e = new Error('Noto\'g\'ri paket uzunligi: ' + len);
+                e.host = this.host;
+                this._failAll(e);
                 return;
             }
             if (merged.length - off < 4 + len) break;
@@ -885,7 +949,13 @@
                 this.pending.delete(parsed.reqId);
                 if (p.timer) clearTimeout(p.timer);
                 if (parsed.kind === 'result') p.resolve(parsed.result);
-                else p.reject(parsed.error);
+                else {
+                    // Xato qaysi frontenddan kelganini belgilaymiz: media
+                    // klaster (`-1`) rad etsa — shu belgi bo'yicha oddiy
+                    // manzilga qaytamiz.
+                    if (parsed.error && !parsed.error.host) parsed.error.host = this.host;
+                    p.reject(parsed.error);
+                }
             }
         }
     };
@@ -908,6 +978,21 @@
         }
         if (ctor === TL.RPC_RESULT) {
             const reqId = r.long();
+            // Telegram xatoni `rpc_result` ICHIDA `rpc_error` ko'rinishida
+            // yuboradi: rpc_result{req_msg_id, result:rpc_error}. Buni
+            // `upload.file` deb o'qish "Kutilmagan javob turi" xatosini
+            // berardi va haqiqiy sabab (masalan AUTH_KEY_UNREGISTERED)
+            // yo'qolardi — media klasterga fallback ham ishlamasdi.
+            const save = r.off;
+            if (r.u32() === TL.RPC_ERROR) {
+                const code = r.i32();
+                const message = r.str();
+                const err = new Error(message || ('RPC xato #' + code));
+                err.errorCode = code;
+                err.errorMessage = message || ('RPC xato #' + code);
+                return { kind: 'error', reqId, error: err };
+            }
+            r.off = save;
             return { kind: 'result', reqId, result: readUploadFile(r) };
         }
         if (ctor === TL.RPC_ERROR) {
@@ -1052,28 +1137,55 @@
         const clients = new Map();
 
         // --- Ulanishlar havzasi (pool) -----------------------------------
-        // Telegram Web / Desktop kabi bitta DC ga bir nechta alohida
-        // WebSocket ochamiz (har birining o'z session_id si bor, auth_key
-        // umumiy). SUKUT BO'YICHA O'CHIQ: yoqish uchun
+        // Bitta DC ga bir nechta alohida WebSocket ochish mumkin (har birining
+        // o'z session_id si bor, auth_key umumiy). O'lchov: bu tarmoqda
+        // 3 ta ulanish handshake'i 1 tasiga qaraganda ~20 ms qimmatroq, ya'ni
+        // video OCHILISHINI tezlashtirmaydi — shuning uchun sukut bo'yicha
+        // O'CHIQ (1 ta ulanish, avvalgidek). Katta fayllarni parallel
+        // yuklashda sinab ko'rish uchun:
         //   localStorage.wc_pool = '3'   (2..4)
         // Havza ulanishida xato bo'lsa — o'zi o'chadi va so'rov asosiy
         // ulanishda qayta bajariladi (video to'xtamaydi).
         const poolSize = (function () {
             try {
-                const n = parseInt(global.localStorage.getItem('wc_pool'), 10);
+                const raw = global.localStorage.getItem('wc_pool');
+                if (raw === null || raw === undefined) return 1;
+                const n = parseInt(raw, 10);
                 return n >= 2 && n <= 4 ? n : 1;
             } catch (e) { return 1; }
         })();
         const pools = new Map();
-        let poolRR = 0;
+        let poolRR = -1;
         let poolBroken = false;
+
+        // Media klaster (`-1`) — Telegram Web K ham fayllarni shu klasterdan
+        // oladi, LEKIN o'lchov shuni ko'rsatdi: bu tarmoqda `-1` frontend
+        // handshake'i tezroq emas (median 484 ms vs 473 ms) va ayrim
+        // brauzerlarda umuman ochilmaydi (1006) — u holda har sahifa
+        // yuklanishida behuda handshake + qayta ulanish bo'ladi, ya'ni
+        // video SEKINROQ ochiladi. Shuning uchun sukut bo'yicha O'CHIQ:
+        //   localStorage.wc_media = '1'  -> media klasterni yoqish
+        // Yoqilganda ham ishlamasa — o'zi oddiy manzilga qaytadi.
+        const mediaPref = (function () {
+            try {
+                const raw = global.localStorage.getItem('wc_media');
+                return raw === '1' || raw === 'true';
+            } catch (e) { return false; }
+        })();
+
+        // Media klaster (`-1`) rad etilsa — butun klient oddiy manzillarga
+        // qaytadi. Sahifa ochilishida bir marta aniqlanadi.
+        const mediaState = { ok: mediaPref };
+        function markMediaBroken() { mediaState.ok = false; }
 
         function newExtraConnection(id) {
             const k = keyFor(id);
             const c = new MtConnection({
                 authKey: k.authKey,
                 keyId: k.keyId,
-                dcId: id
+                dcId: id,
+                media: mediaState.ok,
+                onMediaBroken: markMediaBroken
             });
             c.apiId = conn.apiId;
             c.deviceModel = conn.deviceModel;
@@ -1089,22 +1201,88 @@
             pools.clear();
         }
 
-        // So'rovni havzadagi navbatdagi ulanishga beradi (round-robin).
-        function send(dcId, body) {
-            const id = dcId || session.dcId;
-            const main = getConnection(id);
-            if (poolSize < 2 || poolBroken) return main.request(body);
+        // So'rovni havzadagi TAYYOR ulanishga beradi (round-robin).
+        // MUHIM: hali ulanayotgan WebSocket'ga so'rov berilmaydi — aks holda
+        // birinchi kadr TLS handshake'ini (300–600 ms) kutib qolardi, ya'ni
+        // havza sezilarli sekinlashuv berardi. Ulanayotganlar fonda ochiladi.
+        function pickReady(arr) {
+            const n = arr.length;
+            for (let k = 1; k <= n; k++) {
+                const idx = (poolRR + k + n) % n;
+                if (arr[idx].ready) { poolRR = idx; return arr[idx]; }
+            }
+            poolRR = 0;
+            return arr[0];
+        }
+
+        // Qo'shimcha ulanishlarni FON rejimida ochadi (hech qanday so'rovni
+        // ushlab turmaydi). Ochilmasa — bu sessiyada parallel rejim o'chadi.
+        const extrasOpening = new Set();
+        function scheduleExtras(id) {
+            if (poolSize < 2 || poolBroken) return;
+            const arr = pools.get(id);
+            if (!arr) return;
+            for (let i = 1; i < arr.length; i++) {
+                const c = arr[i];
+                if (c.ready || extrasOpening.has(c)) continue;
+                extrasOpening.add(c);
+                c.connect().catch(function () {
+                    poolBroken = true;
+                    try { c.close(); } catch (e) {}
+                }).then(function () { extrasOpening.delete(c); });
+            }
+        }
+
+        function ensurePool(id, main) {
             let arr = pools.get(id);
             if (!arr) { arr = [main]; pools.set(id, arr); }
-            while (arr.length < poolSize) arr.push(newExtraConnection(id));
-            poolRR = (poolRR + 1) % arr.length;
-            const c = arr[poolRR];
+            if (arr.length < poolSize) {
+                while (arr.length < poolSize) arr.push(newExtraConnection(id));
+                scheduleExtras(id);
+            }
+            return arr;
+        }
+
+        function sendAttempt(id, body) {
+            const main = getConnection(id);
+            if (poolSize < 2 || poolBroken) return main.request(body);
+            const arr = ensurePool(id, main);
+            const c = pickReady(arr);
             if (c === main) return main.request(body);
             return c.request(body).catch(function (e) {
-                // Havza ishlamadi: o'chiramiz va asosiy ulanishda qaytaramiz.
+                // Qo'shimcha ulanish ishlamadi (tarmoq uzilishi va h.k.).
+                // Katta ehtimol bilan bu DC'da parallel ulanishlar yopiq —
+                // bitta ulanishga qaytamiz, aks holda har bir so'rov avval
+                // 15 s connect timeout kutardi.
                 poolBroken = true;
                 closeExtras();
                 return main.request(body);
+            });
+        }
+
+        function resetConnections() {
+            clients.forEach(function (c) { try { c.close(); } catch (e) {} });
+            clients.clear();
+            closeExtras();
+        }
+
+        // Media klaster (`-1`) auth_key'ni rad etishi yoki ulanishni uzishi
+        // mumkin. Faqat SHU holatda klientni oddiy manzillarga qaytaramiz va
+        // so'rovni BIR marta takrorlaymiz.
+        //
+        // Diqqat: oddiy tarmoq uzilishida (WebSocket xatosi) ulanishlarni
+        // BUZMAYMIZ. Ilgari shunday qilinardi va bitta uzilish butun havzani
+        // (sog'lom ulanishlar bilan birga) yopib, qaytadan handshake qilardi —
+        // video ochilishi sezilarli sekinlashardi. Bunday xatoni chaqiruvchi
+        // (`tg-stream.js`) o'z qayta urinishi bilan hal qiladi.
+        function send(dcId, body) {
+            const id = dcId || session.dcId;
+            return sendAttempt(id, body).catch(function (e) {
+                const onMedia = !!(e && typeof e.host === 'string' && e.host.indexOf('-1.') !== -1);
+                if (!onMedia) throw e;
+                mediaState.ok = false;
+                resetConnections();
+                return sendAttempt(id, body);
             });
         }
 
@@ -1115,7 +1293,9 @@
             const c = new MtConnection({
                 authKey: k.authKey,
                 keyId: k.keyId,
-                dcId: id
+                dcId: id,
+                media: mediaState.ok,
+                onMediaBroken: markMediaBroken
             });
             c.apiId = conn.apiId;
             c.deviceModel = conn.deviceModel;
@@ -1133,7 +1313,17 @@
             /** Ulanishni oldindan boshlash (sahifa yuklanayotgan paytda). */
             warm: function (dcId) {
                 try {
-                    return getConnection(dcId).connect();
+                    const id = dcId || session.dcId;
+                    const main = getConnection(id);
+                    const p = main.connect();
+                    // Uy DC uchun havzani ham ochamiz — lekin `warm()` asosiy
+                    // ulanish tayyor bo'lishi bilan qaytadi. Qo'shimchalar fonda
+                    // ochiladi: sahifa yuklanishida 3 ta parallel TLS handshake
+                    // birinchi so'rovni ushlab turmasin.
+                    if (Number(id) === session.dcId && poolSize > 1 && !poolBroken) {
+                        p.then(function () { ensurePool(id, main); }, function () {});
+                    }
+                    return p.then(function () { return main; });
                 } catch (e) {
                     return Promise.reject(e);
                 }
@@ -1265,6 +1455,7 @@
             buildInitConnection: buildInitConnection,
             buildInvokeWithLayer: buildInvokeWithLayer,
             MtConnection: MtConnection,
+            dcHost: dcHost,
             TL: TL
         }
     };

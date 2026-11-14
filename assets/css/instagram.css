@@ -39,6 +39,37 @@ img.ig-logo {
 }
 .ig-brand-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* --------------------------------------------------------------------------
+   BREND qatori: logo + nom + "Joylash" (+) tugmasi.
+   Tugma brend yonida — ixcham doira. Keng sariq banner olib tashlandi:
+   u yon panelni bo'sh joyga egallagan, e'tiborni tarqatgan edi.
+   -------------------------------------------------------------------------- */
+.ig-brand-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px 18px;
+}
+.ig-brand-row .ig-brand { padding: 0; flex: 1 1 auto; min-width: 0; }
+
+.ig-create {
+    flex: 0 0 auto;
+    width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center;
+    border: 1px solid var(--line);
+    background: transparent; color: var(--text);
+    text-decoration: none;
+    transition: border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease;
+}
+.ig-create:hover {
+    border-color: var(--accent); color: var(--accent);
+    background: rgba(42, 171, 238, .1);
+    transform: translateY(-1px);
+}
+.ig-create:active { transform: translateY(0) scale(.94); }
+.ig-create:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ig-create .ig-svg { width: 18px; height: 18px; stroke-width: 2.3; }
+.ig-create-sm { width: 30px; height: 30px; }
+.ig-create-sm .ig-svg { width: 17px; height: 17px; }
+
 .ig-nav {
     display: flex; flex-direction: column; gap: 2px;
     flex: 1; min-height: 0;
@@ -255,6 +286,7 @@ body.ig-shell { transition: padding-left .2s ease; }
     font-size: 20px; font-weight: 800; letter-spacing: .3px;
     color: var(--text); text-decoration: none;
 }
+.ig-mobar-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ig-mobar-actions { display: flex; align-items: center; gap: 2px; }
 .ig-mobar-btn {
     width: 40px; height: 40px;
@@ -264,6 +296,12 @@ body.ig-shell { transition: padding-left .2s ease; }
     color: var(--text);
 }
 .ig-mobar-btn .ig-svg { width: 23px; height: 23px; }
+
+/* Juda kichik ekranlarda (360px) brend yozuvi joyni yeg'adi —
+   faqat logotip qoladi, tugmalar siqilmaydi. */
+@media (max-width: 380px) {
+    .ig-mobar-brand span { display: none; }
+}
 
 /* Mobil header: "Kataloglar" tugmasi + ochiladigan menyu (Kino/Animelar/Multfilmlar) */
 .ig-mobar-cats { position: relative; display: flex; }
@@ -351,9 +389,15 @@ body.ig-shell { transition: padding-left .2s ease; }
     .ig-side .ig-caret,
     .ig-side .ig-side-foot,
     .ig-side .ig-tg-status { display: none; }
+    .ig-side .ig-brand-row { justify-content: center; padding: 12px 0 18px; }
+    .ig-side .ig-brand { justify-content: center; flex: 0 0 auto; }
     .ig-side .ig-brand { justify-content: center; padding-left: 0; padding-right: 0; }
     .ig-side .ig-item { justify-content: center; }
     .ig-sub { display: none; }
+
+    /* "+" (Joylash) tugmasi yig'ilgan holatda yashiriladi —
+       faqat panel ochilganda (hover / fokus) ko'rinadi. */
+    .ig-side .ig-create { display: none; }
 
     /* Sichqoncha yoki fokus panelga kirsa — kengayadi */
     .ig-side:hover,
@@ -365,6 +409,10 @@ body.ig-shell { transition: padding-left .2s ease; }
     .ig-side:focus-within .ig-brand-text,
     .ig-side:hover .ig-txt,
     .ig-side:focus-within .ig-txt { display: inline; }
+    .ig-side:hover .ig-brand-row,
+    .ig-side:focus-within .ig-brand-row { justify-content: flex-start; padding: 10px 12px 18px; }
+    .ig-side:hover .ig-brand,
+    .ig-side:focus-within .ig-brand { justify-content: flex-start; flex: 1 1 auto; }
     .ig-side:hover .ig-caret,
     .ig-side:focus-within .ig-caret { display: inline; }
     .ig-side:hover .ig-tg-status,
@@ -983,4 +1031,3 @@ body.donate-open { overflow: hidden; }
     .donate-panel { width: 100%; padding: 28px 20px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 18px 18px; }
     .donate-panel h2 { font-size: 21px; }
 }
-@media (prefers-reduced-motion: reduce) { .donate-fab, .donate-panel { animation: none; transition: none; } }

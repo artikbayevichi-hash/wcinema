@@ -735,29 +735,80 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         video.addEventListener('durationchange', updateSkip);
 
         /* ================= HLS (hls.js) ================= */
+        //
+        // hls.js manbai: avval faqat chetdagi CDN (jsdelivr) va "play"
+        // bosilganda yuklanardi — ya'ni aynan foydalanuvchi kutayotgan paytda
+        // +620 KB va uchinchi tomon handshake. Telegram Web K buni qilmaydi:
+        // u hls.js ni o'z build'iga kiritadi va `modulepreload` bilan
+        // sahifa ochilishidayin keshga yuklaydi.
+        //
+        // Biz: lokal nusxa (`assets/vendor/hls.min.js`) birinchi, CDN zaxira.
+        // Sahifada `<link rel="preload" as="script">` bilan oldindan yuklanadi.
+        var HLS_LOCAL = 'assets/vendor/hls.min.js';
+        var HLS_CDN = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
+
+        function hlsLocalUrl() {
+            // PHP bergan ANIQ manzil (preload bilan bir xil bo'lishi shart).
+            if (window.__WC_HLS_URL) return window.__WC_HLS_URL;
+            var b = (window.APP && window.APP.base) || '';
+            if (b) return b + '/' + HLS_LOCAL;
+            var s = document.currentScript;
+            if (s && s.src) {
+                return s.src.replace(/assets\/[^/]+\/[^/?]+(\?.*)?$/, HLS_LOCAL);
+            }
+            return HLS_LOCAL;
+        }
+
+        function loadHlsScript(src, done, fail) {
+            var urls = [hlsLocalUrl(), HLS_CDN];
+            var i = 0;
+            (function next() {
+                if (i >= urls.length) { fail(); return; }
+                var s = document.createElement('script');
+                s.src = urls[i++];
+                s.async = true;
+                s.onload = function () { done(); };
+                s.onerror = function () {
+                    if (s.parentNode) s.parentNode.removeChild(s);
+                    next();
+                };
+                document.head.appendChild(s);
+            })();
+        }
+
         function startHls(src) {
             if (window.Hls && Hls.isSupported()) {
                 initHls(src);
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = src;
             } else if (!window.Hls) {
-                var s = document.createElement('script');
-                s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
-                s.onload = function () {
+                loadHlsScript(src, function () {
                     if (window.Hls && Hls.isSupported()) initHls(src);
                     else showError();
-                };
-                s.onerror = function () { showError(); };
-                document.head.appendChild(s);
+                }, function () { showError(); });
             } else {
                 showError();
             }
         }
         function initHls(src) {
             hls = new Hls({
+                // ===== TELEGRAM WEB K DAN KO'CHIRILGAN SOZLAMALAR =====
+                // Web K: startLevel 0, testBandwidth false, 60 s buffer,
+                // maxBufferHole 1, nudgeMaxRetry 10000.
+                //
+                // startLevel 0 = eng past sifatdan boshlash -> birinchi kadr
+                // tez chiqadi (avval `auto` edi: avval bandwidth test o'tib,
+                // qo'shimcha RTT ketgardi). testBandwidth false = o'sha test
+                // umuman o'tkazilmaydi. 60 s buffer = sekin tarmoqda qotish
+                // kamayadi.
+                startLevel: 0,
+                testBandwidth: false,
                 maxBufferLength: 60,
-                maxMaxBufferLength: 180,
+                maxMaxBufferLength: 60,
                 backBufferLength: 30,
+                maxBufferHole: 1,
+                nudgeMaxRetry: 10000,
+                maxFragLookUpTolerance: 0.001,
                 enableWorker: true,
                 lowLatencyMode: false,
                 autoStartLoad: true,

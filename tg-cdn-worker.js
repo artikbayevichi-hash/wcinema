@@ -90,17 +90,11 @@ const MIN_CHUNK = 64 * 1024;   // shundan kichikga tushmaymiz
 
 // Bitta HTTP javobida qancha bayt qaytaramiz?
 //
-// Nega bir necha Telegram so'rovini birlashtiramiz? Sabab - MP4 indeksi
-// (moov qutisi). Katta filmlarda u bir necha yuz KB dan MB gacha bo'ladi va
-// faylning OXIRIDA turadi. Agar brauzer so'raganda biz faqat bitta bo'lak
-// (512 KB) qaytarsak, indeks to'liq kelmaydi - brauzer uni tushunmaydi va
-// "format qo'llab-quvvatlanmaydi" (error 4) xatosi beradi.
-const MAX_RESPONSE = 8 * 1024 * 1024;
-
-// "bytes=0-" (ya'ni butun faylni so'rash) da javobni KICHIK qilib beramiz.
-// Aks holda foydalanuvchi birinchi kadrni ko'rish uchun o'nlab soniya kutadi.
-// Qolganini brauzer o'zi so'raydi.
-const FIRST_CHUNK = 2 * 1024 * 1024;
+// Faqat bitta bo'lak: 512 KB (75 MB dan katta faylda 1 MB). Katta javob
+// (ilgari 8 MB "dum") brauzerni butun yuklanish tugashini kutishga majbur
+// qilardi; endi brauzer kerakli oynani o'zi so'raydi, har javob ~1 RTT da
+// tayyor (tweb: `STREAM_CHUNK_MIDDLE_LIMIT = 512 KB`). Aniq chegara
+// `fetch` ishlovchisidagi `RANGE_LIMIT`.
 
 // --- MP4 indeksi (moov) oldindan yuklash ------------------------------------
 //
@@ -116,18 +110,26 @@ const FIRST_CHUNK = 2 * 1024 * 1024;
 //   javob shu zaxiradan (Telegram'ga murojaat qilmasdan) beriladi —
 //   foydalanuvchi bir RTT tez ochadi.
 //
-//   `moov` boshida bo'lsa (faststart) — umuman yuklamaymiz (traffik
-//   behuda emas).
+//   `moov` boshida bo'lsa (faststart) — dum oynasi baribir bir marta
+//   o'qiladi, lekin u faqat `warmtail` (Wi-Fi) yoqilganda va 1 MB.
 // O'LCHANGAN: yangi filmlarning `moov` i 3.4–5.0 MB (masalan 4.23 MB,
-// 4.96 MB). 4 MB yetmasdi — brauzer indeksni so'raganda keshda topilmay,
-// yana Telegram'ga uchta RTT ketardi (fayl "ochilmayotgan"dek tuyulardi).
-// 8 MB barcha o'lchangan holatlarni qoplaydi (baytlar keshga yoziladi,
-// keyingi ochishda Telegram'ga umuman murojaat bo'lmaydi).
-const TAIL_PREFETCH = 8 * 1024 * 1024;      // zaxira: aniq oraliq topilmasa
-const TAIL_LANES = 8;                       // 8 × 512 KB = 4 MB bir raundda
+// 4.96 MB).
+//
+// NIMA O'ZGARDI (Telegram Web K uslubi)
+//   Ilgari fayl oxiridagi 8 MB "ko'r-ko'rona" yuklanardi va butun oqim shu
+//   yuklanish tugashini KUTARDI. 4G da 8 MB = 4–8 s: `ttfb` 44 ms bo'lsa ham
+//   `canplay` 5–7 s chiqardi (o'lchov: `canplay p50 = 5246 ms`).
+//
+//   tweb (`src/lib/serviceWorker/stream.ts`) buni boshqacha qiladi: faqat
+//   BITTA oxirgi bo'lakni oldindan oladi (`preloadChunk(size - limit)`),
+//   qolganini brauzerning o'z Range so'rovlari boshqaradi — har javob ~1 RTT.
+//   Biz ham shu modelga o'tdik: oldindan faqat 1 MB (2 × 512 KB) olinadi,
+//   hech qanday so'rov bu yuklanishni KUTMAYDI.
+const TAIL_WINDOW = 1024 * 1024;            // oldindan olinadigan dum oynasi
+const TAIL_LANES = 2;                       // 2 × 512 KB — bitta raund
 const IDX_MAX = 8 * 1024 * 1024;            // indeks oynasining yuqori chegarasi
 const HOFF_KEEP = 256 * 1024;               // bosh baytlardan eslab qolinadigan qism
-const IDX_PAUSE_MS = 8000;                  // indeks kutilayotganda oqim tanaffusi
+const IDX_PAUSE_MS = 600;                   // indeks kutilayotganda oqim tanaffusi
 
 // Kalit: `doc/size`. Ilgari faqat `size` edi — bir xil o'lchamdagi ikki
 // hujjat bir-birining indeksini ishlatib yuborishi mumkin edi.
@@ -458,28 +460,44 @@ async function indexRegion(size, doc) {
 // Faylning oxirini (MP4 indeksini) oldindan yuklab, keshga qo'yamiz.
 // `doc` berilsa u DISK keshiga ham yoziladi — qayta ochishda indeks darhol
 // tayyor bo'ladi (RTT ham, Telegram trafigi ham tejaladi).
+//
+// Eslatma: faststart fayllarda (`moov` boshda) dum baribir bir marta
+// o'qiladi — bu faqat `watch.php` "warmtail" yuborganda (Wi-Fi) bo'ladi va
+// 1 MB dan oshmaydi. Indeksni oldindan aniqlash uchun KUTILMAYDI: kutish
+// dum oynasini klikdan keyinga surardi (o'lchangan).
 function prefetchTail(size, doc) {
-  if (!(size > TAIL_PREFETCH)) return Promise.resolve(null);   // kichik fayl
+  if (!(size > CHUNK)) return Promise.resolve(null);          // juda kichik fayl
   const key = tailKey(doc, size);
   const ready = TAIL_CACHE.get(key);
   if (ready && ready.bytes) return Promise.resolve(ready);     // allaqachon tayyor
   if (TAIL_PROMISE.has(key)) return TAIL_PROMISE.get(key);     // davom etyapti
 
   const p = (async function () {
-    const reg = await indexRegion(size, doc);
-    if (reg && reg.inHead) return null;        // indeks boshda — kerak emas
-    let start, len;
-    if (reg) {
-      start = reg.start;
-      len = Math.min(reg.len, IDX_MAX);
-    } else {
-      start = size - TAIL_PREFETCH;            // zaxira: ko'r-ko'rona dum
-      len = TAIL_PREFETCH;
-    }
-    if (!(len > 0) || start < 0) return null;
-    const bytes = await readRange(start, len, size, doc, TAIL_LANES);
+    // Asosiy ish — faylning OXIRGI oynasi: brauzer `moov` ni shu yerdan
+    // qidiradi (WebK ham aynan oxirgi bo'lakni oldindan oladi).
+    //
+    // Bu so'rov DARHOL boshlanadi. Ilgari avval `indexRegion` kutilardi:
+    // uning `headWait` chegarasi (1200 ms) butun dum oynasini klikdan
+    // KEYINGA surardi — o'lchovda prefetch 1.34 s da boshlanib, 2.2 s da
+    // tugardi, `canplay` esa 3.7 s edi.
+    const start = Math.max(0, size - TAIL_WINDOW);
+    const aligned = start - (start % CHUNK);
+    const len = size - aligned;
+    if (!(len > 0)) return null;
+    const tailP = readRange(aligned, len, size, doc, TAIL_LANES);
+
+    // `moov` indeksini PARALLEL aniqlaymiz: natija `IDX_WIN` ga yoziladi
+    // (keyingi so'rovlar uchun bepul), topilsa uning sarlavhasi turgan
+    // bo'lak ham qizdiriladi. HECH QANDAY so'rov buni kutmaydi.
+    indexRegion(size, doc).then(function (reg) {
+      if (!reg || reg.inHead || !(reg.start > 0)) return;
+      const moovOff = reg.start - (reg.start % CHUNK);
+      readWindow(doc, moovOff, Math.min(CHUNK, size - moovOff)).then(noop, noop);
+    }).catch(noop);
+
+    const bytes = await tailP;
     if (!bytes || !bytes.length) return null;
-    const it = { start: start, bytes: bytes };
+    const it = { start: aligned, bytes: bytes };
     TAIL_CACHE.set(key, it);
     while (TAIL_CACHE.size > TAIL_MAX_ENTRIES) {
       TAIL_CACHE.delete(TAIL_CACHE.keys().next().value);
@@ -495,25 +513,15 @@ function prefetchTail(size, doc) {
   return p;
 }
 
-// So'ralgan oraliq tayyorlanishini KUTAMIZ (takroriy yuklash o'rniga).
-// Faqat indeks oynasidagi so'rovlar uchun; aks holda darhol `null`.
-async function awaitTail(start, want, size, doc, ms) {
-  const key = tailKey(doc, size);
-  const p = TAIL_PROMISE.get(key);
-  if (!p) return null;
-  const reg = IDX_WIN.get(key);
-  if (reg && reg.inHead) return null;          // indeks boshda — kutmaymiz
-  if (reg && start < reg.start) return null;   // oynadan tashqarida
-  // Oyna hali noma'lum bo'lsa — faqat fayl oxiriga yaqin so'rovlarni
-  // kutamiz; o'rtadagi seek'ni ushlab turmaymiz.
-  if (!reg && start < size - IDX_MAX) return null;
-  let timer = null;
-  const timeout = new Promise(function (res) {
-    timer = setTimeout(function () { res(null); }, Math.max(1000, ms || 6000));
-  });
-  try { await Promise.race([p, timeout]); } catch (e) { /* pastda keshdan tekshiramiz */ }
-  if (timer) clearTimeout(timer);
-  return tailFromCache(key, start, want);
+// So'ralgan oraliq allaqachon keshdami? KUTISH YO'Q.
+//
+// Ilgari bu funksiya 8 MB lik prefetch tugashini 6 sekundgacha KUTARDI.
+// Aynan shu kutish `canplay` ni 5–7 s ga cho'zardi: brauzer `moov` so'rovi
+// bitta bo'lak (~1 RTT) bilan javob olishi mumkin bo'lsa ham, butun 8 MB
+// yuklanishini kutardi. Endi WebK kabi: keshda bo'lsa — darhol, bo'lmasa
+// so'rov o'zining 512 KB lik oynalarini to'g'ridan-to'g'ri o'qiydi.
+function awaitTail(start, want, size, doc) {
+  return tailFromCache(tailKey(doc, size), start, want);
 }
 
 // So'ralgan oraliq keshda bormi? (butunlay sig'ishi kerak)
@@ -2030,49 +2038,42 @@ self.addEventListener('fetch', (e) => {
       }});
     }
 
-    // --- Range YO'Q bo'lsa: TO'G'RI HTTP javobi ---------------------------
+    // --- Range YO'Q bo'lsagina progressiv (200) javob ---------------------
     //
-    // Nima uchun? RFC 9110 §15.5.7 bo'yicha `206 Partial Content` faqat
-    // Range sarlavhali so'rovga BERILISHI mumkin. `<video>` ning birinchi
-    // so'rovi Range siz keladi — biz esa baribek 206 + Content-Range
-    // qaytardik. Bu qoidabuzarlik: brauzer "men so'ramaganman, sen nima
-    // qaytarding?" deb qaror qabul qiladi va demuxlashni to'xtatadi.
+    // RFC 9110 §15.5.7: `206 Partial Content` faqat Range sarlavhali so'rovga
+    // beriladi. Range umuman yo'q so'rovga `200 OK` + `Content-Length` +
+    // ReadableStream qaytaramiz — brauzer oqimni o'zi tortadi (backpressure).
     //
-    // To'g'ri yechim: `200 OK` + `Content-Length: <hajm>` + ReadableStream.
-    // Brauzer shunda odatiy video javobini oladi, oqimni o'zi xohlagancha
-    // (backpressure) tortadi — 520 MB fayl ham xuddi shu yo'l bilan ishlaydi.
-    // Seek uchun alohida Range so'rovlari keladi, ular 206 bilan xizmat qiladi.
-    // Boshidan ochiq so'rov ("bytes=0-" yoki Range umuman yo'q) — PROGRESSIV
-    // oqim. Shunda brauzer videoning boshini darhol oladi, qolganini esa
-    // ko'rish davomida oqib keladi. Ilgari bu holatda faqat 2 MB berilib,
-    // brauzer qayta-qayta so'rardi — birinchi kadr kechikardi.
-    if (!rg || (rg.open && rg.start === 0)) {
+    // MUHIM (O'LCHANGAN): `Range: bytes=0-` ni ham 206 bilan xizmat qilamiz.
+    // Ilgari bunday so'rov ham progressiv 200 olardi va brauzer uzun javobni
+    // "tugallanmagan oqim" deb sekin demuxlash qilardi. Headless-Chrome
+    // dastgohi (13.8 MB, moov oxirida, RTT 150 ms / 1.5 MB/s):
+    //   pure-206 `canplay` 2130 ms (buffered 0.61 s) ·
+    //   progressiv-200 2640 ms (3.46 s) · git HEAD 3105 ms (6.72 s).
+    // 1.5 s "o'ylash" bilan: 2432 / 3710 / 4178 ms. Ya'ni har Range so'rovi —
+    // bitta bo'lak 206; brauzer keyingi oynani o'zi so'raydi (tweb modeli).
+    if (!rg) {
       return progressiveResponse(size, mime, headers, t0, duration, docId, cacheDoc);
     }
 
     const start = rg.start;
 
-    // Qancha bayt qaytaramiz?
+    // QANCHA BAYT QAYTARAMIZ? (Telegram Web K modeli)
     //
-    // Asosiy g'oya: MP4 indeksi (moov) faylning OXIRIDA turadi. Agar biz
-    // shu so'rovga yetarli bayt qaytarmasak, indeks kesilib qoladi va
-    // brauzer uni tushunmaydi -> "format qo'llab-quvvatlanmaydi" (error 4).
-    // Shuning uchun fayl CHUQURIDAN kelayotgan ochiq so'rovlarga katta javob
-    // beramiz.
+    //   `bytes=X-`  (ochiq) -> faqat BITTA bo'lak: 512 KB (katta faylda 1 MB).
+    //   `bytes=X-Y` (aniq)  -> so'ralgan oraliq, ko'pi 2 bo'lak.
     //
-    // Aksincha, fayl boshidagi ochiq so'rov ("bytes=0-") ga javobni
-    // KICHIK qilib beramiz — aks holda foydalanuvchi birinchi kadrni
-    // ko'rish uchun o'nlab soniya kutadi. Qolganini brauzer o'zi so'raydi.
+    // NIMA UCHUN: avval butun fayl bitta "oqim" (200 + to'liq uzunlik) yoki
+    // 8 MB lik dum javobi sifatida berilardi va brauzer shu yuklanishning
+    // tugashini kutardi. Endi brauzer o'zi kerakli oynani so'raydi, har javob
+    // ~1 RTT da tayyor (tweb: `STREAM_CHUNK_MIDDLE_LIMIT = 512 KB`).
     const toEnd = size - start;              // fayl oxirigacha qancha bayt bor
+    const RANGE_LIMIT = size > 75 * 1024 * 1024 ? 1024 * 1024 : CHUNK;
     let want;
-    if (!rg) {
-      want = Math.min(toEnd, FIRST_CHUNK);               // Range umuman yo'q
-    } else if (rg.open) {
-      want = start < FIRST_CHUNK
-        ? Math.min(toEnd, FIRST_CHUNK)                   // boshidan — tez kuzatish
-        : Math.min(toEnd, MAX_RESPONSE);                 // chuqurdan — indeks izlanmoqda
+    if (rg.open) {
+      want = RANGE_LIMIT;                    // "bytes=X-" — bitta bo'lak
     } else {
-      want = Math.min(rg.end - rg.start + 1, MAX_RESPONSE);
+      want = Math.min(rg.end - rg.start + 1, 2 * RANGE_LIMIT);
     }
 
     // Telegram'dan mavjud bo'lmagan bayt so'rash xato beradi.
@@ -2164,6 +2165,12 @@ self.addEventListener('fetch', (e) => {
     // Sahifa shuni `window.__wcPerf` da ko'radi (QA).
     const ttfb = Date.now() - t0;
     stats({ ttfb: ttfb, range: start + '-' + (start + u8.length - 1), size: size });
+
+    // Keyingi bo'laklarni FONDA qizdiramiz (WebK: 20 MB read-ahead). Javob
+    // allaqachon tayyor — bu qator foydalanuvchini kutdirmaydi, lekin keyingi
+    // Range so'rovlari keshdan yoki birlashtirilgan (`INFLIGHT`) so'rovdan
+    // darhol keladi.
+    maybePrefetch(cacheDoc, size, start + u8.length, start + u8.length);
 
     return new Response(u8, { status: 206, headers: {
       ...headers,

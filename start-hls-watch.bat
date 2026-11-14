@@ -9,7 +9,9 @@ REM ============================================================================
 title W CINEMA - HLS kuzatuvchi
 cd /d "%~dp0"
 :loop
-"C:\xampp\php\php.exe" cli\hls-watch.php
+echo. >> "storage\hls-watch.log"
+echo [%date% %time%] start >> "storage\hls-watch.log"
+"C:\xampp\php\php.exe" cli\hls-watch.php >> "storage\hls-watch.log" 2>&1
 echo.
 echo [%date% %time%] Jarayon to'xtadi, 10 soniyadan keyin qayta ishga tushadi...
 timeout /t 10 /nobreak >nul

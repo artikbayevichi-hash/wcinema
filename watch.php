@@ -274,7 +274,13 @@ $NAV_ACTIVE = 'home';
     <link rel="stylesheet" href="assets/player/player.css?v=<?php echo @filemtime(__DIR__ . '/assets/player/player.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/watch.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/watch.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/tv-watch.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tv-watch.css') ?: 1; ?>">
+    <?php /* YouTube uslubidagi dizayn qatlami (watch.css ustidan). Eski uslubga
+             qaytish kerak bo'lsa shu bitta qatorni o'chirish kifoya. */ ?>
+    <link rel="stylesheet" href="assets/css/watch-yt.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/watch-yt.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/uz-loader.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/uz-loader.css') ?: 1; ?>">
+    <?php /* Qora fonli bloklar (Qismlar, izoh yozish, stiker/GIF) + Ambient light uslubi.
+             Eng OXIRIDA turishi shart. Qaytarish uchun shu qatorni olib tashlang. */ ?>
+    <link rel="stylesheet" href="assets/css/watch-dark.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/watch-dark.css') ?: 1; ?>">
     <?php /* GramJS bundle'ni OLDINDAN yuklash (735 KB siqilgan).
 
         Bu sahifadagi eng katta va eng sekin kutiladigan manba. Odatda u
@@ -322,6 +328,28 @@ $NAV_ACTIVE = 'home';
           href="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>">
     <link rel="preload" as="script"
           href="assets/player/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/player/player.js') ?: 1; ?>">
+    <?php /* hls.js ni OLDINDAN yuklash — Telegram Web K modeli.
+             Web K hls.js ni o'z build'iga kiritib, `modulepreload` orqali
+             sahifa ochilishidayin brauzer keshiga yuklaydi. Natijada "play"
+             bosilganda pleyer TAYYOR turadi.
+
+             Bizda avval hls.js faqat "play" bosilganda, uchinchi tomon CDN
+             dan yuklanardi — ya'ni aynan foydalanuvchi kutayotgan paytda
+             +620 KB va uchinchi tomon TLS handshake (0.9-1.4 s). Endi:
+               * fayl LOKAL (`assets/vendor/hls.min.js`) — o'z serverimizdan,
+                 uchinchi tomonga so'rov umuman yo'q;
+               * faqat HLS kontentida preload qilinadi — MP4/Telegram
+                 videolarda bu 415 KB behuda sarflanmaydi;
+               * `?v=` va `window.__WC_HLS_URL` bir xil manzilni beradi,
+                 aks holda brauzer faylni IKKI MARTA yuklaydi. */
+    $__hlsType = is_array($playback) ? (string) ($playback['type'] ?? '') : '';
+    if ($__hlsType === 'hls') {
+        $__hlsV = (int) (@filemtime(__DIR__ . '/assets/vendor/hls.min.js') ?: 1);
+        $__hlsUrl = 'assets/vendor/hls.min.js?v=' . $__hlsV;
+        ?>
+        <link rel="preload" as="script" fetchpriority="low" href="<?php echo htmlspecialchars($__hlsUrl, ENT_QUOTES); ?>">
+        <script>window.__WC_HLS_URL = <?php echo json_encode($__hlsUrl); ?>;</script>
+    <?php } ?>
 </head>
 <body class="ig-shell watch-body">
 
@@ -388,25 +416,43 @@ $NAV_ACTIVE = 'home';
                                 <span class="watch-channel-subs" id="watchSubs"></span>
                             </span>
                         </div>
-                        <div class="watch-sub" id="watchSub"></div>
                     </div>
 
                     <!-- O'NG: kinomanba ma'lumoti + harakat tugmalari -->
                     <div class="watch-meta-r">
-                        <div class="watch-badges" id="watchBadges"></div>
                         <div class="watch-actions" id="watchActions"></div>
                     </div>
                 </div>
             </div>
 
             <!-- Qisqa tavsif -->
-            <div class="watch-desc" id="watchDesc" hidden></div>
+            <?php /* YouTube'dagi "ta'rif kartasi": ko'rishlar soni + vaqt (+ reyting/yil),
+                     bosilganda kengayadi. Ichki id'lar watch.js (renderHead) uchun. */ ?>
+            <div class="watch-desc" id="watchDesc" tabindex="0" role="button" aria-expanded="false">
+                <div class="watch-desc-top">
+                    <div class="watch-sub" id="watchSub"></div>
+                    <div class="watch-badges" id="watchBadges"></div>
+                </div>
+                <div class="watch-desc-body" id="watchDescBody" hidden></div>
+            </div>
 
             <!-- ============================ IZOHLAR ============================ -->
             <section class="watch-block">
                 <h2 class="watch-block-h">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 12a8.4 8.4 0 0 1-11.9 7.6L3.5 20.5l1-4.9A8.4 8.4 0 1 1 20.5 12z"/></svg>
-                    Izohlar <span id="commentsCount"></span>
+                    <span class="watch-block-t">Izohlar <span id="commentsCount"></span></span>
+                    <?php /* YouTube'dagi "Saralash": ro'yxatni yangi / eng yaxshi / eski tartibda ko'rsatadi. */ ?>
+                    <span class="watch-sort" id="watchSort">
+                        <button type="button" class="watch-sort-btn" id="watchSortBtn" aria-haspopup="true" aria-expanded="false">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h5"/></svg>
+                            <span>Saralash</span>
+                        </button>
+                        <div class="watch-sort-menu" id="watchSortMenu" hidden>
+                            <button type="button" class="watch-sort-item on" data-sort="new">Yangilari birinchi</button>
+                            <button type="button" class="watch-sort-item" data-sort="top">Eng yaxshilari</button>
+                            <button type="button" class="watch-sort-item" data-sort="old">Eskilari birinchi</button>
+                        </div>
+                    </span>
                 </h2>
 
                 <?php /* Bu qatlay `position: relative` - formatlash menyusi
@@ -416,6 +462,8 @@ $NAV_ACTIVE = 'home';
                 <?php /* YouTube uslubida: yozish maydoni izohlar ro'yxatidan
                          OLDIN turadi, shuning uchun kompyuterda foydalanuvchi
                          izoh yozish uchun ro'yxat oxirigacha scroll qilmaydi. */ ?>
+                <div class="watch-compose">
+                <span class="watch-cav" id="watchCav" aria-hidden="true"></span>
                 <form class="reels-comments-form" id="commentForm" autocomplete="off">
                     <button type="button" class="reels-c-tool tg-fmt-btn" id="cFmtBtn"
                             aria-label="Matn formatlash" aria-expanded="false" title="Matn formatlash">
@@ -438,6 +486,7 @@ $NAV_ACTIVE = 'home';
                     </button>
                     <input type="file" id="cPhoto" accept="image/*" hidden>
                 </form>
+                </div>
 
                 <?php /* Telegram vositalari paneli: stiker / emoji / GIF / rasm /
                          @ belgilash. reels.php bilan BIR XIL tuzilma -
@@ -515,6 +564,12 @@ $NAV_ACTIVE = 'home';
             </section>
 
             <section class="watch-side-block watch-side-rec" id="watchSideRecBlock">
+                <?php /* YouTube chiplari: Hammasi / Yangi / Tomosha qilingan (watch.js filtrlaydi). */ ?>
+                <div class="watch-chips" id="watchChips" role="tablist">
+                    <button type="button" class="watch-chip-f on" data-f="all" role="tab" aria-selected="true">Hammasi</button>
+                    <button type="button" class="watch-chip-f" data-f="new" role="tab" aria-selected="false">Yangi</button>
+                    <button type="button" class="watch-chip-f" data-f="seen" role="tab" aria-selected="false">Tomosha qilingan</button>
+                </div>
                 <div class="watch-side-list" id="watchSideRecList"></div>
                 <!-- Lazy load "ruxsat beruvchi": ko'rinishga kirganda
                      `api/related.php` dan keyingi sahifa so'raladi. -->
@@ -615,13 +670,12 @@ $NAV_ACTIVE = 'home';
             var currentPlayback = (window.WATCH && window.WATCH.playback) || {};
             if (currentPlayback.type === 'telegram' && currentPlayback.channel
                 && currentPlayback.post && typeof window.TgStream.prefetch === 'function') {
-                // Birinchi 256 KB ni oldindan olamiz. 1 MB emas: tez klient
-                // hovuzi standart holatda BITTA ulanish ishlatadi, shuning
-                // uchun katta warm joriy oqimning birinchi baytini bloklab
-                // qo'yardi (o'lchovda `ttfb` 6 s gacha chiqqan). 256 KB esa
-                // pleerning birinchi `Range` so'rovini qoplaydi va ulanishni
-                // uzoq band qilmaydi. Data Saver/2G da faqat metama'lumot.
-                var warmCurrentHead = 256 * 1024;
+                // Pleerning BIRINCHI bo'lagi (512 KB = Service Worker'dagi
+                // `CHUNK`) oldindan olinadi: klik paytida u disk keshidan
+                // 0 ms da keladi. 256 KB yetmasdi — kesh kaliti butun
+                // bo'lakni talab qiladi (`doc/0/524288`), yarim bo'lak esa
+                // hech qachon "urilmasdi".
+                var warmCurrentHead = 512 * 1024;
                 try {
                     var netInfo = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
                     if (netInfo && (netInfo.saveData || /(^|-)2g$/.test(String(netInfo.effectiveType || '')))) {
@@ -721,3 +775,5 @@ $NAV_ACTIVE = 'home';
 <script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
 <script src="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>"></script>
 <script src="assets/js/tv-watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tv-watch.js') ?: 1; ?>"></script>
+<?php /* Ambient light (YouTube kengaytmasi kabi). Standart holati o'chiq. */ ?>
+<script src="assets/js/watch-ambient.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch-ambient.js') ?: 1; ?>"></script>

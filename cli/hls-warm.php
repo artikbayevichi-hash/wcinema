@@ -51,7 +51,7 @@ if ($arg === '--status') {
 
 $onlyId = (int) $arg;
 
-$db  = new Database();
+$db  = Database::getInstance();
 $sql = "SELECT e.id AS eid, e.content_id, e.video_url, e.video_url_720p, e.video_url_1080p
         FROM episodes e
         WHERE e.video_type IS NULL OR e.video_type <> 'none'";

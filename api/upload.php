@@ -125,6 +125,64 @@ if ($userId <= 0) {
     fail('Foydalanuvchi aniqlanmadi. Sahifani yangilab, qayta urinib ko‘ring.', 401);
 }
 
+// ---------------------------------------------------------------------------
+// BOSQICHLI YUKLASH
+// ---------------------------------------------------------------------------
+// stage=media   — fayl serverga keladi va vaqtinchalik saqlanadi (token qaytaradi).
+//                 Foydalanuvchi shu vaqtda caption yozadi — yuklash parallel ketadi.
+// stage=publish — metadata yuboriladi; server staging'dagi faylni Telegram
+//                 kanalga joylaydi va reels yozuvini yaratadi.
+//
+// stage ko'rsatilmasa — eski bir bosqichli yuklash ishlaydi (backward compat).
+$stage = input('stage', '', 20);
+
+if ($stage === 'media') {
+    $files = $_FILES['media'] ?? [];
+    if (!$files) {
+        $files = $_FILES['video'] ?? $_FILES['files'] ?? [];
+    }
+    if (!$files) fail('Fayl tanlanmagan', 400);
+
+    $format = input('format', '', 20);
+    if ($format === '') {
+        $first = Uploader::normFiles($files)[0] ?? [];
+        $mime  = strtolower((string) ($first['type'] ?? ''));
+        $ext   = strtolower(pathinfo((string) ($first['name'] ?? ''), PATHINFO_EXTENSION));
+        $format = (strpos($mime, 'image/') === 0 || in_array($ext, Uploader::IMAGE_EXT, true))
+            ? 'post' : 'reel';
+    }
+
+    $res = Uploader::stageMedia($userId, $format, $files, [
+        'width'    => inputInt('width', 0),
+        'height'   => inputInt('height', 0),
+        'duration' => inputInt('duration', 0),
+    ]);
+    if (empty($res['success'])) {
+        fail($res['message'] ?? 'Yuklab bo‘lmadi', 400);
+    }
+    ok($res);
+}
+
+if ($stage === 'publish') {
+    $token = input('token', '', 40);
+    if ($token === '') fail('token kerak', 400);
+
+    $res = Uploader::publishStaged($userId, $token, [
+        'title'       => input('title', '', 200),
+        'description' => input('description', '', 500),
+        'content_id'  => inputInt('content_id', 0),
+        'poster'      => $_FILES['poster'] ?? null,
+        'width'       => inputInt('width', 0),
+        'height'      => inputInt('height', 0),
+        'duration'    => inputInt('duration', 0),
+    ]);
+    if (empty($res['success'])) {
+        fail($res['message'] ?? 'Yayinlab bo‘lmadi', 400);
+    }
+    ok($res);
+}
+
+// ------------------------------------------------------------------- POST
 // Fayllar: `media[]` (yangi) yoki `video` (eski shakl).
 $files = $_FILES['media'] ?? [];
 if (!$files) {

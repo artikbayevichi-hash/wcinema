@@ -273,6 +273,14 @@ try {
         hlsProgAbort($pg);                       // yetim ffmpeg qolib ketmasin
     }
     $msg = trim((string) $e->getMessage());
+    // Buzilgan yoki chala yuklangan manba keyingi urinishda ham ffmpeg'ni
+    // yiqitadi ("Invalid NAL unit"). Bunday xatoda source.mp4 ni o'chiramiz —
+    // keyingi urinish Telegram'dan toza nusxani qaytadan yuklaydi.
+    if (stripos($msg, 'ffmpeg xato') !== false
+        || stripos($msg, 'Invalid data') !== false
+        || stripos($msg, 'Invalid NAL') !== false) {
+        @unlink($source);
+    }
     hlsMetaSet($metaF, [
         'status' => 'error',
         'error'  => $msg,

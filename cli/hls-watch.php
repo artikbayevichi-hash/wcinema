@@ -68,11 +68,24 @@ function readMeta($dir)
     return is_array($d) ? $d : null;
 }
 
+// Kesh papkasining hozirgi hajmi (bayt).
+function hlsCacheBytes()
+{
+    $total = 0;
+    foreach (glob(HLS_CACHE_DIR . '/*', GLOB_ONLYDIR) ?: [] as $sub) {
+        foreach (glob($sub . '/*') ?: [] as $f) {
+            $total += (int) @filesize($f);
+        }
+    }
+    return $total;
+}
+$lastQuotaLog = 0;
+
 wlog('hls-watch ishga tushdi (oraliq ' . $interval . ' s). Kesh: ' . HLS_CACHE_DIR);
 
 while (true) {
     try {
-        $db   = new Database();   // har aylanishda yangi ulanish (uzoq ishda uzilib qolmasin)
+        $db   = Database::getInstance();   // yagona ulanish (konstruktor private)
         $rows = $db->fetchAll(
             "SELECT e.id AS eid, e.content_id, e.video_url, e.video_url_720p, e.video_url_1080p
                FROM episodes e
@@ -106,6 +119,15 @@ while (true) {
                 continue;
             }
 
+            // Disk kvotasi to'layotgan bo'lsa yangi video O'GIRMAYMIZ: aks holda hls.php
+            // eng eskisini o'chiradi, kuzatuvchi esa uni yana o'giradi (cheksiz aylanish).
+            if (hlsCacheBytes() >= HLS_MAX_MB * 1048576 * 0.9) {
+                if (time() - $lastQuotaLog > 600) {
+                    wlog('Kesh kvotaning 90% idan oshdi - yangi videolar o\'girilmaydi (HLS_MAX_MB ni oshiring yoki eskilarini o\'chiring).');
+                    $lastQuotaLog = time();
+                }
+                break;
+            }
             if (!is_dir($dir)) {
                 @mkdir($dir, 0777, true);
             }

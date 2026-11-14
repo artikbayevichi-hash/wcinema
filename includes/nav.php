@@ -116,8 +116,7 @@ function ig_svg($name) {
         'smile'    => '<path d="M12 3.6c3.5 0 6.3 2.7 6.3 6.1 0 3.3-2.8 6.1-6.3 6.1s-6.3-2.8-6.3-6.1c0-3.4 2.8-6.1 6.3-6.1z"/><path style="fill:none" d="M10.9 15.5h2.2l-1.1 2.1z"/><path style="fill:none" d="M12 17.6c0 1.3.5 2.2 1.5 2.9"/><circle style="fill:currentColor;stroke:none" cx="9.8" cy="9" r="1.05"/><circle style="fill:currentColor;stroke:none" cx="14.2" cy="9" r="1.05"/><path style="fill:none" d="M9.7 11.8a3.1 3.1 0 0 0 4.6 0"/>',
         // Seriallar — antenna va "qism" o'ynatish tugmasi bo'lgan retro TV.
         'tv'       => '<rect x="2.9" y="7.5" width="18.2" height="12" rx="2.8"/><path style="fill:none" d="M8.3 3.7 12 7.5l3.7-3.8"/><path style="fill:currentColor;stroke:none" d="M10.6 11v5l4.3-2.5z"/>',
-        // Kuz barog'i (yomg'ir + chaqmoq) — "Kuz rejimi" tugmasi uchun.
-        'leaf'     => '<path d="M20 4C10 4 4.4 8.6 4.4 15.2c0 2 .6 3.6 1.5 4.8 4-6.4 8.3-9.6 11.6-11.4-3.4 2.4-6.6 5.7-9 10.9 1.3.6 2.7.9 4.2.9 5.3 0 9.3-4.2 9.3-16.5Z"/>',
+        // Dunyo — botga o'tish.
         'globe'    => '<circle cx="12" cy="12" r="8.1"/><path style="fill:none" d="M3.9 12h16.2"/><path style="fill:none" d="M12 3.9c2.35 2.35 2.35 13.85 0 16.2M12 3.9c-2.35 2.35-2.35 13.85 0 16.2"/><path style="fill:none" d="M6 7.2h12M6 16.8h12"/>',
         'tag'      => '<path d="M4.1 4.1h7.4l8.4 8.4-7.4 7.4-8.4-8.4z"/><circle style="fill:currentColor;stroke:none" cx="8.5" cy="8.5" r="1.25"/>',
         'plus'     => '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
@@ -184,10 +183,18 @@ function wc_logo_img($alt = '', $attrs = '') {
 </script>
 <!-- ============================== Desktop: yon panel ============================== -->
 <aside class="ig-side" id="igSide">
-    <a class="ig-brand" href="index.php">
-        <?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?>
-        <span class="ig-brand-text"><?php echo htmlspecialchars(SITE_NAME); ?></span>
-    </a>
+    <!-- BREND qatori: logo + nom + "Joylash" (+) tugmasi.
+         Tugma brend yonida turadi — keng sariq banner emas, ixcham va
+         har doim ko'rinadi (yig'ilgan panel holatida ham). -->
+    <div class="ig-brand-row">
+        <a class="ig-brand" href="index.php">
+            <?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?>
+            <span class="ig-brand-text"><?php echo htmlspecialchars(SITE_NAME); ?></span>
+        </a>
+        <a class="ig-create" href="<?php echo $igCreateH; ?>" title="Reels yuklash" aria-label="Reels yuklash">
+            <?php echo ig_svg('plus'); ?>
+        </a>
+    </div>
 
     <nav class="ig-nav">
         <!-- Profil (eng yuqorida) -->
@@ -279,7 +286,10 @@ function wc_logo_img($alt = '', $attrs = '') {
 
 <!-- ============================== Telefon: yuqori panel ============================== -->
 <header class="ig-mobar">
-    <a class="ig-mobar-brand" href="index.php"><?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
+    <div class="ig-mobar-row">
+        <a class="ig-mobar-brand" href="index.php"><?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
+        <a class="ig-create ig-create-sm" href="<?php echo $igCreateH; ?>" title="Reels yuklash" aria-label="Reels yuklash"><?php echo ig_svg('plus'); ?></a>
+    </div>
     <div class="ig-mobar-actions">
         <?php /* Telefonda qidiruv yuqoridagi panelda emas - faqat pastki
                 navigatsiyada (Instagram uslubidagi markaziy "Qidiruv"). */ ?>
@@ -353,6 +363,15 @@ function wc_logo_img($alt = '', $attrs = '') {
         <label class="sr-only" for="igSearchInput">Saytdan qidirish</label>
         <input id="igSearchInput" type="search" placeholder="Qidirish" autocomplete="off">
         <button class="ig-search-close" id="igSearchClose" type="button" aria-label="Yopish"><?php echo ig_svg('back'); ?></button>
+    </div>
+    <div class="ig-search-chips" id="igSearchChips" role="toolbar" aria-label="Kategoriyalar">
+        <button type="button" class="ig-chip on" data-cat="">Barchasi</button>
+        <button type="button" class="ig-chip" data-cat="kino">Kino</button>
+        <button type="button" class="ig-chip" data-cat="film">Kinolar</button>
+        <button type="button" class="ig-chip" data-cat="anime">Animelar</button>
+        <button type="button" class="ig-chip" data-cat="multfilm">Multfilmlar</button>
+        <button type="button" class="ig-chip" data-cat="serial">Seriallar</button>
+        <button type="button" class="ig-chip" data-cat="dokumental">Dokumental</button>
     </div>
     <div class="ig-search-body">
         <div class="ig-search-hint" id="igSearchHint">Qidirish uchun nom yozing</div>
@@ -438,11 +457,6 @@ function wc_logo_img($alt = '', $attrs = '') {
                     <span class="ig-set-ico"><?php echo ig_svg('tv'); ?></span>
                     <span class="ig-set-txt">TV rejimi</span>
                     <span class="ig-set-val" id="setTvVal">O&#8217;chiq</span>
-                </button>
-                <button class="ig-set-row" id="autumnToggleLink" type="button">
-                    <span class="ig-set-ico"><?php echo ig_svg('leaf'); ?></span>
-                    <span class="ig-set-txt">Kuz rejimi</span>
-                    <span class="ig-set-val" id="setAutumnVal">O&#8217;chiq</span>
                 </button>
             </div>
 
@@ -625,30 +639,6 @@ window.addEventListener('DOMContentLoaded', function () {
         } catch (e) { location.reload(); }
     });
 
-    // ---------------- "Kuz rejimi" (yomg'ir + chaqmoq) tugmasi ----------------
-    // Sozlamalar oynasidan yoqish/o'chirish. Holat `localStorage`da saqlanadi
-    // va `includes/tv-head.php` orqali sahifa chizilishidan OLDIN
-    // `body.autumn-off` sinfi sifatida qo'yiladi (FOUC bo'lmaydi).
-    var autumnKey = 'wc_autumn_off';
-    var setAutumnVal = document.getElementById('setAutumnVal');
-    function igAutumnOff() {
-        try { return localStorage.getItem(autumnKey) === '1'; } catch (e) { return false; }
-    }
-    function igAutumnPaint() {
-        if (setAutumnVal) setAutumnVal.textContent = igAutumnOff() ? 'O\u2018chiq' : 'Yoniq';
-    }
-    if (document.body) document.body.classList.toggle('autumn-off', igAutumnOff());
-    igAutumnPaint();
-    var autumnLink = document.getElementById('autumnToggleLink');
-    if (autumnLink) {
-        autumnLink.addEventListener('click', function () {
-            var off = !igAutumnOff();
-            try { localStorage.setItem(autumnKey, off ? '1' : '0'); } catch (e) {}
-            if (document.body) document.body.classList.toggle('autumn-off', off);
-            igAutumnPaint();
-        });
-    }
-
     // ---------------- Kutubxona bo'limi ----------------
     var libBtn = document.getElementById('igLibBtn');
     var libMenu = document.getElementById('igLibMenu');
@@ -685,6 +675,19 @@ window.addEventListener('DOMContentLoaded', function () {
     // tokeniga ega (sekin javob keyingisini bekor qilmasligi uchun).
     var igTokenSearch = { n: 0 };
     var igTokenTv    = { n: 0 };
+    var igCatFilter  = '';
+    (function () {
+        var box = document.getElementById('igSearchChips');
+        if (!box) return;
+        box.addEventListener('click', function (e) {
+            var b = e.target.closest ? e.target.closest('[data-cat]') : null;
+            if (!b) return;
+            igCatFilter = b.getAttribute('data-cat') || '';
+            var all = box.querySelectorAll('[data-cat]');
+            for (var i = 0; i < all.length; i++) all[i].classList.toggle('on', all[i] === b);
+            igRunSearch();
+        });
+    })();
 
     // ---------------- TV rejimi: YouTube TV uslubidagi qidiruv ----------------
     // Pult bilan boshqariladigan to'liq ekranli qidiruv. Fokus avval
@@ -845,6 +848,9 @@ window.addEventListener('DOMContentLoaded', function () {
             if (seq !== token.n) return;
             var profiles = (d && d.profiles) || [];
             var content  = (d && d.content) || [];
+            if (token === igTokenSearch && igCatFilter) {
+                content = content.filter(function (c) { return c.category_slug === igCatFilter; });
+            }
             var reels    = (d && d.reels) || [];
             var html = '';
             if (profiles.length) {
