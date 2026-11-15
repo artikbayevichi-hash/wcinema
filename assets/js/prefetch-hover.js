@@ -59,9 +59,11 @@
         if (!ctx) return;
         clearTimeout(timer);
         currentKey = ctx.key;
+        // 180 ms: tasodifiy o'tishda so'rov ketmaydi, lekin jiddiy niyat
+        // (kursor shu kartada turibdi) bo'lsa tayyorgarlik boshlanadi.
         timer = setTimeout(function () {
             if (currentKey === ctx.key) load(ctx.key, ctx.c, ctx.e);
-        }, 120);
+        }, 180);
     }
 
     function cancel() {
@@ -72,7 +74,10 @@
     // Desktop: sichqoncha olib kelish
     document.addEventListener('pointerover', function (ev) {
         var a = ev.target && ev.target.closest ? ev.target.closest('a[href*="watch.php"]') : null;
-        if (a) schedule(a);
+        if (!a) return;
+        // SW uyquda bo'lsa uyg'otamiz — birinchi so'rov kutmasin.
+        try { if (window.TgStream && window.TgStream.wakeSW) window.TgStream.wakeSW(); } catch (e) {}
+        schedule(a);
     }, { passive: true });
 
     document.addEventListener('pointerout', function (ev) {
@@ -80,36 +85,24 @@
         if (a) cancel();
     }, { passive: true });
 
-    // Mobil: barmoq tegishi (click dan oldin)
-    document.addEventListener('touchstart', function (ev) {
-        var t = ev.target;
-        var a = t && t.closest ? t.closest('a[href*="watch.php"]') : null;
+    // Bosish BOSHLANISHI (barmoq tegi / sichqoncha bosildi) — `click` dan
+    // oldin. Telefonda hover yo'q, shuning uchun bu yagona imkoniyat:
+    // 100–300 ms yutiladi.
+    function pressStart(ev) {
+        var a = ev.target && ev.target.closest ? ev.target.closest('a[href*="watch.php"]') : null;
         if (!a) return;
         var ctx = ctxFromLink(a);
-        if (ctx) load(ctx.key, ctx.c, ctx.e);
-    }, { passive: true });
-    // Dastlabki ko'rinadigan 4 ta kartani sahifa ochilishida oldindan tayyorlash
-    // (hover kutmasdan): videoning birinchi ~4 MB (≈30 s) keshlanadi.
-    function autoWarmInitial() {
-        try {
-            var links = document.querySelectorAll('a[href*="watch.php"]');
-            var seenKeys = {};
-            var count = 0;
-            for (var i = 0; i < links.length && count < 4; i++) {
-                var ctx = ctxFromLink(links[i]);
-                if (!ctx || seenKeys[ctx.key]) continue;
-                seenKeys[ctx.key] = true;
-                count++;
-                (function (key, c, e, delay) {
-                    setTimeout(function () { load(key, c, e); }, delay);
-                })(ctx.key, ctx.c, ctx.e, 600 + (count - 1) * 500);
-            }
-        } catch (e) {}
+        if (!ctx) return;
+        try { if (window.TgStream && window.TgStream.wakeSW) window.TgStream.wakeSW(); } catch (e) {}
+        load(ctx.key, ctx.c, ctx.e);
     }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () { setTimeout(autoWarmInitial, 400); }, { once: true });
-    } else {
-        setTimeout(autoWarmInitial, 400);
-    }
+    document.addEventListener('pointerdown', pressStart, { passive: true });
+    document.addEventListener('touchstart', pressStart, { passive: true });
+
+    // Dastlabki avtomatik "isitish" OLIB TASHLANDI: har bir tashrifchida
+    // 4 ta videoning 4 MB prefiksi yuklanardi (minglab foydalanuvchida
+    // Telegram'ga katta yuk). Endi faqat kursor/barmoq bilan jiddiy
+    // qiziqish bildirilganda yuklanadi. "Davom ettirish" videosi
+    // `tg-prefetch.js` tomonidan alohida tayyorlanadi.
 
 })();

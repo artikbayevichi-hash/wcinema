@@ -923,6 +923,82 @@
     S.fast = null;
   }
 
+  // ============================================== DC ULANISHINI USHLAB TURISH
+  //
+  // MUAMMO: Telegram ~60 soniya harakatsizlikdan keyin WebSocket'ni yopadi
+  // (brauzer konsolida "Connection to dc 2 was lost"). Keyingi klik avval
+  // qayta ulanish + kalit almashinuvini kutadi — 1–3 s. Sahifa ko'rinib
+  // turganda vaqti-vaqti bilan ping yuboramiz: ulanish uzilmaydi.
+  //
+  // Ping — TRANSPORT darajasida (`ping#7abe77ec`, seq_no = 0). U RPC emas,
+  // shuning uchun video oqimining navbatiga tushmaydi va javobi `pong`
+  // bo'lib, ping xabarining msg_id'si bilan keladi.
+  var KA_MS = 45000;
+  var kaTimer = null;
+  var kaBound = false;
+  var kaBusy = false;
+
+  /** Tez klient mavjud bo'lsa qaytaradi (yangi ulanish OCHMAYDI). */
+  function kaFast() {
+    if (S.fast) return Promise.resolve(S.fast);
+    if (fastClientPromise === null) return Promise.resolve(null);
+    return Promise.resolve(fastClientPromise).then(function (f) {
+      return f || null;
+    }, function () { return null; });
+  }
+
+  function kaPingFast() {
+    return kaFast().then(function (f) {
+      if (!f || typeof f.keepAlive !== 'function') return 0;
+      return f.keepAlive({ timeout: 6000 }).catch(function () { return 0; });
+    });
+  }
+
+  /** GramJS yo'li (agar u ishlatilgan bo'lsa) — xuddi shunday ping. */
+  function kaPingGram() {
+    try {
+      if (!S.client || !S.authed) return;
+      var Api = S.T && S.T.Api;
+      if (!Api || typeof S.client.invoke !== 'function') return;
+      var Ctor = Api.PingDelayDisconnect || Api.Ping;
+      if (!Ctor) return;
+      var args = { pingId: Math.floor(Math.random() * 9007199254740991) };
+      if (Api.PingDelayDisconnect) args.disconnectDelay = 75;
+      var p = S.client.invoke(new Ctor(args));
+      if (p && p.catch) p.catch(function () { /* jim */ });
+    } catch (e) { /* jim */ }
+  }
+
+  function kaTick(force) {
+    try {
+      if (!force && document.hidden) return;
+      if (kaBusy) return;
+      kaBusy = true;
+      kaPingGram();
+      kaPingFast().then(function () { kaBusy = false; }, function () { kaBusy = false; });
+    } catch (e) { kaBusy = false; }
+  }
+
+  // Tarmoq qaytdi / varaq ko'rindi: uzilgan bo'lsa DARHOL qayta ulanamiz,
+  // keyin ping yuboramiz. `warmFast()` mavjud ulanishni qayta ishlatadi.
+  function kaWake() {
+    try { warmFast(); } catch (e) {}
+    kaTick(true);
+  }
+
+  function bindKeepAlive() {
+    if (kaBound) return;
+    kaBound = true;
+    try {
+      kaTimer = setInterval(function () { kaTick(false); }, KA_MS);
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) kaWake();
+      });
+      global.addEventListener('online', kaWake);
+      global.addEventListener('pageshow', kaWake);
+    } catch (e) { /* jim */ }
+  }
+
   // `file_reference` yo'q joylashuv — bunday hujjatni Telegram yuklab
   // bermaydi (FILE_REFERENCE_INVALID).
   function hasFileRef(loc) {
@@ -1810,6 +1886,31 @@
     } catch (e) { return false; }
   }
 
+  // Tarmoq tezligiga qarab parallel so'rovlar soni.
+  //
+  // Nima uchun: sekin tarmoqda 6 ta yo'lak Telegram'ga ortiqcha so'rov
+  // yuboradi (flood chegarasi) va foyda bermaydi; tez tarmoqda esa
+  // 4 ta yo'lak RTT'ni to'liq yopmaydi. `downlink` (Mbit/s) mavjud bo'lsa
+  // shunga moslaymiz; noma'lum bo'lsa eski xatti-harakat saqlanadi.
+  function netLanes() {
+    try {
+      var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (!c) return canSeed() ? 6 : 4;
+      if (c.saveData) return 2;
+      var et = String(c.effectiveType || '');
+      if (et === 'slow-2g' || et === '2g') return 2;
+      if (et === '3g') return 3;
+      var dl = Number(c.downlink);
+      if (isFinite(dl) && dl > 0) {
+        if (dl < 1) return 2;
+        if (dl < 3) return 3;
+        if (dl < 8) return 4;
+        return 6;
+      }
+      return canSeed() ? 6 : 4;
+    } catch (e) { return 4; }
+  }
+
   // ============================== R2 PREFIKS SOZLAMASI (oldindan)
   //
   // Nima uchun: SW birinchi baytni berishdan oldin `api/r2-sign.php?info=1`
@@ -2589,7 +2690,7 @@
       // So'rovlar bitta WebSocket'da ketma-ket oqib qolmasligi uchun tez
       // klient ularni 3 ta alohida ulanishga (media klaster) taqsimlaydi —
       // Telegram Web K ham yuklab olishda 3 ta ulanish ishlatadi.
-      var LANES = canSeed() ? 6 : 4;   // bir vaqtda nechta so'rov
+      var LANES = netLanes();   // bir vaqtda nechta so'rov
 
       // Oraliqni reja bo'laklariga bo'lamiz — har biri bitta blok ichida.
       var plan = [], acc = 0;
@@ -2843,9 +2944,26 @@
     }).catch(function () {}).then(function () { identityFetch = null; });
   }
 
+  // Brauzer xotira kamayganda keshni o'zi o'chirishi mumkin. Birinchi
+  // tomoshadan keyin `persist()` so'raymiz — 24 soatlik video keshi saqlanadi
+  // va qayta ochilgan video Telegram'ga umuman bormaydi. Ruxsat bermasa jim.
+  var persisted = false;
+  function persistStorage() {
+    if (persisted) return;
+    persisted = true;
+    try {
+      if (!navigator.storage || typeof navigator.storage.persist !== 'function') return;
+      navigator.storage.persisted().then(function (ok) {
+        if (ok) return null;
+        return navigator.storage.persist();
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function fireReady() {
     if (S.readyFired) return;
     S.readyFired = true;
+    persistStorage();
     // Profil so'rovi endi video ochilishining kritik yo'lida emas.
     // Dastlabki kadr tayyor bo'lgach, yetishmagan akkaunt ma'lumotini olamiz.
     if (!isPreview()) setTimeout(refreshIdentityAfterPlayback, 1200);
@@ -4118,6 +4236,10 @@
       // ~150–300 ms tejaladi.
       warmFast();
     } catch (e) {}
+    // Ulanishni tirik ushlab turish: ~60 s harakatsizlikdan keyin Telegram
+    // WebSocket'ni yopadi ("Connection to dc 2 was lost") va keyingi klik
+    // 1–3 s qayta ulanishni kutadi. Ping taymeri shuni oldini oladi.
+    try { bindKeepAlive(); } catch (e) {}
     try {
       if (!('serviceWorker' in navigator)) return;
       // Faqat O'RNATAMIZ — reload qilmaymiz. Foydalanuvchi saytga kirishi
@@ -4142,6 +4264,19 @@
       try { if (reg && reg.active) reg.active.postMessage({ type: 'claim' }); } catch (e) {}
       return waitForController(2500);
     }).catch(function () { return false; });
+  }
+
+  // Service Worker'ni "uyg'otish". Brauzer bo'sh turgan SW'ni o'chiradi;
+  // keyingi birinchi so'rov uni qayta ishga tushirishga 50–200 ms sarflaydi.
+  // Karta ustiga kursor kelganda bitta bo'sh xabar yuborib, SW'ni oldindan
+  // uyg'otamiz — bosish paytida u allaqachon tayyor.
+  function wakeSW() {
+    try {
+      var c = getSwController();
+      if (!c) return false;
+      c.postMessage({ type: 'wake' });
+      return true;
+    } catch (e) { return false; }
   }
 
   // Tez prefetch: hujjat metama'lumotini lokal keshdan yoki serverdan oladi
@@ -4732,6 +4867,11 @@
     init: init,
     // Hover-preview uchun SW'ni oldindan tayyorlash (reload qilmaydi).
     warm: warm,
+    // SW uyg'otish (kursor karta ustiga kelganda) — keyingi so'rov kutmaydi.
+    wakeSW: wakeSW,
+    // DC ulanishini darhol tekshirish/ping (diagnostika va `online` uchun).
+    keepAlive: function () { kaTick(true); },
+    ping: function () { return kaPingFast(); },
     // Keyingi videoni oldindan tayyorlash (faqat metama'lumot keshlanadi).
     prefetch: prefetch,
     // Saytga kirganda BARCHA videolarning metama'lumotini bitta server

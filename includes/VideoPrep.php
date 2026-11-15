@@ -70,7 +70,8 @@ final class VideoPrep
      *
      * @return array{ok:bool,path:string,size:int,container:string,duration:float,
      *               flat:bool,video:?array,audio:?array,faststart:bool,
-     *               gop_max:?float,error:?string}
+     *               audio_count:int,subtitle_count:int,data_count:int,
+     *               extra_tracks:int,gop_max:?float,error:?string}
      */
     public static function inspect($path, array $opts = []): array
     {
@@ -84,6 +85,10 @@ final class VideoPrep
             'video' => null,
             'audio' => null,
             'faststart' => false,
+            'audio_count' => 0,
+            'subtitle_count' => 0,
+            'data_count' => 0,
+            'extra_tracks' => 0,
             'gop_max' => null,
             'error' => null,
         ];
@@ -148,7 +153,21 @@ final class VideoPrep
                     'bitrate' => (int) ($stream['bit_rate'] ?? 0),
                 ];
             }
+
+            // Kerakmas treklar: birinchisidan tashqari audio, barcha subtitr
+            // va ma'lumot (data) treklari. Ular `moov`ni kattalashtiradi va
+            // birinchi kadrni kechiktiradi — remux'da olib tashlanadi.
+            if ($type === 'audio') {
+                $info['audio_count']++;
+            } elseif ($type === 'subtitle') {
+                $info['subtitle_count']++;
+            } elseif ($type === 'data' || $type === 'attachment') {
+                $info['data_count']++;
+            }
         }
+
+        $info['extra_tracks'] = max(0, $info['audio_count'] - 1)
+            + $info['subtitle_count'] + $info['data_count'];
 
         if ($info['video'] === null) {
             $info['error'] = 'video oqimi yo\'q';
@@ -233,6 +252,12 @@ final class VideoPrep
         }
         if (empty($info['faststart'])) {
             $reasons[] = 'moov atomi fayl oxirida (faststart kerak)';
+        }
+        if ((int) ($info['extra_tracks'] ?? 0) > 0) {
+            $reasons[] = 'qo\'shimcha treklar: '
+                . (int) $info['extra_tracks'] . ' ta (audio ' . (int) ($info['audio_count'] ?? 0)
+                . ', subtitr ' . (int) ($info['subtitle_count'] ?? 0)
+                . ', data ' . (int) ($info['data_count'] ?? 0) . ')';
         }
         if ($reasons !== []) {
             return ['action' => 'remux', 'reasons' => $reasons];
@@ -359,6 +384,8 @@ final class VideoPrep
             $bad = 'natija H.264 emas';
         } elseif (empty($check['faststart'])) {
             $bad = 'natijada faststart yo\'q';
+        } elseif ((int) ($check['extra_tracks'] ?? 0) > 0) {
+            $bad = 'natijada qo\'shimcha treklar qoldi';
         } elseif ($action === 'transcode' && $check['audio'] !== null && $check['audio']['codec'] !== 'aac') {
             $bad = 'natijada audio AAC emas';
         } elseif ($action === 'transcode'
@@ -453,6 +480,7 @@ final class VideoPrep
             '-i', (string) $source,
             '-map', '0:v:0',
             '-map', '0:a:0?',
+            '-sn', '-dn',
             '-c', 'copy',
             '-movflags', '+faststart',
             '-f', 'mp4',

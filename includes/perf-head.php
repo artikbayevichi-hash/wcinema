@@ -118,5 +118,40 @@ $__pfV     = @filemtime(__DIR__ . '/../assets/js/tg-prefetch.js') ?: 1;
 window.__WCPERF = { url: <?php echo json_encode($__perfUrl); ?> };
 window.__WCPF   = {};
 </script>
+<?php
+// ---------------------------------------------------------------------------
+// Speculation Rules: kursor karta ustida ~200 ms turganда brauzer tomosha
+// sahifasini fonda "prerender" qiladi — bosilganda sahifa DARHOL ochiladi.
+//
+// Nima uchun JS bilan: `navigator.connection.saveData` / 2G bo'lsa umuman
+// yoqilmaydi (foydalanuvchi trafigini bekorga sarflamaymiz). Ro'yxat
+// dinamik bo'lgani uchun `selector_matches` ishlatiladi — har bir havolani
+// sanab chiqish shart emas.
+//
+// Qo'llab-quvvatlamaydigan brauzerlar (Safari/Firefox) skriptni jimgina
+// o'tkazib yuboradi — xatti-harakat o'zgarmaydi.
+// ---------------------------------------------------------------------------
+?>
+<script>
+(function () {
+  try {
+    if (!window.HTMLScriptElement || !HTMLScriptElement.supports
+        || !HTMLScriptElement.supports('speculationrules')) return;
+    var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (c && (c.saveData || /(^|-)2g$/.test(String(c.effectiveType || '')))) return;
+    var rules = {
+      prerender: [{
+        source: 'document',
+        where: { selector_matches: 'a[href*="watch.php"]' },
+        eagerness: 'moderate'
+      }]
+    };
+    var s = document.createElement('script');
+    s.type = 'speculationrules';
+    s.textContent = JSON.stringify(rules);
+    document.head.appendChild(s);
+  } catch (e) {}
+})();
+</script>
 <script defer src="<?php echo htmlspecialchars($__base, ENT_QUOTES); ?>/assets/js/tg-perf.js?v=<?php echo (int) $__perfV; ?>"></script>
 <script defer src="<?php echo htmlspecialchars($__base, ENT_QUOTES); ?>/assets/js/tg-prefetch.js?v=<?php echo (int) $__pfV; ?>"></script>

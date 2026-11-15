@@ -88,6 +88,52 @@
     });
   }
 
+  // ------------------------------------------------------------------------
+  // "DAVOM ETTIRISH": foydalanuvchi oxirgi ko'rgan video eng ehtimoliy
+  // qayta bosiladigan video. Faqat SHU BITTA videoning boshi (2–4 MB)
+  // tayyorlanadi — minglab foydalanuvchida ham Telegram'ga yuk deyarli yo'q.
+  //
+  // Tarix `wc_lib_v1` (brauzer) da saqlanadi; kanal/post esa mavjud
+  // `api/prefetch-context.php` dan olinadi (bitta kichik JSON).
+  // ------------------------------------------------------------------------
+  function lastWatched() {
+    try {
+      var all = JSON.parse(localStorage.getItem('wc_lib_v1') || '{}') || {};
+      var best = null;
+      for (var k in all) {
+        if (!Object.prototype.hasOwnProperty.call(all, k)) continue;
+        var arr = all[k] && all[k].history;
+        if (!arr || !arr.length) continue;
+        for (var i = 0; i < arr.length; i++) {
+          var it = arr[i];
+          if (!it || !it.id) continue;
+          if (!best || (Number(it.at) || 0) > (Number(best.at) || 0)) best = it;
+        }
+      }
+      return best;
+    } catch (e) { return null; }
+  }
+
+  async function warmContinue(T) {
+    try {
+      if (sessionStorage.getItem('wc_cw_done') === '1') return;
+      sessionStorage.setItem('wc_cw_done', '1');
+    } catch (e) { /* private mode */ }
+    var it = lastWatched();
+    if (!it) return;
+    try {
+      var r = await fetch((BASE || '') + '/api/prefetch-context.php?c=' + encodeURIComponent(String(it.id)),
+        { credentials: 'same-origin' });
+      if (!r.ok) return;
+      var d = await r.json();
+      if (!d || !d.success || !d.telegram || !d.channel || !Number(d.post)) return;
+      if (document.hidden || videoBusy()) return;
+      var opts = { channel: d.channel, post: Number(d.post), url: d.url || '' };
+      try { if (typeof T.prefetch === 'function') await T.prefetch(opts); } catch (e) {}
+      try { if (typeof T.warmMedia === 'function') T.warmMedia(opts); } catch (e) {}
+    } catch (e) { /* jim */ }
+  }
+
   async function run() {
     // Faqat bosh sahifada: watch.php o'z qism ro'yxatini, boshqa sahifalar esa
     // o'z ishini boshqaradi. Dinamik katalog kartalariga bog'lanmaymiz.
@@ -101,6 +147,11 @@
 
     await waitIdle();
     if (videoBusy()) return;
+
+    // 0) "Davom ettirish" — faqat bitta video, eng katta ehtimol bilan
+    //    qayta ochiladi. Boshqa hech narsa yuklanmaydi.
+    await warmContinue(T);
+    if (document.hidden || videoBusy()) return;
 
     // 1) SERVER keshini isitish OLIB TASHLANDI (2026-11-12).
     //

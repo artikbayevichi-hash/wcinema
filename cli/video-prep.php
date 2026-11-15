@@ -151,6 +151,9 @@ function vp_desc(array $info): string
     if ((float) ($info['duration'] ?? 0) > 0) {
         $bits[] = gmdate('H:i:s', (int) $info['duration']);
     }
+    if ((int) ($info['extra_tracks'] ?? 0) > 0) {
+        $bits[] = 'qo\'shimcha trek ' . (int) $info['extra_tracks'];
+    }
     return implode(' | ', $bits);
 }
 
@@ -202,6 +205,10 @@ foreach ($files as $file) {
             'duration' => round((float) $before['duration'], 2),
             'faststart' => (bool) $before['faststart'],
             'gop_max' => $before['gop_max'],
+            'audio_count' => (int) ($before['audio_count'] ?? 0),
+            'subtitle_count' => (int) ($before['subtitle_count'] ?? 0),
+            'data_count' => (int) ($before['data_count'] ?? 0),
+            'extra_tracks' => (int) ($before['extra_tracks'] ?? 0),
             'video' => $before['video'],
             'audio' => $before['audio'],
             'error' => $before['error'],

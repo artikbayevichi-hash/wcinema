@@ -542,7 +542,12 @@
         RPC_RESULT: 0xf35c6d01,
         RPC_ERROR: 0x2144ca19,
         MSG_CONTAINER: 0x73f3f8dc,
-        MSG_ACK: 0x62b6f447
+        MSG_ACK: 0x62b6f447,
+        // Ulanishni tirik ushlab turish (transport darajasi, seq_no = 0).
+        // Javob: pong#347773c5 msg_id:long ping_id:long — `msg_id` aynan
+        // yuborilgan ping xabarining id'si bo'ladi.
+        PING: 0x7abe77ec,
+        PONG: 0x347773c5
     };
 
     const LAYER = 229;
@@ -745,6 +750,28 @@
         return { packet: packet, plain: plain, msgKey: msgKey };
     };
 
+    /**
+     * Berilgan TL tanasini (seq_no ni O'ZGARTIRMASDAN) tayyor WebSocket
+     * freymiga o'raydi: uzunlik(4) + shifrlangan paket.
+     *
+     * `request()` dan farqi: seq_no ni chaqiruvchi beradi (transport
+     * darajasidagi `ping` uchun seq_no = 0 bo'lishi shart) va u `pending`
+     * ga yozmaydi — buni chaqiruvchi o'zi qiladi.
+     */
+    MtConnection.prototype._seal = function (body, seqNo) {
+        const msgId = this._nextMsgId();
+        const w = new TgWriter();
+        w.long(msgId);
+        w.i32(seqNo | 0);
+        w.i32(body.length);
+        w.raw(body);
+        const packet = this._encryptInner(w.finish(), msgId, seqNo | 0).packet;
+        const framed = new Uint8Array(4 + packet.length);
+        new DataView(framed.buffer).setInt32(0, packet.length, true);
+        framed.set(packet, 4);
+        return { msgId: msgId, bytes: this.encryptor.update(framed) };
+    };
+
     /** Serverdan kelgan paketni ochadi. Qaytaradi: {msgId, salt, body} */
     MtConnection.prototype.decryptMessage = function (packet) {
         if (packet.length < 24) throw new Error('Paket juda qisqa');
@@ -800,6 +827,13 @@
     MtConnection.prototype._open = function (host) {
         if (this.ready) return Promise.resolve(this);
         const self = this;
+        // Qayta ulanish: avvalgi sessiyaning qoldiqlari (yopilgan bayrog'i,
+        // yarim paket buferi, initConnection holati) tozalanadi. Aks holda
+        // uzilishdan keyin `request()` buferga eski chiqindini qo'shib,
+        // paket uzunligi buzilardi.
+        this.closed = false;
+        this.buf = new Uint8Array(0);
+        this._initSent = false;
         return new Promise(function (resolve, reject) {
             let url;
             try {
@@ -941,6 +975,24 @@
             this.salt.set(msg.salt);
         }
         // msgId bo'yicha pending so'rovni topamiz (rpc_result req_msg_id orqali).
+        // `pong` — transport darajasidagi javob (rpc_result emas): undagi
+        // `msg_id` aynan yuborilgan ping xabarining id'si bo'ladi.
+        const mbody = msg.body;
+        if (mbody.length >= 4) {
+            const ctor0 = new DataView(mbody.buffer, mbody.byteOffset, 4).getUint32(0, true);
+            if (ctor0 === TL.PONG) {
+                const pr = new TgReader(mbody, 0);
+                pr.u32();
+                const pingMsgId = pr.long();
+                const pp = this.pending.get(pingMsgId);
+                if (pp) {
+                    this.pending.delete(pingMsgId);
+                    if (pp.timer) clearTimeout(pp.timer);
+                    pp.resolve(true);
+                }
+                return;
+            }
+        }
         const parsed = parseRpc(msg.body);
         if (!parsed) return;
         if (parsed.kind === 'result' || parsed.kind === 'error') {
@@ -1058,6 +1110,45 @@
                     self.ws.send(encrypted.buffer);
                 } catch (e) {
                     self.pending.delete(msgId);
+                    clearTimeout(timer);
+                    reject(e);
+                }
+            });
+        });
+    };
+
+    /**
+     * Transport darajasidagi `ping` (bare, seq_no = 0).
+     *
+     * Telegram ~60 s harakatsizlikdan keyin WebSocket'ni yopadi va brauzer
+     * konsolida "Connection to dc 2 was lost" ko'rinadi. Keyingi klik
+     * qayta ulanish + kalit almashinuvini kutadi (1–3 s). Sahifa ko'rinib
+     * turganda vaqti-vaqti bilan ping yuborib, uzilishning oldini olamiz.
+     *
+     * Javob `pong` bo'lib, `pending` da ping xabarining msg_id'si bilan
+     * turadi (rpc_result emas — shuning uchun `_onPacket` alohida ishlaydi).
+     */
+    MtConnection.prototype.ping = function (timeoutMs) {
+        const self = this;
+        return this.connect().then(function () {
+            const w = new TgWriter();
+            w.u32(TL.PING);
+            w.long(0n);                       // ping_id (0 — javob msg_id bo'yicha)
+            const sealed = self._seal(w.finish(), 0);
+            return new Promise(function (resolve, reject) {
+                const timer = setTimeout(function () {
+                    const p = self.pending.get(sealed.msgId);
+                    if (!p) return;
+                    self.pending.delete(sealed.msgId);
+                    reject(new Error('PING javobi kelmadi'));
+                }, timeoutMs || 8000);
+                self.pending.set(sealed.msgId, {
+                    resolve: resolve, reject: reject, timer: timer, ping: true
+                });
+                try {
+                    self.ws.send(sealed.bytes.buffer);
+                } catch (e) {
+                    self.pending.delete(sealed.msgId);
                     clearTimeout(timer);
                     reject(e);
                 }
@@ -1327,6 +1418,40 @@
                 } catch (e) {
                     return Promise.reject(e);
                 }
+            },
+
+            /**
+             * Ulanishlarni tirik ushlab turadi: mavjud (avval ochilgan)
+             * ulanishlarga `ping` yuboradi, javob kelmasa — o'sha obyekt
+             * ustida qayta ulanadi. YANGI ulanish ochmaydi va hech qanday
+             * RPC yubormaydi (tarmoq navbatini video uchun bo'sh qoldiradi).
+             */
+            keepAlive: function (opts) {
+                const options = opts || {};
+                const timeout = Number(options.timeout) || 8000;
+                const list = [];
+                clients.forEach(function (c) { if (c) list.push(c); });
+                pools.forEach(function (arr) {
+                    for (let i = 1; i < arr.length; i++) {
+                        if (arr[i] && arr[i].ready) list.push(arr[i]);
+                    }
+                });
+                if (!list.length) return Promise.resolve(0);
+                return Promise.all(list.map(function (c) {
+                    const revive = function () {
+                        if (c.ready) return Promise.resolve(true);
+                        return c.connect().then(function () { return true; }, function () { return false; });
+                    };
+                    if (!c.ready) return revive();
+                    return c.ping(timeout).then(function () { return true; }, function () {
+                        try { c.close(); } catch (e) {}
+                        return revive();
+                    });
+                })).then(function (res) {
+                    let ok = 0;
+                    res.forEach(function (v) { if (v) ok++; });
+                    return ok;
+                });
             },
 
             /** Yangi DC kalitini qo'shish (GramJS'dan yig'ilgan bo'lishi mumkin). */

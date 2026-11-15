@@ -468,6 +468,34 @@ main { padding: 4px 0 20px; }
     border-radius: 50%;
     animation: spin .7s linear infinite;
 }
+/* Modal ochilganda poster + spinner DARHOL (content.php kutilmaydi). */
+.modal-loading {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 60vh;
+    margin: 0;
+    padding: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.modal-loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .35);
+}
+.modal-loading .spinner {
+    position: relative;
+    z-index: 1;
+    width: 34px; height: 34px;
+    border-width: 3px;
+    border-color: rgba(255, 255, 255, .3);
+    border-top-color: #fff;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ==========================================================================

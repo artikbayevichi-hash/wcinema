@@ -80,6 +80,14 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 <link rel="stylesheet" href="assets/css/tg-stream.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-stream.css') ?: 1; ?>">
 <?php /* uz-loader.css - bitta yuklanish halqasi; player.css va tg-stream.css dan KEYIN */ ?>
 <link rel="stylesheet" href="assets/css/uz-loader.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/uz-loader.css') ?: 1; ?>">
+<?php /* Tomosha sahifasi skriptlari: birinchi marta bosganda ular
+         allaqachon brauzer keshida bo'lsin (Telegram Web K ham shunday
+         qiladi). `prefetch` — past ustuvorlik, joriy sahifani bloklamaydi.
+         `tg-stream.js` bu sahifada allaqachon yuklangan. */ ?>
+<link rel="prefetch" as="script" href="assets/js/tg-mtproto.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-mtproto.js') ?: 1; ?>">
+<?php if (is_file(__DIR__ . '/assets/js/watch.js')): ?>
+<link rel="prefetch" as="script" href="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>">
+<?php endif; ?>
 <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <!-- Telegram Web App — FAQAT Telegram ilovasi ichida kerak. Oddiy
          tashrifchida bu so'rov muvaffaqiyatsiz bo'lib, sahifani

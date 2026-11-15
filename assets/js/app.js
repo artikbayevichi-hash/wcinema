@@ -701,7 +701,7 @@
     }
 
     // ---------------------------------------------------------------- modal
-    async function openContent(id, episodeId) {
+    async function openContent(id, episodeId, poster) {
         id = parseInt(id, 10) || 0;
         episodeId = parseInt(episodeId, 10) || 0;
         if (!id) return;
@@ -710,7 +710,11 @@
         previewStop();
         state.current = null;
         $('#modal').hidden = false;
-        $('#modalBody').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+        // KLIK JAVOBI DARHOL: poster + spinner `content.php` javobini
+        // kutmasdan chiziladi. Poster bo'lmasa oddiy spinner qoladi.
+        $('#modalBody').innerHTML = poster
+            ? `<div class="loading modal-loading" style="background-image:url('${esc(String(poster).replace(/'/g, '%27'))}')"><span class="spinner"></span></div>`
+            : '<div class="loading"><span class="spinner"></span></div>';
         document.body.style.overflow = 'hidden';
 
         const q = new URLSearchParams({ id: id });
@@ -1337,7 +1341,7 @@
         // Qism tanlash
         $$('#modalBody .ep').forEach(btn => btn.onclick = () => {
             destroyPlayer();
-            openContent(c.id, parseInt(btn.dataset.ep, 10));
+            openContent(c.id, parseInt(btn.dataset.ep, 10), (sel && sel.poster) || c.poster || '');
         });
 
         // "✂️ Reels yaratish" - joriy bo'lakdan virtual reel

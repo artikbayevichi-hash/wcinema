@@ -895,11 +895,16 @@
     if (!host) return;
     S.streamGeneration += 1;
     var generation = S.streamGeneration;
+    // Yangi video: `playing`/`canplay` kelguncha boshqa so'rovlar kutadi.
+    armVideoReady();
 
     try { if (global.UzPlayer && typeof global.UzPlayer.destroyAll === 'function') global.UzPlayer.destroyAll(); } catch (e) {}
     try { if (global.UDP) global.UDP.destroyAll(); } catch (e) {}
     try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
     host.innerHTML = '';
+    // Poster + spinner birinchi kadrgacha qoladi (qism almashtirishda
+    // `switchEpisode` allaqachon chizgan; birinchi ochilishda shu yerda).
+    showPlayerLoading('');
 
     // Pleyer tanlovi paneli (faqat Telegram embed mumkin bo'lsa ko'rinadi).
     // Boshqa qismga o'tildi — oldingi qismning "embed ishlamadi" holatini
@@ -2150,7 +2155,10 @@
   function thumbInner(c) {
     var fb = '<div class="watch-ep-fb">' + catEmoji(c.category_slug, c.category) + '</div>';
     if (!c.poster) return fb;
-    return '<img src="' + esc(c.poster) + '" alt="" loading="lazy" referrerpolicy="no-referrer"'
+    // Birinchi kadr chiqquncha posturlar yuklanmaydi (`data-lazy-src`).
+    // `fireVideoReady()` ularni bir zumda to'ldiradi.
+    var attr = vReady ? ' src="' : ' data-lazy-src="';
+    return '<img' + attr + esc(c.poster) + '" alt="" loading="lazy" referrerpolicy="no-referrer"'
       + ' onerror="this.remove()">' + fb;
   }
 
@@ -2563,7 +2571,9 @@
     }
 
     // Kalit = episodes.id (reels moduli esa reels.id ishlatadi).
-    openComments();
+    // Izohlar so'rovi video tayyor bo'lgach boshlanadi (tarmoq navbati
+    // avval FAQAT video uchun) — 4 s zaxira taymer bilan.
+    onVideoReady(openComments);
 
     // --- Kompozitor yuborishi. `tg-comments.js` formani BOG'LAMAYDI
     //     (reels.js bog'laydi), shuning uchun shu yerda qilamiz.
@@ -2645,6 +2655,16 @@
     // ma'nosiz (yangisida 95-soniyasi boshqa joy). Faqat joriy video uchun.
     S.hashStart = 0;
 
+    // KLIK JAVOBI DARHOL: eski oqim to'xtatiladi va poster + spinner shu
+    // yerning o'zida chiziladi — `content.php` javobini kutmasdan.
+    armVideoReady();
+    try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
+    try { if (global.UDP) global.UDP.destroyAll(); } catch (e) {}
+    try { if (global.UzPlayer && global.UzPlayer.destroyAll) global.UzPlayer.destroyAll(); } catch (e) {}
+    var wHost = el('watchPlayer');
+    if (wHost) wHost.innerHTML = '';
+    showPlayerLoading((S.playback && S.playback.poster) || '');
+
     // Chuqur havola darhol yangilanadi - "Ulashish" va "orqaga" to'g'ri ishlaydi.
     try {
       // Loyiha /tele_uzdub papkasida ishlaydi; base ni olib tashlash
@@ -2676,11 +2696,13 @@
         // "Barcha" holatiga qaytaramiz.
         S.epSeason = 0;
         S.selectedId = epId;
-        prefetchAdjacent();
+        // Keyingi qism metama'lumoti va izohlar — video tayyor bo'lgach.
+        onVideoReady(prefetchAdjacent);
         renderHead();
         renderSide();
         mountPlayer();
-        return openComments();
+        onVideoReady(openComments);
+        return null;
       })
       .then(function () {
         // Blokni TUMASHTIRISH shart: `switchEpisode` birinchi qatorida
@@ -2724,6 +2746,87 @@
     });
   }
 
+  // ============================================== BIRINCHI KADR (READY) DARVOZASI
+  //
+  // Nima uchun: video ochilayotganda brauzerning tarmoq navbati FAQAT video
+  // uchun bo'lishi kerak. Izohlar, tavsiya posturlari va boshqa so'rovlar
+  // birinchi kadr (`playing`) chiqqandan keyin boshlanadi — aks holda ular
+  // video bilan raqobatlashib, ochilishni kechiktiradi.
+  //
+  // Xavfsizlik: 4 soniyalik zaxira taymer — video umuman ochilmasa (xato,
+  // ruxsat yo'q) panel "abadiy bo'sh" qolmaydi.
+  var vReady = false;
+  var vWaiters = [];
+  var vTimer = null;
+
+  function onVideoReady(fn) {
+    if (typeof fn !== 'function') return;
+    if (vReady) { try { fn(); } catch (e) {} return; }
+    vWaiters.push(fn);
+  }
+
+  function hydrateThumbs() {
+    try {
+      var imgs = document.querySelectorAll('img[data-lazy-src]');
+      for (var i = 0; i < imgs.length; i++) {
+        var u = imgs[i].getAttribute('data-lazy-src');
+        if (!u) continue;
+        imgs[i].removeAttribute('data-lazy-src');
+        imgs[i].src = u;
+      }
+    } catch (e) {}
+  }
+
+  function fireVideoReady() {
+    if (vReady) return;
+    vReady = true;
+    if (vTimer) { clearTimeout(vTimer); vTimer = null; }
+    // Birinchi kadr keldi — posterdagi spinner olib tashlanadi.
+    try {
+      var host = el('watchPlayer');
+      if (host) {
+        host.classList.remove('is-loading');
+        var ld = host.querySelector('.watch-load');
+        if (ld && ld.parentNode) ld.parentNode.removeChild(ld);
+      }
+    } catch (e) {}
+    var q = vWaiters;
+    vWaiters = [];
+    for (var i = 0; i < q.length; i++) {
+      try { q[i](); } catch (e) { /* bittasi xato bo'lsa qolgani davom etadi */ }
+    }
+    hydrateThumbs();
+  }
+
+  function armVideoReady() {
+    vReady = false;
+    if (vTimer) clearTimeout(vTimer);
+    vTimer = setTimeout(fireVideoReady, 4000);
+  }
+
+  function isPlayerVideo(n) {
+    var host = el('watchPlayer');
+    return !!(host && n && host.contains(n));
+  }
+
+  document.addEventListener('playing', function (e) {
+    if (e.target && e.target.tagName === 'VIDEO' && isPlayerVideo(e.target)) fireVideoReady();
+  }, true);
+  document.addEventListener('canplay', function (e) {
+    if (e.target && e.target.tagName === 'VIDEO' && isPlayerVideo(e.target)) fireVideoReady();
+  }, true);
+
+  // Bosish paytida poster + spinner DARHOL chiziladi (hech narsa kutilmaydi).
+  function showPlayerLoading(poster) {
+    var host = el('watchPlayer');
+    if (!host) return;
+    if (poster) {
+      var u = String(poster).replace(/\\/g, '/').replace(/"/g, '%22');
+      host.style.setProperty('--wposter', 'url("' + u + '")');
+    }
+    host.classList.add('is-loading');
+  }
+
   // ============================================================ ISHGA TUSHISH
   function boot() {
     // Agar progress allaqachon ma'lum bo'lsa (keyingi sahifaga o'tish),
@@ -2737,11 +2840,13 @@
     bindPMode();
     initEpFind();
     bindEpMobileUI();
-    initRecObserver();
+    // Birinchi kadr chiqquncha: tavsiyalar kuzatuvchisi va avatar so'rovi
+    // kutadi (tarmoq navbati faqat video uchun).
+    onVideoReady(initRecObserver);
     initComments();
     initRecChips();
     initCommentSort();
-    initComposerAvatar();
+    onVideoReady(initComposerAvatar);
 
     // Qism almashtirilganda skroll yuqoriga qaytadi.
     global.addEventListener('popstate', function () {
@@ -2757,9 +2862,10 @@
             if (d.episodes && d.episodes.length) S.episodes = d.episodes;
             S.epSeason = 0;
             S.selectedId = id;
-            prefetchAdjacent();
+            onVideoReady(prefetchAdjacent);
             renderHead(); renderSide(); mountPlayer();
-            return openComments();
+            onVideoReady(openComments);
+            return null;
           })
           .catch(function () {})
           .finally(function () { S.switching = false; });
