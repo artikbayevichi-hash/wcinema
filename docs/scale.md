@@ -18,7 +18,7 @@ qanday o'lchashni yozadi. Raqamlar lokal o'lchov (`tests/load/smoke.js`) va
 
 **Xulosa:** auditoriya o'sganda Telegram yo'li ishlatiladi. HLS — "Telegram
 ochilmadi" holati uchun zaxira, ommaviy tarqatish vositasi emas.
-Shuning uchun standart `HLS_MODE=fallback`.
+Shuning uchun standart `HLS_MODE=off` (HLS faqat oxirgi chora sifatida).
 
 ## 2. Serverda nima bor (qatlamlar)
 

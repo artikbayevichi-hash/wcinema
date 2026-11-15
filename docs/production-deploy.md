@@ -68,17 +68,18 @@ ni yangilang. **`.env` ni hech qachon git'ga qo'shmang** (`.gitignore` da bor).
 
 ```
 HLS_ENABLED=1
-HLS_MODE=fallback      # prefer | fallback | off
-HLS_FALLBACK_MS=8000   # Telegram 8 s ichida o'ynamasa — HLS tekshiriladi
+HLS_MODE=off           # prefer | fallback | off  (standart: off — faqat Telegram)
+HLS_FALLBACK_MS=8000   # faqat fallback rejimida: Telegram 8 s ichida o'ynamasa — HLS
 ```
 
-* `fallback` (standart) — Telegram darhol boshlanadi. 8 soniya ichida `playing`
-  hodisasi bo'lmasa yoki video `error` bersa, `api/hls.php?json=1` tekshiriladi va
-  tayyor bo'lsa HLS'ga o'tiladi. Keyin 5 s → 30 s oraliqda (orqaga chekinish)
-  qayta tekshiriladi.
+* `off` (standart) — HLS umuman ishlatilmaydi: hls.js ham yuklanmaydi,
+  `api/hls.php` so'ralmaydi, ffmpeg konvertatsiyasi boshlanmaydi. Video faqat
+  Telegram'dan oqadi. Telegram bo'lmasa HLS oxirgi chora sifatida qoladi.
+* `fallback` (vaqtinchalik sinov) — Telegram darhol boshlanadi. 8 soniya ichida
+  `playing` hodisasi bo'lmasa yoki video `error` bersa, `api/hls.php?json=1`
+  tekshiriladi va tayyor bo'lsa HLS'ga o'tiladi. Keyin 5 s → 30 s oraliqda
+  (orqaga chekinish) qayta tekshiriladi.
 * `prefer` — eski xatti-harakat (HLS tayyor bo'lsa darhol diskdan).
-* `off` — HLS umuman ishlatilmaydi (hls.js ham yuklanmaydi). Telegram bo'lmasa
-  HLS oxirgi chora sifatida qoladi.
 
 Kod: `assets/js/watch.js` → `raceHlsTelegram()`, `watch.php` →
 `window.__WC_HLS_MODE`.

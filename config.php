@@ -335,8 +335,8 @@ define('HLS_TTL',      max(3600, (int) env_value('HLS_TTL', '21600')));      // 
 //   fallback — Telegram darhol boshlanadi, u ishlamasa/o'ynab ketmasa HLS'ga o'tiladi;
 //   off      — HLS umuman ishlatilmaydi (Telegram bo'lmasa HLS baribir ishlaydi).
 define('HLS_MODE', (function () {
-    $m = strtolower(trim((string) env_value('HLS_MODE', 'fallback')));
-    return in_array($m, ['prefer', 'fallback', 'off'], true) ? $m : 'fallback';
+    $m = strtolower(trim((string) env_value('HLS_MODE', 'off')));   // Telegram orqali majburiy kirish: faqat Telegram oqimi
+    return in_array($m, ['prefer', 'fallback', 'off'], true) ? $m : 'off';
 })());
 // Fallback rejimida Telegram shuncha millisekund ichida o'ynamasa — HLS'ga o'tamiz.
 define('HLS_FALLBACK_MS', max(2000, (int) env_value('HLS_FALLBACK_MS', '8000')));

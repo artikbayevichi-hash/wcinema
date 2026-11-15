@@ -72,6 +72,8 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
 <script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/tg-phone-mask.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-phone-mask.js') ?: 1; ?>"></script>
 <script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/tg-login.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-login.js') ?: 1; ?>"></script>
+<!-- Server sessiyasi (HttpOnly `wc_cs`) — LoginGate aynan shuni tekshiradi. -->
+<script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/wc-session.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-session.js') ?: 1; ?>"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         var node = document.getElementById('tgLogin');
@@ -79,8 +81,13 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
         window.TgLogin.mount(node, {
             next: window.TG_LOGIN_NEXT || (window.APP.base + '/index.php'),
             onSuccess: function (to) {
-                // `to` — tekshirilgan nisbiy/absolyut yo'l. Yangi sahifaga o'tamiz.
-                location.replace(to || (window.APP.base + '/index.php'));
+                // Avval server sessiyasini olamiz, keyin sahifaga o'tamiz:
+                // cookie bo'lmasa LoginGate yana shu yerga qaytaradi.
+                var go = function () {
+                    location.replace(to || (window.APP.base + '/index.php'));
+                };
+                if (window.WcSession) window.WcSession.issue().then(go, go);
+                else go();
             }
         });
     });

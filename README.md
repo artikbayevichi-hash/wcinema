@@ -386,7 +386,29 @@ TG_TRUST_CLIENT_ID=1   # 1 = eski `tg_me` ham qabul (moslik), 0 = QAT'IY
 
 `TG_TRUST_CLIENT_ID=0` — production uchun tavsiya etiladi: u holda faqat
 imzolangan sessiya ishlaydi. Buning uchun login oqimi token olishi shart
-(`tg-stream.js` → `registerServerSession()`, yoki bot orqali `/start auth_…`).
+(`assets/js/wc-session.js`, yoki bot orqali `/start auth_…`).
+
+### Majburiy kirish (server tomonida) — 2026-11-15
+
+Ilgari kirish himoyasi **faqat brauzerda** edi (`localStorage` dagi `auth_key`
++ `nav.php` / `1stlogin.php` skriptlari), ya'ni `watch.php` yoki `index.php` ni
+to'g'ridan-to'g'ri ochib, uni chetlab o'tish mumkin edi. Endi darvoza serverda:
+
+| Qism | Vazifa |
+|---|---|
+| `includes/LoginGate.php` | `bootstrap.php` dan chaqiriladi; cookie bo'lmasa `1stlogin.php?next=…` ga 302 |
+| `assets/js/wc-session.js` | `wc_tg_me_v1` (TgStream profili) ni `tg_me` qilib yuborib cookie oladi — og'ir klient to'plami yuklanmaydi |
+| `1stlogin.php` | `auth_key` bo'lsa avval cookie, keyin `next` ga o'tadi (aks holda cheksiz aylanish bo'lardi) |
+| `tg-login.php` | `onSuccess` da avval cookie, keyin `next` |
+
+To'silmaydi: `1stlogin.php`, `tg-login.php`, `logout.php`, `login.php`,
+`check_login.php`, `mini-app-setup.php`, `bot.php`, `diag.php`, `tg-proof.php`,
+`admin*.php`, `api/*`, `cli/*`, `includes/*`.
+
+Cheklov: `TG_TRUST_CLIENT_ID=1` bo'lganda `tg_me` bilan boshqa odam nomidan
+kirish mumkin — bu bosqichda himoya "tasodifiy kirish"ni to'sadi, taqlidni
+(impersonation) emas. Yakuniy yechim: `TG_TRUST_CLIENT_ID=0` + initData.
+
 
 ## ⚡ Video tezligi
 

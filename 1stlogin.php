@@ -49,11 +49,20 @@ $siteName  = SITE_NAME;
                 document.documentElement.classList.add('tgl-day');
             }
         } catch (e) {}
-        // Allaqachon kirgan bo'lsa — to'g'ridan-to'g'ri `next`ga o'tamiz.
+    </script>
+    <script>window.WC_BASE = <?php echo json_encode($base); ?>;</script>
+    <script src="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/js/wc-session.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-session.js') ?: 1; ?>"></script>
+    <script>
+        // Allaqachon kirgan bo'lsak (auth_key bor) — avval SERVER sessiyasini
+        // (HttpOnly `wc_cs` cookie) olamiz, keyin `next`ga o'tamiz. Cookie
+        // bo'lmasa sahifalar qayta shu yerga qaytaradi (cheksiz aylanish),
+        // shuning uchun faqat muvaffaqiyatli javobdan keyin yo'naltiramiz.
         try {
             var _k = localStorage.getItem('wc_mtproto_auth_v1');
-            if (_k && _k.length > 20) {
-                location.replace(<?php echo json_encode($next); ?>);
+            if (_k && _k.length > 20 && window.WcSession) {
+                window.WcSession.issue().then(function (ok) {
+                    if (ok) location.replace(<?php echo json_encode($next); ?>);
+                });
             }
         } catch (e) {}
     </script>

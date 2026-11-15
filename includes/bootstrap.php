@@ -96,6 +96,17 @@ if (!defined('WC_SKIP_MAINTENANCE')) {
 }
 
 
+// ---------------------------------------------------------------------------
+// MAJBURIY TELEGRAM KIRISHI (server tomonida).
+//
+// Brauzerdagi guard (`auth_key` + `nav.php`) — faqat qulaylik: sahifani
+// to'g'ridan-to'g'ri ochib, uni chetlab o'tish mumkin edi. Haqiqiy darvoza
+// shu yerda: cookie (`wc_cs`) bo'lmasa — `1stlogin.php?next=...`.
+// Batafsil: includes/LoginGate.php.
+// ---------------------------------------------------------------------------
+require_once __DIR__ . '/LoginGate.php';
+LoginGate::enforce();
+
 /**
  * GET/POST parametrni toza olish (trim + uzunlik cheklovi).
  */
