@@ -118,6 +118,10 @@ manzilga almashtiradi. Muammo bo'lsa: `HLS_REMOTE_REDIRECT=0` (darhol qaytish).
 
 Avtomatik: `deploy/systemd/wc-hls-publish.{service,timer}` (har kuni 04:30).
 
+Videoning **bosh qismini** (2–5 MB) R2'ga oldindan yuklab, birinchi
+tomoshabinga tez boshlanish berish: `php cli/prefix-publish.php --manifest=...`
+va `p/<doc>` obyektlari — batafsil: [video-prep.md](video-prep.md).
+
 ## 6. Kesh va limitlar
 
 `.env`:
@@ -205,6 +209,8 @@ PHP fayl sessiyasi bir foydalanuvchining parallel so'rovlarini ketma-ket qiladi.
 * `cli/hls-watch.php` — bir vaqtda bitta worker (Telegram sessiya qulfi serial).
 * Tungi rejim (ixtiyoriy): `HLS_NIGHT_ONLY=1`, `HLS_NIGHT_FROM=1`, `HLS_NIGHT_TO=7`.
 * systemd: `Nice=19`, `CPUSchedulingPolicy=idle`, `CPUQuota=50%`.
+* Video tayyorlash (H.264/AAC, 2 s GOP, faststart): `php cli/video-prep.php --fix`
+  — rejimlar, `.env` va cron: [video-prep.md](video-prep.md).
 
 ## 10. Tekshirish
 

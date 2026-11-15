@@ -22,6 +22,7 @@
 // ============================================================================
 
 require_once __DIR__ . '/FastStart.php';
+require_once __DIR__ . '/VideoPrep.php';
 
 class TgPull {
 
@@ -506,17 +507,27 @@ class TgPull {
             return ['ok' => false, 'error' => 'Yuklangan fayl juda kichik yoki to\'liq emas — qayta urinib ko\'ring.'];
         }
 
-        // Import qilingan mahalliy MP4 birinchi stream so'rovidanoq
-        // progressiv o'ynashi uchun uni katalogga qaytarishdan oldin tayyorlaymiz.
-        $faststart = FastStart::optimizeInPlace($target);
+        // Import qilingan video birinchi stream so'rovidanoq progressiv
+        // o'ynashi uchun uni katalogga qaytarishdan oldin tayyorlaymiz:
+        // H.264/AAC, 2s kalit kadr, faststart, kerak bo'lsa MP4'ga remux.
+        $prep = VideoPrep::optimizeInPlace($target, ['to_mp4' => true]);
+        if ($prep['changed'] && is_file($prep['path'])) {
+            $target = $prep['path'];
+            $name = basename($target);
+            if (strtolower(pathinfo($target, PATHINFO_EXTENSION)) === 'mp4') {
+                $mime = 'video/mp4';
+            }
+        }
+        $faststart = !empty($prep['changed']);
 
         return [
             'ok' => true, 'already' => false, 'path' => 'uploads/videos/' . $name,
             'size' => (int) filesize($target), 'mime' => $mime, 'duration' => $duration,
             'file_name' => $fileName ?: $name,
             'faststart' => $faststart,
+            'prep' => $prep['action'],
             'message' => 'Video yuklab olindi: ' . $this->fmtSize((int) filesize($target))
-                . ($faststart ? ' (MP4 faststart tayyor)' : ''),
+                . ($faststart ? ' (' . $prep['action'] . ' tayyor)' : ''),
         ];
         } catch (\Throwable $e) {
             return ['ok' => false, 'error' => $this->friendly($e, 'Kutilmagan xato')];

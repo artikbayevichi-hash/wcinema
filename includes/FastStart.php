@@ -31,7 +31,7 @@ final class FastStart
             || !defined('FASTSTART_ENABLED') || !FASTSTART_ENABLED
             || !defined('FFMPEG_BIN') || trim((string) FFMPEG_BIN) === ''
             || !function_exists('proc_open')
-            || self::isFastStart($source)) {
+            || self::hasFastStart($source)) {
             return $result;
         }
 
@@ -117,8 +117,11 @@ final class FastStart
         }
     }
 
-    /** MP4 atomlarini o'qib, moov atom mdat'dan oldinligini tekshiradi. */
-    private static function isFastStart($path)
+    /**
+     * MP4 atomlarini o'qib, moov atom mdat'dan oldinligini tekshiradi.
+     * VideoPrep ham shu tekshiruvdan foydalanadi (faststart holati).
+     */
+    public static function hasFastStart($path)
     {
         $size = @filesize($path);
         $fp = @fopen($path, 'rb');

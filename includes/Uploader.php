@@ -25,6 +25,7 @@
 // ============================================================================
 
 require_once __DIR__ . '/FastStart.php';
+require_once __DIR__ . '/VideoPrep.php';
 
 class Uploader
 {
@@ -511,9 +512,10 @@ class Uploader
         $description = self::cleanText($opts['description'] ?? '', 500) ?: null;
         $caption = $title . ($description ? "\n\n" . $description : '');
 
-        // Telegram'ga jo'natishdan oldin MP4'ni faststart qilamiz; FFmpeg
-        // mavjud bo'lmasa helper asl upload yo'lini qaytaradi.
-        $prepared = FastStart::prepare($file['tmp_name'], $file['name']);
+        // Telegram'ga jo'natishdan oldin videoni strimingga tayyorlaymiz:
+        // faststart (moov boshida), kerak bo'lsa MP4'ga remux yoki kichik
+        // fayllarni H.264/AAC'ga keltiramiz. Xatoda asl upload qoladi.
+        $prepared = VideoPrep::prepare($file['tmp_name'], $file['name'], ['web' => true]);
         $sendPath = $prepared['path'];
         $sendName = $prepared['name'];
         $ext  = strtolower(pathinfo((string) $sendName, PATHINFO_EXTENSION));
@@ -533,7 +535,7 @@ class Uploader
                 ]);
             }
         } finally {
-            FastStart::cleanup($prepared);
+            VideoPrep::cleanup($prepared);
             // Staging fayli bo'lsa o'chirilmaydi — xato yuz berganida
             // foydalanuvchi "Qayta yuborish" tanlay olsin (staging papkasi
             // muddati tugagach tozalanadi).

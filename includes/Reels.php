@@ -29,6 +29,7 @@ require_once __DIR__ . '/Notifications.php';
 require_once __DIR__ . '/Alerts.php';
 require_once __DIR__ . '/Blocks.php';
 require_once __DIR__ . '/FastStart.php';
+require_once __DIR__ . '/VideoPrep.php';
 
 class Reels {
 
@@ -607,9 +608,9 @@ class Reels {
             $caption .= "\n\n" . $description;
         }
 
-        // MP4 bo'lsa, Telegram'ga jo'natishdan oldin moov atomini boshiga
-        // ko'chiramiz. FFmpeg bo'lmasa asl upload o'zgarishsiz yuboriladi.
-        $prepared = FastStart::prepare($file['tmp_name'], $file['name']);
+        // Videoni Telegram'ga jo'natishdan oldin strimingga tayyorlaymiz:
+        // H.264/AAC, faststart, kerak bo'lsa MP4 konteyner.
+        $prepared = VideoPrep::prepare($file['tmp_name'], $file['name'], ['web' => true]);
         $sendPath = $prepared['path'];
         $sendName = $prepared['name'];
         $ext  = strtolower(pathinfo((string) $sendName, PATHINFO_EXTENSION));
@@ -633,7 +634,7 @@ class Reels {
                 ]);
             }
         } finally {
-            FastStart::cleanup($prepared);
+            VideoPrep::cleanup($prepared);
             @unlink($file['tmp_name']);
         }
 

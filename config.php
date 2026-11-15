@@ -309,6 +309,22 @@ define('FASTSTART_ENABLED', in_array(
     ['1', 'true', 'yes', 'on'],
     true
 ));
+
+// ---------------------------------------------------------------------------
+// Video tayyorlash (includes/VideoPrep.php) — H.264 + AAC, 2s kalit kadr
+// ---------------------------------------------------------------------------
+// VIDEO_PREP: off | faststart | remux | normalize | auto
+//   auto — CLI'da normalize (to'liq transcode), web'da faststart (tez, xavfsiz).
+// Eslatma: katta fayllarni `php cli/video-prep.php --fix` bilan tunda tuzating.
+define('VIDEO_PREP', strtolower(trim((string) env_value('VIDEO_PREP', 'auto'))));
+define('FFPROBE_BIN', trim((string) env_value('FFPROBE_BIN', 'ffprobe')));       // tekshiruv uchun
+define('VIDEO_PREP_HEIGHT',  max(240, (int) env_value('VIDEO_PREP_HEIGHT', '1080')));   // maksimal balandlik
+define('VIDEO_PREP_BITRATE', max(400, (int) env_value('VIDEO_PREP_BITRATE', '2800')));  // kbps (maxrate)
+define('VIDEO_PREP_GOP_SEC', max(1, (float) env_value('VIDEO_PREP_GOP_SEC', '2')));     // kalit kadr oralig'i
+define('VIDEO_PREP_WEB_MAX_MB', max(1, (int) env_value('VIDEO_PREP_WEB_MAX_MB', '150')));  // web'da transcode chegarasi
+define('VIDEO_PREP_WEB_MAX_SEC', max(10, (int) env_value('VIDEO_PREP_WEB_MAX_SEC', '1800')));
+define('VIDEO_PREP_TIMEOUT', max(30, (int) env_value('VIDEO_PREP_TIMEOUT', '240')));    // web transcode timeout (s)
+
 define('HLS_SEG_SEC', max(2, (int) env_value('HLS_SEG_SEC', '10')));         // segment uzunligi (soniya)
 define('HLS_CACHE_DIR', __DIR__ . '/storage/hls_cache');                        // HLS keshi (web'dan yopiq)
 define('HLS_MAX_MB',   max(256, (int) env_value('HLS_MAX_MB', '15000')));    // HLS disk kvotasi (MB)

@@ -74,6 +74,18 @@ class S3Client
         return $this->prefix !== '' ? $this->prefix . '/' . $name : $name;
     }
 
+    /**
+     * Xuddi shu sozlamalar bilan boshqa prefiksli nusxa.
+     * R2 videoning bosh qismi (`p/<doc>`) bucket ildizida turadi, HLS esa
+     * `hls/` ostida — shuning uchun bitta klientdan ikkalasi kerak bo'ladi.
+     */
+    public function withPrefix(string $prefix): self
+    {
+        $clone = clone $this;
+        $clone->prefix = trim($prefix, '/');
+        return $clone;
+    }
+
     /** Ochiq URL (S3_PUBLIC_BASE bo'lmasa — endpoint ko'rinishi). */
     public function publicUrl(string $name): string
     {

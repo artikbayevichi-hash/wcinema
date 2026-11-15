@@ -49,9 +49,12 @@ $r2Prefix  = max(1024 * 1024, min(8 * 1024 * 1024, $r2Prefix));
 $r2Prefix -= $r2Prefix % 4096;              // Telegram blok tekisligi
 
 // O'qish uchun baza: custom domain bo'lsa — u (Workers limitini tejaydi),
-// aks holda Worker'ning o'zi.
+// aks holda Worker'ning o'zi. O'qish (GET) uchun imzo SHART EMAS — prefiks
+// ochiq obyekt; imzo faqat yozish (PUT) uchun kerak. Shu sababli oldindan
+// yuklangan prefikslar faqat R2_PUBLIC_BASE bilan ham ishlaydi.
 $r2ReadBase = $r2Public !== '' ? $r2Public : $r2Worker;
-$r2Ready    = $r2Enabled && $r2ReadBase !== '' && $r2Secret !== '';
+$r2Read  = $r2Enabled && $r2ReadBase !== '';
+$r2Write = $r2Read && $r2Worker !== '' && $r2Secret !== '';
 
 /** Imzo: HMAC-SHA256(secret, "PUT\n/p/<doc>\n<exp>") — Worker bilan bir xil. */
 function r2_sign($secret, $doc, $exp)
@@ -124,7 +127,8 @@ if (isset($_GET['stats'])) {
         $sum += (int) ($j['n'] ?? 0);
     }
     ok([
-        'enabled'       => $r2Ready,
+        'enabled'       => $r2Read,
+        'write'         => $r2Write,
         'read_base'     => $r2ReadBase,
         'write_base'    => $r2Worker,
         'prefix_bytes'  => $r2Prefix,
@@ -140,10 +144,10 @@ if (isset($_GET['stats'])) {
 if (isset($_GET['info'])) {
     header('Cache-Control: public, max-age=300');
     ok([
-        'enabled' => $r2Ready,
+        'enabled' => $r2Read,
         'base'    => $r2ReadBase,
-        'prefix'  => $r2Ready ? $r2Prefix : 0,
-        'put'     => $r2Ready && $r2Worker !== '',
+        'prefix'  => $r2Read ? $r2Prefix : 0,
+        'put'     => $r2Write,
         'ttl'     => 900,
         'min'     => 4096,
     ]);
@@ -155,8 +159,8 @@ if ($doc <= 0) {
     fail('doc kerak', 400);
 }
 
-if (!$r2Ready || $r2Worker === '') {
-    ok(['enabled' => false, 'reason' => 'R2 sozlanmagan']);
+if (!$r2Write) {
+    ok(['enabled' => false, 'reason' => 'R2 yozish sozlanmagan']);
 }
 
 // Yozish uchun login talab qilinadi (R2_PUT_AUTH=1 bo'lsa).
