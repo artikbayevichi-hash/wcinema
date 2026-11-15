@@ -118,9 +118,12 @@ manzilga almashtiradi. Muammo bo'lsa: `HLS_REMOTE_REDIRECT=0` (darhol qaytish).
 
 Avtomatik: `deploy/systemd/wc-hls-publish.{service,timer}` (har kuni 04:30).
 
-Videoning **bosh qismini** (2–5 MB) R2'ga oldindan yuklab, birinchi
+Videoning **bosh qismini** (2–4 MB) R2'ga oldindan yuklab, birinchi
 tomoshabinga tez boshlanish berish: `php cli/prefix-publish.php --manifest=...`
 va `p/<doc>` obyektlari — batafsil: [video-prep.md](video-prep.md).
+Service Worker shu prefiksni `Range` so'rovlarida CDN'dan beradi (sozlama
+sahifa tomonidan oldindan uzatiladi), prefiks tugagach oqim Telegram'dan
+davom etadi — pleer uchun bu bitta va aynan o'sha fayl.
 
 ## 6. Kesh va limitlar
 

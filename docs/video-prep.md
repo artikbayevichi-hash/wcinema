@@ -105,9 +105,25 @@ C:\xampp\php\php.exe C:\xampp\htdocs\tele_uzdub\cli\video-prep.php --fix --quiet
 ## Videoning boshini R2'ga oldindan yuklash (`p/<doc>`)
 
 Service Worker pleyer avval `https://<R2 domen>/p/<doc>` dan videoning birinchi
-2–5 MB'ini oladi (tez boshlanish), qolganini Telegram'dan. Ilgari bu obyekt
+2–4 MB'ini oladi (tez boshlanish), qolganini Telegram'dan. Ilgari bu obyekt
 faqat birinchi tomoshabin kelganda yozilardi. `cli/prefix-publish.php` uni
 **oldindan** tayyorlaydi — birinchi tomoshabin ham tez ochadi.
+
+Obyekt — asl faylning **baytma-bayt** boshi (qayta kodlanmaydi), uzunligi
+`R2_PREFIX_BYTES` va har doim 4096 ga karrali. Shu sababli Telegram davomi
+aynan shu chegaradan boshlanadi va pleyer uchun bu bitta fayl bo'lib qoladi.
+
+### Service Worker qanday xizmat qiladi
+
+| Qadam | Xatti-harakat |
+|---|---|
+| Sahifa yuklandi | `init()` → `api/r2-sign.php?info=1` bir marta olinadi va SW'ga `r2info` xabari bilan uzatiladi |
+| Video so'rovi | SW sozlamani **kutmaydi**: tayyor bo'lsa darhol, bo'lmasa ko'pi 700 ms |
+| `Range` prefiks ichida | javob CDN'dan (`X-WC-R2: 1`), Telegram'ga murojaat yo'q |
+| `Range` prefiksdan narida | Telegram'dan (avvalgidek) |
+| Prefiks yo'q (404) | o'sha hujjat uchun 5 daqiqa eslab qolinadi — har seek'da CDN so'ralmaydi |
+| R2 javob bermadi | 30–60 s tanaffus (circuit breaker), oqim Telegram'dan davom etadi |
+| `put:false` | faqat o'qish — oldindan yuklangan prefikslar baribir ishlaydi |
 
 Doc id — `api/tg-doc.php?url=<t.me/...>` javobidagi `id`.
 
@@ -134,7 +150,7 @@ Manifest (JSON) — ikki ko'rinish:
 
 Sozlamalar (`.env`): `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`,
 `S3_SECRET_KEY`, `R2_PUBLIC_BASE` (tekshiruv uchun), `R2_PREFIX_BYTES`
-(standart `5242880`; 1–8 MB, 4096 ga karrali).
+(standart `4194304` = 4 MB; 1–8 MB, 4096 ga karrali).
 
 Obyekt **bucket ildizida** yotadi (`p/<doc>`), HLS esa `S3_PREFIX=hls` ostida —
 shuning uchun CLI `S3Client::withPrefix('')` bilan yozadi.
@@ -148,7 +164,7 @@ o'zgarmasa, obyekt qayta yuklanmaydi.
 
 ```json
 { "success": true, "enabled": true, "base": "https://cdn-r2.example.uz",
-  "prefix": 5242880, "put": true, "ttl": 900, "min": 4096 }
+  "prefix": 4194304, "put": true, "ttl": 900, "min": 4096 }
 ```
 
 | Maydon | Ma'nosi |

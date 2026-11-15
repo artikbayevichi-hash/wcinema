@@ -6,7 +6,7 @@ o'zgarishlarni va ularni **qanday yoqish**ni tushuntiradi.
 Asosiy g'oya: video baytlari sayt serveridan o'tmaydi. Ular ikki manbadan
 keladi:
 
-1. **Cloudflare R2** — har bir videoning faqat birinchi ~5 MB i (prefiks).
+1. **Cloudflare R2** — har bir videoning faqat birinchi 2–4 MB i (prefiks).
 2. **Telegram (MTProto)** — qolgan baytlar, avvalgidek.
 
 Brauzerda esa **Service Worker** (`tg-cdn-worker.js`) ishlaydi: u
@@ -67,7 +67,7 @@ caches.delete('wctg-chunks-v1')
 ## 3. R2 prefiks keshini yoqish (5 qadam)
 
 R2 bepul tarifi: **10 GB saqlash**, **10 mln Class B (o'qish) oyiga**,
-**chiqish trafigi bepul**. 5 MB × 500 video ≈ 2.5 GB — bemalol sig'adi.
+**chiqish trafigi bepul**. 4 MB × 500 video ≈ 2 GB — bemalol sig'adi.
 
 ### 3.1. Cloudflare akkaunt va bucket
 
@@ -134,7 +134,7 @@ R2_ENABLED=1
 R2_WORKER_URL=https://wc-prefix.<account>.workers.dev
 R2_PUBLIC_BASE=https://cdn-r2.saytingiz.uz
 R2_SIGN_SECRET=<3.2 qadamda yaratgan satr>
-R2_PREFIX_BYTES=5242880
+R2_PREFIX_BYTES=4194304
 R2_PUT_AUTH=1
 R2_IP_DAY=20
 R2_GLOBAL_DAY=2000
@@ -166,14 +166,14 @@ Kutilgan javob (2-qadam):
 
 ```json
 {"success":true,"enabled":true,"base":"https://cdn-r2.saytingiz.uz",
- "prefix":5242880,"put":true,"ttl":900,"min":4096}
+ "prefix":4194304,"put":true,"ttl":900,"min":4096}
 ```
 
 Keyin videoni oching. Konsolda:
 
 ```
-⚡ R2 prefiks 5.0 MB — Telegram kutishisiz
-⬆ R2 prefiks saqlandi (5.0 MB)     ← Wi-Fi'da, login qilganda
+⚡ R2 prefiks 4.0 MB — Telegram kutishisiz
+⬆ R2 prefiks saqlandi (4.0 MB)     ← Wi-Fi'da, login qilganda
 ```
 
 Birinchi foydalanuvchi prefiksni **Telegram'dan o'qib, R2 ga yozadi**
@@ -190,7 +190,7 @@ video ochiladi
   │
   ├─ Range: bytes=0- ───────────────► SW:
   │     1) disk keshda bormi? ───────► bor: 0 ms
-  │     2) R2 prefiks (5 MB) ────────► ~20–60 ms (edge)
+  │     2) R2 prefiks (4 MB) ────────► ~20–60 ms (edge)
   │     3) Telegram MTProto ─────────► ~100–600 ms (DC)
   │
   └─ Seek / oldinga ────────────────► 20 MB read-ahead allaqachon tayyor
@@ -205,7 +205,7 @@ almashtirmaydi, `Range`/`206` mantiqi buzilmaydi va sifat pasaymaydi.
 
 | Narsa | Qiymat | Izoh |
 |---|---|---|
-| Prefiks | 5 MB | `R2_PREFIX_BYTES`, 4096 ga karrali bo'lishi shart |
+| Prefiks | 4 MB | `R2_PREFIX_BYTES`, 4096 ga karrali bo'lishi shart |
 | Disk kesh | 400 MB / 4096 kalit / 24 soat | `CACHE_MAX`, `CACHE_MAX_KEYS`, `CACHE_TTL` |
 | Read-ahead | 20 MB | `READAHEAD_BYTES` |
 | Telegram so'rov | 512 KB | 1 MB blok chegarasini kesib o'tmaydi |
@@ -231,7 +231,7 @@ Telegram davomi shu chegaradan boshlanadi; aks holda `LIMIT_INVALID`.
 **`LIMIT_INVALID` xatosi**
 
 `R2_PREFIX_BYTES` 4096 ga karrali emas yoki Telegram bloki kesilgan.
-`R2_PREFIX_BYTES=5242880` (5 × 1024 × 1024) dan foydalaning.
+`R2_PREFIX_BYTES=4194304` (4 × 1024 × 1024) dan foydalaning.
 
 **Prefiks yuklanmayapti (`⬆` chiqmaydi)**
 
@@ -264,12 +264,12 @@ Kod tomoni tayyor, lekin **hosting** hali ham to'siq:
    — bu vaqtinchalik tunnel, million foydalanuvchiga chidamaydi.
 2. Domenni **Cloudflare** (bepul plan) orqasiga qo'ying: HTML/CSS/JS va
    `api/*.php` edge'da keshlanadi, TLS bepul.
-3. R2 prefiksni yoqing (3-bo'lim) — birinchi 5 MB butun dunyo edge'idan
+3. R2 prefiksni yoqing (3-bo'lim) — birinchi 4 MB butun dunyo edge'idan
    keladi, Telegram faqat "sovuq" qolgan qism uchun ishlatiladi.
 4. Disk kesh tufayli **qayta ko'rishlar umuman serverga bormaydi** —
    bu eng katta tejamkorlik.
 
-Ya'ni: R2 — birinchi 5 MB uchun, Cloudflare edge — HTML/API uchun,
+Ya'ni: R2 — birinchi 4 MB uchun, Cloudflare edge — HTML/API uchun,
 Telegram — qolgan baytlar uchun, brauzer keshi — qayta ko'rishlar uchun.
 Server (PHP/MySQL) video baytlarini **hech qachon** ko'rmaydi.
 

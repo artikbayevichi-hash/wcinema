@@ -916,6 +916,13 @@ let R2_INFO_P = null;                // parallel so'rovni birlashtirish
 let R2_DEAD_UNTIL = 0;               // shu vaqtgacha R2 ga murojaat yo'q
 let SEED_OK = false;                 // sahifa "yuklash mumkin" dedi (Wi-Fi)
 const R2_INFO_TTL = 5 * 60 * 1000;
+// Birinchi baytni `api/r2-sign.php` javobiga qarab KUTDIRMAYMIZ. Sahifa
+// sozlamani oldindan yuborsa (odatiy hol) bu kutish umuman bo'lmaydi.
+const R2_INFO_WAIT = 700;            // ms — info kelmasa Telegram darhol boshlanadi
+// Prefiksi yo'q hujjatlar uchun 5 daqiqa CDN'ga qayta murojaat qilmaymiz:
+// aks holda har seek'da 404 olib, foydasiz RTT qo'shilardi.
+const R2_MISS = new Map();           // doc -> vaqtgacha (ms)
+const R2_MISS_TTL = 5 * 60 * 1000;
 
 function r2ApiUrl(qs) {
   try {
@@ -923,6 +930,50 @@ function r2ApiUrl(qs) {
   } catch (e) {
     return '';
   }
+}
+
+function r2Missed(doc) {
+  const until = R2_MISS.get(String(doc)) || 0;
+  return until > Date.now();
+}
+
+function r2MarkMiss(doc) {
+  R2_MISS.set(String(doc), Date.now() + R2_MISS_TTL);
+  if (R2_MISS.size > 512) {                    // xotira chegarasi
+    const now = Date.now();
+    R2_MISS.forEach(function (v, k) { if (v <= now) R2_MISS.delete(k); });
+  }
+}
+
+// Server javobini tekshirib, ichki ko'rinishga keltiradi (yaroqsiz — null).
+function r2Normalize(j) {
+  if (!j || typeof j !== 'object') return null;
+  if (!j.enabled) return { enabled: false, base: '', prefix: 0, put: false };
+  if (!j.base) return null;
+  let base;
+  try {
+    const u = new URL(String(j.base), self.location.origin);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    base = u.toString().replace(/\/+$/, '');
+  } catch (e) {
+    return null;
+  }
+  return {
+    enabled: true,
+    base: base,
+    prefix: Math.max(0, Math.floor(Number(j.prefix) || 0)),
+    put: !!j.put
+  };
+}
+
+// Sahifa yuborgan sozlama (`{type:'r2info'}`) — birinchi bayt yo'lidagi
+// `api/r2-sign.php?info=1` so'rovini yo'q qiladi.
+function r2AcceptInfo(j) {
+  const info = r2Normalize(j);
+  if (!info) return false;
+  R2_INFO = info;
+  R2_INFO_AT = Date.now();
+  return true;
 }
 
 // Server sozlamasini bir marta so'rab, 5 daqiqa eslab qolamiz.
@@ -949,14 +1000,7 @@ function r2Info(force) {
       clearTimeout(timer);
       if (res.ok) {
         const j = await res.json();
-        if (j && j.enabled && j.base) {
-          info = {
-            enabled: true,
-            base: String(j.base).replace(/\/+$/, ''),
-            prefix: Math.max(0, Number(j.prefix) || 0),
-            put: !!j.put
-          };
-        }
+        info = r2Normalize(j) || { enabled: false };
       }
     } catch (e) {
       info = { enabled: false };
@@ -970,6 +1014,32 @@ function r2Info(force) {
   return R2_INFO_P;
 }
 
+// Keshda bo'lsa — darhol; bo'lmasa ko'pi `ms` kutamiz (null = noma'lum).
+// `null` bo'lsa bu safar R2 chetlab o'tiladi, lekin so'rov fonda davom
+// etadi va keyingi Range so'rovlari R2 dan xizmat qilinadi.
+function r2InfoSoon(ms) {
+  if (R2_INFO) return Promise.resolve(R2_INFO);
+  return new Promise(function (resolve) {
+    let done = false;
+    const t = setTimeout(function () {
+      if (done) return;
+      done = true;
+      resolve(null);
+    }, Math.max(0, Number(ms) || 0));
+    r2Info(false).then(function (info) {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      resolve(info || null);
+    }, function () {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      resolve(null);
+    });
+  });
+}
+
 function r2ObjUrl(info, doc) {
   return info.base + '/p/' + encodeURIComponent(String(doc));
 }
@@ -977,14 +1047,17 @@ function r2ObjUrl(info, doc) {
 // R2 dan prefiksni OQIB, `push` orqali navbatga beradi.
 // Qaytaradi: nechta bayt berildi (4096 ga karrali, 0 = R2 ishlamadi).
 //
-// Diqqat: bu yerda to'liq 5 MB kutib turmaymiz — birinchi bo'lak kelishi
+// Diqqat: bu yerda to'liq prefiks kutib turmaymiz — birinchi bo'lak kelishi
 // bilan navbatga qo'yiladi. Shu sababli birinchi kadr juda tez chiqadi.
-async function r2PrefixInto(doc, size, push) {
+//
+// `known` — yuqorida olingan R2 sozlamasi (bo'lsa qayta so'ramaymiz).
+async function r2PrefixInto(doc, size, push, known) {
   if (!doc || size < 2 * 1024 * 1024) return 0;
   if (Date.now() < R2_DEAD_UNTIL) return 0;
+  if (r2Missed(doc)) return 0;
 
-  const info = await r2Info(false);
-  if (!info.enabled || !info.prefix) return 0;
+  const info = known || await r2InfoSoon(R2_INFO_WAIT);
+  if (!info || !info.enabled || !info.prefix) return 0;
 
   const target = Math.min(info.prefix, size) - (Math.min(info.prefix, size) % 4096);
   if (target < 4096) return 0;
@@ -994,6 +1067,7 @@ async function r2PrefixInto(doc, size, push) {
   let got = 0;
   let pending = new Uint8Array(0);
   let stopped = false;
+  let missing = false;
 
   function feed(u8) {
     if (stopped || !u8 || !u8.length) return;
@@ -1021,10 +1095,13 @@ async function r2PrefixInto(doc, size, push) {
       cache: 'force-cache',
       signal: ctrl.signal
     });
+    if (res.status === 404) { missing = true; throw new Error('HTTP 404'); }
     if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
 
+    // Obyekt fayldan katta bo'lishi mumkin emas. Kichikroq bo'lsa (masalan
+    // `R2_PREFIX_BYTES` keyin kamaytirilgan) — shuncha baytni olamiz.
     const len = Number(res.headers.get('Content-Length')) || 0;
-    if (len && (len > size || len > info.prefix + 4096)) {
+    if (len && len > size) {
       throw new Error('prefiks hajmi mos emas');
     }
 
@@ -1040,7 +1117,10 @@ async function r2PrefixInto(doc, size, push) {
     try { await reader.cancel(); } catch (e) { /* allaqachon yopilgan */ }
   } catch (e) {
     clearTimeout(timer);
-    if (got === 0) {
+    if (missing) {
+      // Bu hujjat uchun prefiks yuklanmagan — 5 daqiqa qayta so'ramaymiz.
+      r2MarkMiss(doc);
+    } else if (got === 0) {
       // R2 umuman ishlamadi — bir daqiqa bezovta qilmaymiz.
       R2_DEAD_UNTIL = Date.now() + 60000;
       return 0;
@@ -1055,17 +1135,20 @@ async function r2PrefixInto(doc, size, push) {
 async function r2Range(doc, start, end, size) {
   if (!doc) return null;
   if (Date.now() < R2_DEAD_UNTIL) return null;
+  if (r2Missed(doc)) return null;
 
-  const info = await r2Info(false);
-  if (!info.enabled || !info.prefix) return null;
+  // Range so'rovi birinchi baytni bloklaydi — 500 ms dan ortiq kutmaymiz.
+  const info = await r2InfoSoon(500);
+  if (!info || !info.enabled || !info.prefix) return null;
   if (start >= info.prefix || start >= size) return null;
 
-  const last = Math.min(end, size - 1);
+  // Prefiks obyektidan nariga so'ramaymiz: qolgani Telegram'dan keladi.
+  const last = Math.min(end, info.prefix - 1, size - 1);
   if (last < start) return null;
 
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(function () { ctrl.abort(); }, 2500);
+    const timer = setTimeout(function () { ctrl.abort(); }, 1200);
     const res = await fetch(r2ObjUrl(info, doc), {
       mode: 'cors',
       credentials: 'omit',
@@ -1074,12 +1157,16 @@ async function r2Range(doc, start, end, size) {
       signal: ctrl.signal
     });
     clearTimeout(timer);
+    if (res.status === 404) { r2MarkMiss(doc); return null; }
+    if (res.status === 416) return null;          // prefiks tugadi — Telegram
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
     const u8 = new Uint8Array(buf);
     if (!u8.length) return null;
     return u8;
   } catch (e) {
+    // Tarmoq xatosi / kutish tugadi — 30 soniya R2 ni chetlab o'tamiz.
+    R2_DEAD_UNTIL = Date.now() + 30000;
     return null;
   }
 }
@@ -1210,6 +1297,16 @@ self.addEventListener('message', (e) => {
   // `saveData` yo'qligini biladi — shunda `ok:true` yuboradi.
   if (d.type === 'seed') {
     SEED_OK = !!d.ok;
+    return;
+  }
+
+  // --- Sahifa R2 sozlamasini oldindan yubordi -------------------------
+  //
+  // Nima uchun: birinchi video so'rovi `api/r2-sign.php?info=1` javobini
+  // KUTMASLIGI kerak. Sahifa o'zi (pleer ulanishidan ancha oldin) shu
+  // JSON'ni bir marta olib, shu yerga uzatadi — SW keshida darhol tayyor.
+  if (d.type === 'r2info') {
+    r2AcceptInfo(d.info);
     return;
   }
 
@@ -1805,11 +1902,10 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
       // Bu eng katta yutuq: birinchi bayt Telegram DC dan emas, Cloudflare
       // edge'dan keladi. R2 ishlamasa — pastdagi eski yo'l o'zgarishsiz.
       if (docId) {
-        const info = await r2Info(false);
+        // Sahifa sozlamani oldindan yuborgan bo'lsa — kutish YO'Q.
+        const info = await r2InfoSoon(R2_INFO_WAIT);
         if (info && info.enabled && info.prefix) {
           seedTarget = (info.put && size > info.prefix) ? Math.min(info.prefix, size) : 0;
-        }
-        if (info && info.enabled) {
           usedR2 = await r2PrefixInto(docId, size, function (u8) {
             // R2 dan kelgan birinchi bo'laklarda ham `esds` tuzatiladi
             // (faststart MP4'da `moov` fayl boshida bo'ladi).
@@ -1819,7 +1915,7 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
             queue.push(part);
             addHead(part);
             notify();
-          });
+          }, info);
         }
       }
 

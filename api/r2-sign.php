@@ -19,7 +19,7 @@
 //   R2_WORKER_URL=https://wc-prefix.<account>.workers.dev   (PUT uchun SHART)
 //   R2_PUBLIC_BASE=https://cdn-r2.saytingiz.uz              (ixtiyoriy, tezroq)
 //   R2_SIGN_SECRET=<uzun tasodifiy satr>                    (Worker bilan bir xil)
-//   R2_PREFIX_BYTES=5242880                                 (5 MB)
+//   R2_PREFIX_BYTES=4194304                                 (4 MB)
 //   R2_PUT_AUTH=1                                           (yozish uchun login)
 //   R2_IP_DAY=20        R2_GLOBAL_DAY=2000                  (kunlik limitlar)
 //
@@ -40,7 +40,7 @@ $r2Worker   = rtrim(r2_env('R2_WORKER_URL'), '/');
 $r2Public   = rtrim(r2_env('R2_PUBLIC_BASE'), '/');
 $r2Secret   = r2_env('R2_SIGN_SECRET');
 $r2Enabled  = filter_var(r2_env('R2_ENABLED', '0'), FILTER_VALIDATE_BOOLEAN);
-$r2Prefix   = (int) r2_env('R2_PREFIX_BYTES', '5242880');
+$r2Prefix   = (int) r2_env('R2_PREFIX_BYTES', '4194304');
 $r2PutAuth  = filter_var(r2_env('R2_PUT_AUTH', '1'), FILTER_VALIDATE_BOOLEAN);
 $r2IpDay    = max(1, (int) r2_env('R2_IP_DAY', '20'));
 $r2AllDay   = max(1, (int) r2_env('R2_GLOBAL_DAY', '2000'));

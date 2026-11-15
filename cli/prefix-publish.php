@@ -28,7 +28,7 @@ if (PHP_SAPI !== 'cli') {
 //
 // .env: S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY
 //       R2_PUBLIC_BASE (yoki S3_PUBLIC_BASE) — tekshirish uchun
-//       R2_PREFIX_BYTES (standart 5242880)
+//       R2_PREFIX_BYTES (standart 4194304)
 //
 // Reestr: storage/cache/r2-prefix-published.json (qayta yuklashning oldini oladi).
 // ============================================================================
@@ -45,7 +45,7 @@ $opt = [
     'doc' => '',
     'file' => '',
     'manifest' => '',
-    'prefix' => (int) env_value('R2_PREFIX_BYTES', '5242880'),
+    'prefix' => (int) env_value('R2_PREFIX_BYTES', '4194304'),
     'dry' => false,
     'force' => false,
     'verify' => false,

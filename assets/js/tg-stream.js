@@ -1810,6 +1810,49 @@
     } catch (e) { return false; }
   }
 
+  // ============================== R2 PREFIKS SOZLAMASI (oldindan)
+  //
+  // Nima uchun: SW birinchi baytni berishdan oldin `api/r2-sign.php?info=1`
+  // javobini kutmasligi kerak. Sahifa bu kichik JSON'ni pleer ulanishidan
+  // ANCHA oldin (init() da) olib, SW'ga uzatadi — SW keshida darhol tayyor
+  // bo'ladi. Javob 5 daqiqa keshlanadi, ya'ni qo'shimcha yuk deyarli yo'q.
+  var R2_CFG = null, R2_CFG_P = null;
+
+  function r2CfgFetch() {
+    if (R2_CFG) return Promise.resolve(R2_CFG);
+    if (R2_CFG_P) return R2_CFG_P;
+    R2_CFG_P = fetch('api/r2-sign.php?info=1', {
+      credentials: 'same-origin',
+      cache: 'default'
+    }).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (j) {
+      if (j && typeof j === 'object') R2_CFG = j;     // `enabled:false` ham muhim
+      return R2_CFG;
+    }).catch(function () { return null; });
+    return R2_CFG_P;
+  }
+
+  // SW'ga sozlamani uzatamiz. Controller hali yo'q bo'lsa — `false`;
+  // u holda `connect()` (pleer ulanishi) paytida qayta yuboriladi.
+  function pushR2Cfg() {
+    return r2CfgFetch().then(function (j) {
+      if (!j) return false;
+      var ctl = swCtl();
+      if (!ctl) return false;
+      try { ctl.postMessage({ type: 'r2info', info: j }); } catch (e) { return false; }
+      return true;
+    }).catch(function () { return false; });
+  }
+
+  function warmR2Cfg() {
+    try {
+      r2CfgFetch();                 // HTTP keshni oldindan isitamiz
+      if (!('serviceWorker' in navigator)) return;
+      pushR2Cfg();
+    } catch (e) { /* ixtiyoriy tezlashtirish */ }
+  }
+
   function connect() {
     var ctl = swCtl();
     if (!ctl) return false;
@@ -1821,6 +1864,8 @@
       ctl.postMessage({ type: 'provide', size: S.size }, [S.chan.port2]);
       // SW R2 keshini to'ldirishi uchun ruxsat (faqat Wi-Fi/ethernet).
       try { ctl.postMessage({ type: 'seed', ok: canSeed() }); } catch (e) {}
+      // R2 prefiks sozlamasi — SW birinchi baytni kutmasligi uchun.
+      pushR2Cfg();
       // MP4 indeksini (moov) DARHOL oldindan yuklashni boshlaymiz. Shu
       // tufayli brauzer indeksni so'raganda u allaqachon keshda bo'ladi.
       // SW endi avval bosh baytlardan indeksning ANIQ o'rnini topadi
@@ -4079,6 +4124,9 @@
       // bilan sahifasi sakramasligi uchun. To'liq tayyorlash (va kerak bo'lsa
       // bir marta reload) film ochilganda ensureWorker() orqali bajariladi.
       registerWorker().catch(function () { /* film ochilganda qayta uriniladi */ });
+      // R2 prefiks sozlamasini oldindan olib, SW'ga uzatamiz (pleer
+      // ulanishiga qadar tayyor bo'lsin — birinchi bayt kutmaydi).
+      warmR2Cfg();
     } catch (e) {}
   }
 
