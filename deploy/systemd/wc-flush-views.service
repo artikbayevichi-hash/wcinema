@@ -1,0 +1,10 @@
+[Unit]
+Description=W CINEMA — ko'rishlar sonini bazaga yozish (views flush)
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/wc
+Nice=10
+ExecStart=/usr/bin/php /var/www/wc/cli/flush-views.php

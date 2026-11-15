@@ -81,9 +81,43 @@ function hlsCacheBytes()
 }
 $lastQuotaLog = 0;
 
+/**
+ * Tungi oyna tekshiruvi (.env: HLS_NIGHT_ONLY=1, HLS_NIGHT_FROM/TO).
+ *
+ * Nima uchun: prewarm — og'ir ish (Telegram'dan yuklab olish + ffmpeg).
+ * Kunduzi u Apache/MySQL bilan protsessor va tarmoqni bo'lishadi. Tungi
+ * rejim yoqilsa, prewarm faqat belgilangan soatlarda ishlaydi.
+ */
+function hlsNightNow()
+{
+    if (!defined('HLS_NIGHT_ONLY') || !HLS_NIGHT_ONLY) {
+        return true;
+    }
+    $h    = (int) date('G');
+    $from = (int) HLS_NIGHT_FROM;
+    $to   = (int) HLS_NIGHT_TO;
+    if ($from === $to) {
+        return true;                       // noto'g'ri sozlama — bloklamaymiz
+    }
+    return $from < $to ? ($h >= $from && $h < $to) : ($h >= $from || $h < $to);
+}
+$lastNightLog = 0;
+
 wlog('hls-watch ishga tushdi (oraliq ' . $interval . ' s). Kesh: ' . HLS_CACHE_DIR);
 
 while (true) {
+    // Tungi oyna: kunduzi og'ir ish qilmaymiz.
+    if (!hlsNightNow()) {
+        if (time() - $lastNightLog > 1800) {
+            wlog('Tungi rejim: hozir prewarm qilinmaydi (' . HLS_NIGHT_FROM . ':00-' . HLS_NIGHT_TO . ':00).');
+            $lastNightLog = time();
+        }
+        if ($once) {
+            break;
+        }
+        sleep(max(60, $interval));
+        continue;
+    }
     try {
         $db   = Database::getInstance();   // yagona ulanish (konstruktor private)
         $rows = $db->fetchAll(

@@ -30,6 +30,7 @@ ini_set('memory_limit', '-1');
 
 require __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/TgPull.php';
+require_once __DIR__ . '/proc-priority.php';
 require_once __DIR__ . '/hls-progressive.php';
 
 $url = $argv[1] ?? '';
@@ -221,6 +222,11 @@ try {
         $desc = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
         $proc = @proc_open($ffArgs, $desc, $pipes, $hlsDir);
         if (is_resource($proc)) {
+            // Past ustuvorlik: sayt so'rovlari ffmpeg'dan oldin bajarilsin.
+            $st = @proc_get_status($proc);
+            if (is_array($st) && !empty($st['pid'])) {
+                wc_apply_low_priority((int) $st['pid']);
+            }
             fclose($pipes[0]);
             $errTxt = (string) stream_get_contents($pipes[2]);
             stream_get_contents($pipes[1]);
@@ -235,7 +241,7 @@ try {
         // Eski PHP: papkaga o'tib, "%" li nomni tirnoqsiz beramiz.
         $prevCwd = getcwd();
         @chdir($hlsDir);
-        exec(escapeshellarg($ff) . ' -hide_banner -loglevel error -y -i ' . escapeshellarg($source)
+        exec(wc_nice_prefix() . escapeshellarg($ff) . ' -hide_banner -loglevel error -y -i ' . escapeshellarg($source)
             . ' -c copy -f hls -hls_time ' . (int) HLS_SEG_SEC . ' -hls_list_size 0'
             . ' -hls_segment_filename seg_%05d.ts index.m3u8 2>&1', $out, $code);
         if ($prevCwd !== false) {

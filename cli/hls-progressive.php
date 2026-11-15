@@ -21,6 +21,8 @@
 // nusxa bilan bayt-bayt bir xil; birinchi segmentlar 0.15 s da chiqdi.
 // ============================================================================
 
+require_once __DIR__ . '/proc-priority.php';
+
 /** Yangi progressive holat. */
 function hlsProgNew($hlsDir, $source, $ffBin, $segSec)
 {
@@ -78,6 +80,11 @@ function hlsProgStart(array &$pg)
     if (!is_resource($proc)) {
         $pg['failed'] = true;
         return;
+    }
+    // Past ustuvorlik — sayt so'rovlari ffmpeg'dan oldin bajarilsin.
+    $st = @proc_get_status($proc);
+    if (is_array($st) && !empty($st['pid'])) {
+        wc_apply_low_priority((int) $st['pid']);
     }
     $pg['proc'] = $proc;
 }

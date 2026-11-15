@@ -231,8 +231,13 @@ AddType text/css .css
   </FilesMatch>
 
   # --- PHP/HTML: har doim yangilanishni tekshirish ------------------------
+  # DIQQAT: bu yerda `setifempty` (aynan `set` EMAS). `api/*.php` o'z javobiga
+  # `Cache-Control: public, s-maxage=...` qo'yadi (includes/HttpCache.php) —
+  # `set` uni MAJBURAN ustidan yozib, Cloudflare hech narsani keshlay
+  # olmaydigan holatga tushirardi (X-WC-Cache: HIT bo'lsa ham).
+  # `setifempty` faqat sarlavha UMUMAN bo'lmaganda qo'shadi.
   <FilesMatch "\.(php|html)$">
-    Header set Cache-Control "no-cache, must-revalidate"
+    Header setifempty Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 
   # --- Poster proksisi (api/tg-resolve.php?mode=img) ----------------------

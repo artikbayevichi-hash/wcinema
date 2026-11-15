@@ -19,9 +19,16 @@
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     fail('POST so\'raladi', 405);
 }
+
+// Bot/spam oqimidan himoya: bir IP daqiqada 60 tadan ko'p ko'rish yubormasin.
+RateLimit::enforce('write', 60, 60);
 
 $contentId = contentIdInput();
 if ($contentId <= 0) {
@@ -51,7 +58,9 @@ if ($viewerKey === '') {
     fail('viewer aniqlanmadi');
 }
 
-$result = $catalog->addUniqueView($contentId, $viewerKey);
+// Yozish batching bilan: unikal ko'rish darhol saqlanadi, `content.views`
+// esa daqiqada bir marta yig'ib yangilanadi (ViewCounter'ga qarang).
+$result = ViewCounter::record($contentId, $viewerKey);
 if (!$result['success']) {
     fail($result['message'] ?? 'Ko\'rish sanalmadi');
 }

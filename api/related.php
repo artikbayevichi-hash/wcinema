@@ -17,6 +17,13 @@
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 
+// Faqat o'qish — sessiya qulfini bo'shatamiz.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
+RateLimit::enforce('read');
+
 // Bu endpoint OCHIQ (login shart emas): tavsiyalar hamma uchun bir xil.
 $contentId = contentIdInput();
 if ($contentId <= 0) {
@@ -35,15 +42,32 @@ if ($limit <= 0) {
 $limit  = max(1, min(24, $limit));
 $offset = max(0, inputInt('offset', 0));
 
-$rows = $catalog->getRelated($item, $limit + 1, $offset);
-$hasMore = count($rows) > $limit;
-if ($hasMore) {
-    array_pop($rows);
+$compute = function () use ($catalog, $item, $limit, $offset, $userId) {
+    $rows = $catalog->getRelated($item, $limit + 1, $offset);
+    $hasMore = count($rows) > $limit;
+    if ($hasMore) {
+        array_pop($rows);
+    }
+
+    return [
+        'items'    => array_map(static fn($c) => $catalog->toPublicArray($c, $userId), $rows),
+        'offset'   => $offset,
+        'limit'    => $limit,
+        'has_more' => $hasMore,
+    ];
+};
+
+$isAnon = $userId === null && clientUserId() === 0;
+if ($isAnon) {
+    $out = HttpCache::json(
+        HttpCache::key('related', [$contentId, $offset, $limit]),
+        300,
+        120,
+        $compute
+    );
+} else {
+    HttpCache::privateNoStore();
+    $out = $compute();
 }
 
-Auth::ok([
-    'items'    => array_map(static fn($c) => $catalog->toPublicArray($c, $userId), $rows),
-    'offset'   => $offset,
-    'limit'    => $limit,
-    'has_more' => $hasMore,
-]);
+Auth::ok($out);

@@ -62,6 +62,60 @@ function hlsReadMeta($metaFile) {
     return null;
 }
 
+/**
+ * R2/B2 ga yuklangan nusxa bormi (`cli/hls-publish.php` yozadi).
+ * Bo'lsa — segmentlar o'sha yerdan beriladi, uy interneti ishlatilmaydi.
+ *
+ * remote.json: { "base": "https://cdn.example.com/hls/<key>", "ts": 1731... }
+ */
+function hlsRemoteBase($key) {
+    if (!defined('HLS_REMOTE_REDIRECT') || !HLS_REMOTE_REDIRECT) {
+        return '';
+    }
+    $f = HLS_CACHE_DIR . '/' . $key . '/remote.json';
+    if (!is_file($f)) {
+        return '';
+    }
+    $d = json_decode((string) @file_get_contents($f), true);
+    $base = is_array($d) ? trim((string) ($d['base'] ?? '')) : '';
+    // Faqat https — imzosiz/ochiq bo'lmagan manzilni brauzerga bermaymiz.
+    if ($base === '' || !preg_match('#^https://#i', $base)) {
+        return '';
+    }
+    return rtrim($base, '/');
+}
+
+/** Segmentni tashqi saqlash joyiga yo'naltiradi (302). */
+function hlsRemoteRedirect($url) {
+    header('Cache-Control: public, max-age=60');
+    header('Location: ' . $url, true, 302);
+    exit;
+}
+
+/**
+ * Playlistdagi `seg_00001.ts` qatorlarini brauzer uchun haqiqiy manzillarga
+ * almashtiradi.
+ *
+ * @param string $raw    index.m3u8 matni
+ * @param string $key    kesh kaliti (endpoint URL'i uchun)
+ * @param string $remote R2/B2 baza (bo'sh bo'lsa — o'z endpointimiz)
+ * @param string $base   `api` papkasining URL yo'li
+ */
+function hlsRewritePlaylist($raw, $key, $remote, $base) {
+    $out = [];
+    foreach (explode("\n", (string) $raw) as $ln) {
+        $t = trim($ln);
+        if (preg_match('/^seg_\d+\.ts$/', $t)) {
+            $out[] = $remote !== ''
+                ? $remote . '/' . rawurlencode($t)
+                : $base . '/hls.php?key=' . rawurlencode($key) . '&seg=' . $t;
+        } else {
+            $out[] = $ln;
+        }
+    }
+    return implode("\n", $out);
+}
+
 // ---------------------------------------------------------------------------
 // Eskirgan HLS keshini tozalash (har bir so'rov boshida)
 // ---------------------------------------------------------------------------
@@ -162,6 +216,11 @@ if ($key !== '' && $seg !== '') {
     $file = basename($seg);
     if (!preg_match('/^seg_\d+\.ts$/', $file)) {
         hlsErr('Segment nomi noto\'g\'ri', 404);
+    }
+    // R2/B2 ga yuklangan bo'lsa — tomoshabin to'g'ridan-to'g'ri o'sha yerdan oladi.
+    $remote = hlsRemoteBase($key);
+    if ($remote !== '') {
+        hlsRemoteRedirect($remote . '/' . rawurlencode($file));
     }
     if (!is_file(HLS_CACHE_DIR . '/' . $key . '/' . $file)) {
         hlsErr('Segment topilmadi', 404);
@@ -353,23 +412,15 @@ if (is_file($playlist)) {
     if ($raw === false || $raw === '') {
         hlsErr('Playlist o\'qilmadi', 502);
     }
-    // Segment qatorlarini shu endpointning deterministik URL'lariga aylantiramiz
+    // Segment qatorlarini shu endpointning deterministik URL'lariga aylantiramiz.
+    // R2/B2 nusxasi bo'lsa — to'g'ridan-to'g'ri o'sha manzillar (302 ham kerak emas).
     $base = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
-    $lines = explode("\n", $raw);
-    $out = [];
-    foreach ($lines as $ln) {
-        $t = trim($ln);
-        if (preg_match('/^seg_\d+\.ts$/', $t)) {
-            $out[] = $base . '/hls.php?key=' . rawurlencode($key) . '&seg=' . $t;
-        } else {
-            $out[] = $ln;
-        }
-    }
+    $out  = hlsRewritePlaylist($raw, $key, hlsRemoteBase($key), $base);
     header('Content-Type: application/vnd.apple.mpegurl');
     // Tayyor bo'lmaguncha playlist O'SADI (progressive) - keshlanmasin, aks holda yangi
     // segmentlar ko'rinmay qoladi. Tayyor (done) bo'lsa qisqa kesh.
     header($status === 'done' ? 'Cache-Control: public, max-age=60' : 'Cache-Control: no-store'); // qisqa — lekin segmentlar immutable
-    echo implode("\n", $out);
+    echo $out;
     exit;
 }
 

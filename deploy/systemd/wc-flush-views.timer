@@ -1,0 +1,11 @@
+[Unit]
+Description=W CINEMA — views flush har daqiqada
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=wc-flush-views.service
+
+[Install]
+WantedBy=timers.target

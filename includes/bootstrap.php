@@ -49,6 +49,10 @@ require_once __DIR__ . '/../includes/Settings.php';
 require_once __DIR__ . '/../includes/Notifications.php';
 // Kontent yuklash (Reels / Image Post / Long Video + thumbnail)
 require_once __DIR__ . '/../includes/Uploader.php';
+// Masshtab qatlami: javob keshi, IP cheklovi, ko'rishlar batching'i.
+require_once __DIR__ . '/HttpCache.php';
+require_once __DIR__ . '/RateLimit.php';
+require_once __DIR__ . '/ViewCounter.php';
 
 $auth    = new Auth();
 $catalog = new Catalog();

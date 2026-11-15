@@ -2,6 +2,13 @@
 // Katalog ro'yxati: kategoriya / janr / qidiruv / saralash / sahifa
 require_once __DIR__ . '/../includes/bootstrap.php';
 
+// Faqat o'qish — sessiya qulfini bo'shatamiz (parallel so'rovlar uchun).
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
+RateLimit::enforce('read');
+
 $category  = input('category', '', 50);
 $genreId   = inputInt('genre');
 $sort      = input('sort', 'new', 20);
@@ -35,22 +42,43 @@ $opt = [
     'seed'          => max(0, inputInt('seed', 0)),
 ];
 
-$items = $catalog->listContent($opt);
-$total = $catalog->countContent($opt);
+$compute = function () use ($catalog, $opt, $perPage, $page, $userId) {
+    $items = $catalog->listContent($opt);
+    $total = $catalog->countContent($opt);
 
-Auth::ok([
-    'items' => array_map(
-        static fn($c) => $catalog->toPublicArray($c, $userId),
-        $items
-    ),
-    'page'   => $page,
-    'per_page' => $perPage,
-    'total'  => $total,
-    'has_more' => ($page * $perPage) < $total,
-    'query'  => [
-        'category' => $opt['category_slug'],
-        'genre'    => $opt['genre_id'],
-        'q'        => $opt['search'],
-        'sort'     => $opt['sort'],
-    ],
-]);
+    return [
+        'items' => array_map(
+            static fn($c) => $catalog->toPublicArray($c, $userId),
+            $items
+        ),
+        'page'     => $page,
+        'per_page' => $perPage,
+        'total'    => $total,
+        'has_more' => ($page * $perPage) < $total,
+        'query'    => [
+            'category' => $opt['category_slug'],
+            'genre'    => $opt['genre_id'],
+            'q'        => $opt['search'],
+            'sort'     => $opt['sort'],
+        ],
+    ];
+};
+
+// Foydalanuvchiga xos bayroqlar (watchlist va h.k.) bo'lmasa — kesh.
+$isAnon = $userId === null && clientUserId() === 0;
+if ($isAnon) {
+    $out = HttpCache::json(
+        HttpCache::key('catalog', [
+            $opt['category_slug'], $opt['genre_id'], $opt['search'],
+            $opt['sort'], $opt['limit'], $opt['offset'], $opt['seed'],
+        ]),
+        60,
+        60,
+        $compute
+    );
+} else {
+    HttpCache::privateNoStore();
+    $out = $compute();
+}
+
+Auth::ok($out);

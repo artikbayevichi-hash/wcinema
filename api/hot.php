@@ -18,24 +18,20 @@
 
 require_once __DIR__ . '/../includes/bootstrap.php';
 
+// Sessiya faqat o'qish uchun ochilgan — qulfni darhol bo'shatamiz.
+// (Aks holda bir foydalanuvchining parallel so'rovlari ketma-ket bajariladi.)
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
+RateLimit::enforce('read');
+
 $n = inputInt('n', 30);
 $n = max(1, min(100, $n));
 
-$cacheDir  = dirname(__DIR__) . '/storage/cache';
-$cacheFile = $cacheDir . '/hot-' . $n . '.json';
-$ttl       = 300;
-
-if (is_file($cacheFile) && (time() - (int) @filemtime($cacheFile)) < $ttl) {
-    $raw = @file_get_contents($cacheFile);
-    if ($raw !== false) {
-        $data = json_decode($raw, true);
-        if (is_array($data) && isset($data['items'])) {
-            ok($data);
-        }
-    }
-}
-
-$db = Database::getInstance();
+// Ro'yxat hamma uchun bir xil: 5 daqiqa keshlanadi, edge'da 60 s.
+$out = HttpCache::json(HttpCache::key('hot', [$n]), 300, 60, function () use ($n) {
+    $db = Database::getInstance();
 
 // Har bir kontent uchun BIRINCHI qism (serial bo'lsa 1-mavsum 1-qism).
 // `video_url_1080p` / `_720p` bo'lsa — sifatlisi ustun.
@@ -75,11 +71,7 @@ foreach ($rows as $r) {
     ];
 }
 
-$out = ['success' => true, 'items' => $items, 'ts' => time()];
-
-if (!is_dir($cacheDir)) @mkdir($cacheDir, 0775, true);
-if (is_dir($cacheDir) && is_writable($cacheDir)) {
-    @file_put_contents($cacheFile, json_encode($out, JSON_UNESCAPED_UNICODE), LOCK_EX);
-}
+    return ['success' => true, 'items' => $items, 'ts' => time()];
+});
 
 ok($out);

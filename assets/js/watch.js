@@ -759,19 +759,37 @@
     } catch (e) { return false; }
   }
 
+  /** .env: HLS_MODE = prefer | fallback | off (watch.php uzatadi). */
+  function hlsMode() {
+    var m = String(global.__WC_HLS_MODE || 'fallback').toLowerCase();
+    return (m === 'prefer' || m === 'off') ? m : 'fallback';
+  }
+
+  /** Fallback rejimida Telegram shuncha ms ichida o'ynamasa — HLS tekshiriladi. */
+  function hlsWaitMs() {
+    var v = Number(global.__WC_HLS_FALLBACK_MS);
+    return v >= 2000 ? v : 8000;
+  }
+
   /** true qaytarsa - poyga shu yerda boshqaruvni oldi; false - eski oddiy yo'l. */
   function raceHlsTelegram(host, pb, generation) {
-    var tg = tgSourceFor(pb);
-    if (!tg || !tgLoggedIn() || typeof global.TgStream.mount !== 'function') return false;
+    var mode = hlsMode();
+    var tg   = tgSourceFor(pb);
+    var tgOk = !!(tg && tgLoggedIn() && typeof global.TgStream.mount === 'function');
+    if (!tgOk) return false;   // Telegram yo'q — HLS oddiy yo'l bilan ochiladi
 
     var media = hlsMediaFor(pb);
     var done = false;          // g'olib aniq (yoki Telegram o'ynab ketdi)
     var tgPlaying = false;
     var pollTimer = null;
+    var waitTimer = null;
     var t0 = Date.now();
 
     function alive() { return generation === S.streamGeneration; }
-    function stopPoll() { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }
+    function stopPoll() {
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      if (waitTimer) { clearTimeout(waitTimer); waitTimer = null; }
+    }
 
     function probe() {
       var ctl = global.AbortController ? new AbortController() : null;
@@ -790,7 +808,7 @@
     }
 
     function useHls() {
-      if (done || !alive()) return;
+      if (done || !alive() || mode === 'off') return;
       done = true;
       stopPoll();
       try { if (global.UzPlayer && typeof global.UzPlayer.destroyAll === 'function') global.UzPlayer.destroyAll(); } catch (e) {}
@@ -809,25 +827,66 @@
           done = true;                       // Telegram o'ynab ketdi - HLS'ga o'tmaymiz
           stopPoll();
         }, { once: true });
+        // Telegram o'ynay olmasa (DC javob bermadi, limit) — HLS'ni darhol tekshiramiz.
+        v.addEventListener('error', function () {
+          if (!done && !tgPlaying && alive()) wait(0);
+        }, { once: true });
       };
       mountTelegramFallback(host, tg, generation);
     }
 
+    // HLS tayyor bo'lguncha kutish. Prefer rejimida tez (1.5 s), fallbackda
+    // sekin-orqaga (5 s -> 30 s) — Telegram yaxshi ishlayotganda bekorga
+    // so'rov yubormaymiz (minglab tomoshabin uchun bu muhim).
+    function poll(delay) {
+      if (done || tgPlaying || !alive() || (Date.now() - t0) > 180000) return;
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(function () {
+        probe().then(function (r) {
+          if (done || tgPlaying || !alive()) return;
+          if (r) { useHls(); return; }
+          poll(mode === 'prefer' ? 1500 : Math.min(30000, delay * 2));
+        });
+      }, delay);
+    }
+
+    // `delay` ms dan keyin HLS'ni bir marta tekshirish (0 = darhol).
+    function wait(delay) {
+      if (done || tgPlaying || !alive() || mode === 'off') return;
+      if (waitTimer) { clearTimeout(waitTimer); waitTimer = null; }
+      waitTimer = setTimeout(function () {
+        waitTimer = null;
+        if (done || tgPlaying || !alive()) return;
+        probe().then(function (r) {
+          if (done || tgPlaying || !alive()) return;
+          if (r) useHls();
+          else poll(mode === 'prefer' ? 1500 : 5000);
+        });
+      }, Math.max(0, delay));
+    }
+
     host.innerHTML = '<div class="player-wrap no-video"><div class="nv-msg">Video ulanmoqda\u2026</div></div>';
-    probe().then(function (ready) {
-      if (!alive()) return;
-      if (ready) { useHls(); return; }
-      useTelegram();                         // HLS tayyor emas - Telegram DARHOL
-      (function poll() {
-        if (done || tgPlaying || !alive() || (Date.now() - t0) > 180000) return;
-        pollTimer = setTimeout(function () {
-          probe().then(function (r) {
-            if (done || tgPlaying || !alive()) return;
-            if (r) useHls(); else poll();
-          });
-        }, 1500);
-      })();
-    });
+
+    // HLS o'chirilgan: faqat Telegram. U ham bo'lmasa chaqiruvchi HLS'ni ochadi.
+    if (mode === 'off') {
+      useTelegram();
+      return true;
+    }
+
+    // prefer: HLS tayyor bo'lsa darhol u (eski xatti-harakat).
+    if (mode === 'prefer') {
+      probe().then(function (ready) {
+        if (!alive()) return;
+        if (ready) { useHls(); return; }
+        useTelegram();                       // HLS tayyor emas - Telegram DARHOL
+        poll(1500);
+      });
+      return true;
+    }
+
+    // fallback (standart): Telegram DARHOL boshlanadi, HLS — zaxira.
+    useTelegram();
+    wait(hlsWaitMs());
     return true;
   }
 

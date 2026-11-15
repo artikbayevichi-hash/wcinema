@@ -493,9 +493,9 @@
       var all = raw ? (JSON.parse(raw) || {}) : {};
       all[key] = meta;
       var keys = Object.keys(all);
-      if (keys.length > 40) {
+      if (keys.length > 120) {
         keys.sort(function (a, b) { return (all[a].t || 0) - (all[b].t || 0); });
-        for (var i = 0; i < keys.length - 40; i++) delete all[keys[i]];
+        for (var i = 0; i < keys.length - 120; i++) delete all[keys[i]];
       }
       localStorage.setItem(DOC_META_KEY, JSON.stringify(all));
     } catch (e) { /* kvota to'lgan bo'lishi mumkin — jim */ }

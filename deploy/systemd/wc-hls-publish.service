@@ -1,0 +1,16 @@
+[Unit]
+Description=W CINEMA — tayyor HLS segmentlarini R2/B2 ga yuklash
+After=network-online.target wc-hls-watch.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/wc
+Nice=15
+IOSchedulingClass=idle
+# Yuklash sekin tarmoqda uzoq davom etadi
+TimeoutStartSec=6h
+ExecStart=/usr/bin/php /var/www/wc/cli/hls-publish.php --all --prune
+StandardOutput=append:/var/www/wc/storage/hls-publish.log
+StandardError=append:/var/www/wc/storage/hls-publish.log

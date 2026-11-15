@@ -757,7 +757,20 @@ class Auth {
         if (!headers_sent()) {
             http_response_code($status);
             header('Content-Type: application/json; charset=utf-8');
-            header('Cache-Control: no-store');
+            // DIQQAT: HttpCache javobni keshlashga ruxsat bergan bo'lsa
+            // (`X-WC-Cache` sarlavhasi bor), `no-store` ni USTIDAN YOZMAYMIZ —
+            // aks holda `Cache-Control: public, s-maxage=60` o'chib ketadi va
+            // Cloudflare/brauzer hech narsani keshlay olmaydi.
+            $cached = false;
+            foreach (headers_list() as $h) {
+                if (stripos($h, 'x-wc-cache:') === 0) {
+                    $cached = true;
+                    break;
+                }
+            }
+            if (!$cached) {
+                header('Cache-Control: no-store');
+            }
         }
         echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         exit;

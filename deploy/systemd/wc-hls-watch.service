@@ -1,0 +1,34 @@
+[Unit]
+Description=W CINEMA — HLS prewarm kuzatuvchisi (Telegram -> segmentlar)
+Documentation=file:///var/www/wc/docs/production-deploy.md
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/wc
+# ---------------- MUHIM: past ustuvorlik ----------------
+# prewarm og'ir ish (Telegram'dan yuklash + ffmpeg). Sayt so'rovlari
+# oldin bajarilishi uchun jarayon "eng past" sinfda ishlaydi.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+# Protsessorning 50% idan ko'pini olmasin (sayt uchun joy qolsin).
+CPUQuota=50%
+# ---------------------------------------------------------
+ExecStart=/usr/bin/php /var/www/wc/cli/hls-watch.php --interval=30
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/www/wc/storage/hls-watch.log
+StandardError=append:/var/www/wc/storage/hls-watch.log
+
+# Xavfsizlik (faqat kerakli papkalar yoziladi)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/www/wc/storage
+
+[Install]
+WantedBy=multi-user.target

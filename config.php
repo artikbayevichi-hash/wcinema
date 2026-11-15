@@ -314,6 +314,41 @@ define('HLS_CACHE_DIR', __DIR__ . '/storage/hls_cache');                        
 define('HLS_MAX_MB',   max(256, (int) env_value('HLS_MAX_MB', '15000')));    // HLS disk kvotasi (MB)
 define('HLS_TTL',      max(3600, (int) env_value('HLS_TTL', '21600')));      // HLS faolsizlik TTL (soniya)
 
+// Pleyer yo'li: Telegram oqimi ASOSIY, HLS faqat ZAXIRA.
+//   prefer   — HLS tayyor bo'lsa darhol diskdan (tez, lekin server uploadini yeydi);
+//   fallback — Telegram darhol boshlanadi, u ishlamasa/o'ynab ketmasa HLS'ga o'tiladi;
+//   off      — HLS umuman ishlatilmaydi (Telegram bo'lmasa HLS baribir ishlaydi).
+define('HLS_MODE', (function () {
+    $m = strtolower(trim((string) env_value('HLS_MODE', 'fallback')));
+    return in_array($m, ['prefer', 'fallback', 'off'], true) ? $m : 'fallback';
+})());
+// Fallback rejimida Telegram shuncha millisekund ichida o'ynamasa — HLS'ga o'tamiz.
+define('HLS_FALLBACK_MS', max(2000, (int) env_value('HLS_FALLBACK_MS', '8000')));
+// ffmpeg'ni past prioritetda ishga tushirish (Apache/MySQL bilan CPU bo'lishmasin).
+define('HLS_FFMPEG_NICE', in_array(
+    strtolower(trim((string) env_value('HLS_FFMPEG_NICE', '1'))),
+    ['1', 'true', 'yes', 'on'],
+    true
+));
+// Ixtiyoriy: prewarm faqat tunda ishlasin (masalan 01:00–07:00).
+define('HLS_NIGHT_ONLY', in_array(
+    strtolower(trim((string) env_value('HLS_NIGHT_ONLY', '0'))),
+    ['1', 'true', 'yes', 'on'],
+    true
+));
+define('HLS_NIGHT_FROM', min(23, max(0, (int) env_value('HLS_NIGHT_FROM', '1'))));
+define('HLS_NIGHT_TO',   min(24, max(0, (int) env_value('HLS_NIGHT_TO', '7'))));
+
+// Segmentlar Cloudflare R2 / Backblaze B2 ga yuklangan bo'lsa (`remote.json`,
+// `php cli/hls-publish.php` yozadi), tomoshabin ularni TO'G'RIDAN-TO'G'RI
+// saqlash joyidan oladi — uy interneti orqali emas. HLS_REMOTE_REDIRECT=0
+// bilan bu xatti-harakat butunlay o'chiriladi (muammo bo'lsa tez qaytish).
+define('HLS_REMOTE_REDIRECT', in_array(
+    strtolower(trim((string) env_value('HLS_REMOTE_REDIRECT', '1'))),
+    ['1', 'true', 'yes', 'on'],
+    true
+));
+
 // ---------------------------------------------------------------------------
 // Fayl yuklash
 // ---------------------------------------------------------------------------

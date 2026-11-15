@@ -1,0 +1,12 @@
+[Unit]
+Description=W CINEMA — HLS -> R2/B2 yuklash (tunda)
+
+[Timer]
+# Har kuni 04:30 (server vaqti). Kunduzgi trafikka tegmaydi.
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=20min
+Persistent=true
+Unit=wc-hls-publish.service
+
+[Install]
+WantedBy=timers.target

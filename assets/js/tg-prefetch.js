@@ -28,7 +28,7 @@
 
   var BASE = (w.APP && w.APP.base) || '';
   var GAP  = 500;                  // batchlar orasidagi tanaffus
-  var META_ITEMS = 24;
+  var META_ITEMS = 60;
   var META_BATCH = 20;             // server batch: bitta so'rovda 20 ta hujjat
 
   function conn() {

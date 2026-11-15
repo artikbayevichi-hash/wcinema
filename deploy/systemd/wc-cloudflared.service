@@ -1,0 +1,17 @@
+[Unit]
+Description=W CINEMA — Cloudflare nomlangan tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cloudflared
+# config.yml: deploy/cloudflared/config.yml.example
+ExecStart=/usr/local/bin/cloudflared --config /etc/cloudflared/config.yml tunnel run
+Restart=always
+RestartSec=5
+# Tunnel uzilsa sayt tushmasin: cloudflared o'zi qayta ulanadi.
+# MUHIM: bu jarayon o'lsa sayt tashqaridan ko'rinmaydi — monitoring qo'ying.
+
+[Install]
+WantedBy=multi-user.target

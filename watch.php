@@ -343,7 +343,14 @@ $NAV_ACTIVE = 'home';
                * `?v=` va `window.__WC_HLS_URL` bir xil manzilni beradi,
                  aks holda brauzer faylni IKKI MARTA yuklaydi. */
     $__hlsType = is_array($playback) ? (string) ($playback['type'] ?? '') : '';
-    if ($__hlsType === 'hls') {
+    /* Pleyer siyosati (config.php: HLS_MODE). Telegram — asosiy yo'l, HLS —
+       zaxira. Bu qiymatlar watch.js `raceHlsTelegram()` da o'qiladi. */
+    ?>
+    <script>window.__WC_HLS_MODE = <?php echo json_encode(HLS_MODE); ?>;
+            window.__WC_HLS_FALLBACK_MS = <?php echo (int) HLS_FALLBACK_MS; ?>;</script>
+    <?php
+    // HLS_MODE=off bo'lsa hls.js umuman kerak emas — 415 KB yuklanmaydi.
+    if ($__hlsType === 'hls' && HLS_MODE !== 'off') {
         $__hlsV = (int) (@filemtime(__DIR__ . '/assets/vendor/hls.min.js') ?: 1);
         $__hlsUrl = 'assets/vendor/hls.min.js?v=' . $__hlsV;
         ?>
