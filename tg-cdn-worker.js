@@ -2222,6 +2222,21 @@ self.addEventListener('fetch', (e) => {
 
     const rg = parseRange(e.request.headers.get('Range'), size);
 
+    // --- tweb: birinchi so'rovda faylning OXIRGI bo'lagini oldindan olish ---
+    //
+    // `tweb/src/lib/serviceWorker/stream.ts` da `preloadChunks()` aynan
+    // `from === 0` bo'lganda faylning oxirgi bo'lagini yuklaydi: MP4 `moov`
+    // indeksi ko'pincha fayl oxirida turadi va brauzer uni darhol so'raydi.
+    // Bizda bu ishni sahifa `warmtail` xabari bilan ham qiladi, lekin har
+    // yo'l (reels, izohlar posteri, to'g'ridan-to'g'ri havola) bu xabarni
+    // yubormaydi. Shuning uchun SW o'zi ham birinchi so'rovda boshlaydi.
+    //
+    // `prefetchTail` idempotent: takroriy chaqiriq mavjud promisni qaytaradi,
+    // `readWindow` esa avval keshni va prefiksni (R2/mahalliy) tekshiradi.
+    if (cacheDoc && size > CHUNK && (!rg || rg.start === 0)) {
+      prefetchTail(size, cacheDoc).catch(noop);
+    }
+
     // --- 0–1 BAYT "PROBE" JAVOBI (WebK hiylasi) --------------------------
     //
     // Pleer ishga tushganda `Range: bytes=0-1` yuborib "server range'ni

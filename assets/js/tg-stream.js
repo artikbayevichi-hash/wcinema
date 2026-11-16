@@ -67,7 +67,24 @@
   function docQ() {
     var id = (S.loc && S.loc.id != null) ? S.loc.id
       : (S.doc && S.doc.id != null) ? S.doc.id : null;
-    return (id == null || id === '') ? '' : '&doc=' + encodeURIComponent(String(id));
+    if (id == null || id === '') return '';
+    var q = '&doc=' + encodeURIComponent(String(id));
+
+    // tweb uslubi: hujjat metama'lumoti (dc_id / access_hash /
+    // file_reference) OQIM MANZILIDA yuradi. Bu qo'shimcha RPC qilmaydi —
+    // ma'lumot baribir `S.doc`/`S.loc` da bor. Manzil o'z-o'zini to'liq
+    // tavsiflaydi: diagnostikada qaysi DC va qaysi havola bilan o'qilayotgani
+    // ko'rinib turadi, Service Worker esa kelajakda keshni shu bo'yicha
+    // tekshira oladi. Noma'lum parametrlarni SW jimgina e'tiborsiz qoldiradi.
+    var dc = Number(S.doc && S.doc.dcId) || 0;
+    var ah = (S.loc && S.loc.accessHash) || (S.doc && S.doc.accessHash) || '';
+    var fr = (S.loc && S.loc.fileReference) || (S.doc && S.doc.fileReference) || null;
+    if (dc > 0) q += '&dc=' + dc;
+    if (ah) q += '&ah=' + encodeURIComponent(String(ah));
+    if (fr && fr.length) {
+      q += '&fr=' + u8ToB64(fr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    return q;
   }
 
   // Probe aniqlagan konteynerdan haqiqiy MIME. Brauzer shu sarlavhani
@@ -401,6 +418,129 @@
       }
       return n;
     } catch (e) { return 0; }
+  }
+
+  // -------------------------------- DC'larni BO'SH PAYTDA oldindan ochish
+  //
+  // tweb login paytida HAR BIR DC uchun auth_key'ni eksport qilib qo'yadi —
+  // shuning uchun video ochilganda sovuq DH handshake bo'lmaydi. Biz login
+  // oqimiga TEGMASDAN xuddi shunday natijaga erishamiz: sahifa bo'sh
+  // turganda kerakli DC'larga GramJS orqali bir marta ulanamiz.
+  //
+  // GramJS `_connectSender()` ichida `auth.exportAuthorization` ->
+  // `auth.importAuthorization` bajaradi va yangi kalitni sessiyaga yozadi;
+  // `harvestDcKeys()` uni localStorage'ga ko'chiradi. Keyingi sahifa
+  // yuklanishida minimal klient 0 RPC bilan to'g'ridan-to'g'ri o'sha DC'ga
+  // ulanadi (faqat ~200 ms WebSocket handshake).
+  var warmDcBusy = false;
+  var warmDcTimer = null;
+
+  // MUHIM (AUTH_KEY_DUPLICATED): bitta auth_key bilan ikki ulanish ochilsa
+  // Telegram sessiyani butunlay bekor qiladi. Shuning uchun:
+  //   * tez klient shu DC'da allaqachon ochiq bo'lsa — GramJS u yerda
+  //     umuman ulanmaydi (`warmDcList`);
+  //   * kalit yig'ilgach GramJS ulanishi DARHOL yopiladi (`warmDcs`);
+  //   * yopib bo'lmasa — shu DC uchun tez yo'l `GRAM_DC_GRACE` davomida
+  //     chetlab o'tiladi (`readOnce`).
+  var GRAM_DC_GRACE = 10 * 60 * 1000;
+
+  function markGramDc(dc) {
+    if (!(Number(dc) > 0)) return;
+    S.gramDcAt = S.gramDcAt || {};
+    S.gramDcAt[Number(dc)] = Date.now();
+  }
+
+  function unmarkGramDc(dc) {
+    if (S.gramDcAt) delete S.gramDcAt[Number(dc)];
+  }
+
+  function gramDcFresh(dc) {
+    var t = S.gramDcAt && S.gramDcAt[Number(dc)];
+    return !!t && (Date.now() - t) < GRAM_DC_GRACE;
+  }
+
+  // Qaysi DC'lar uchun hujjat bor, lekin tez klientda kalit YO'Q?
+  function warmDcList() {
+    var have = loadDcKeys() || {};
+    var home = 0;
+    try { home = Number(S.client && S.client.session && S.client.session.dcId) || 0; }
+    catch (e) { home = 0; }
+    var all = {};
+    try { all = JSON.parse(localStorage.getItem(DOC_META_KEY) || '{}') || {}; }
+    catch (e) { all = {}; }
+    var seen = {}, out = [];
+    for (var k in all) {
+      if (!Object.prototype.hasOwnProperty.call(all, k)) continue;
+      var it = all[k];
+      if (!it || !it.id || !it.fr) continue;
+      var dc = Number(it.dc);
+      if (!(dc > 0) || dc === home || seen[dc]) continue;
+      if (have[String(dc)]) continue;              // kalit bor — `warmFast` ochadi
+      if (S.fastBadDc && S.fastBadDc[dc]) continue;
+      // Tez klient shu DC'da allaqachon ulangan bo'lsa — GramJS u yerda
+      // ikkinchi ulanish ochmasligi kerak (AUTH_KEY_DUPLICATED).
+      try { if (S.fast && S.fast.isOpen && S.fast.isOpen(dc)) continue; } catch (e) {}
+      seen[dc] = 1;
+      out.push(dc);
+    }
+    return out;
+  }
+
+  /**
+   * Kaliti yo'q DC'larga bir marta ulanib, auth_key'larni saqlaydi.
+   * GramJS klienti bo'lmasa yoki mobil internet bo'lsa — hech narsa qilmaydi.
+   */
+  function warmDcs() {
+    if (warmDcBusy) return Promise.resolve(0);
+    if (!S.client || !S.T || typeof S.client.getSender !== 'function') return Promise.resolve(0);
+    if (S.T.__engine === 'teleproto') return Promise.resolve(0);   // API boshqa
+    if (!canSeed()) return Promise.resolve(0);      // mobil trafikni yemaymiz
+    var list = warmDcList();
+    if (!list.length) return Promise.resolve(0);
+    warmDcBusy = true;
+    var done = 0, i = 0;
+    function next() {
+      if (i >= list.length || !S.client) return done;
+      var dc = list[i++];
+      // Bir vaqtda BITTA DC: bir nechta parallel DH handshake Telegram'ning
+      // flood chegarasiga urilib, joriy video oqimini ham sekinlashtirardi.
+      return Promise.resolve()
+        .then(function () { return S.client.getSender(dc); })
+        .then(function (sender) {
+          harvestDcKeys();
+          done++;
+          // Kalit endi saqlangan — GramJS ulanishini yopamiz, aks holda
+          // keyingi tez yo'l o'sha kalit bilan ikkinchi WebSocket ochib
+          // AUTH_KEY_DUPLICATED olardi.
+          var closing = null;
+          try {
+            if (sender && typeof sender.disconnect === 'function') {
+              closing = Promise.resolve(sender.disconnect());
+            }
+          } catch (e) { closing = null; }
+          if (!closing) { markGramDc(dc); return; }   // yopilmadi — chetlab o'tamiz
+          return closing.then(function () {
+            unmarkGramDc(dc);
+          }, function () {
+            markGramDc(dc);                          // yopilmadi — chetlab o'tamiz
+          });
+        }, function () { /* jim */ })
+        .then(next);
+    }
+    return Promise.resolve().then(next).then(function (n) {
+      warmDcBusy = false;
+      return n;
+    }, function () { warmDcBusy = false; return 0; });
+  }
+
+  // Idle'da bir marta rejalashtiramiz — foydalanuvchi hech narsa bosmasa ham
+  // keyingi ochilish tez bo'ladi. Login oqimi tugashini KUTMAYMIZ.
+  function scheduleWarmDcs(ms) {
+    if (warmDcTimer) return;
+    warmDcTimer = setTimeout(function () {
+      warmDcTimer = null;
+      try { warmDcs().catch(function () {}); } catch (e) { /* jim */ }
+    }, Math.max(1000, Number(ms) || 4000));
   }
 
 
@@ -1361,6 +1501,7 @@
     // bilan urinib, ortiqcha xato/xatolarni keltirib chiqaradi.
     try { localStorage.removeItem(DCKEY_KEY); } catch (e) {}
     S.fastBadDc = null;
+    S.gramDcAt = null;
     S.me = null;
   }
 
@@ -1457,6 +1598,9 @@
     S.authed = false;
     S.connecting = null;
     S.connectingMode = null;
+    // GramJS ulanishlari yopildi — "ochiq DC" belgilarini ham tozalaymiz,
+    // aks holda tez yo'l 10 daqiqa bekorga chetlab o'tilardi.
+    S.gramDcAt = null;
     saveMe(null);
   }
 
@@ -1666,6 +1810,9 @@
         }
         S.authed = !opts.fastPlayback;
         try { saveSession(c.session.save()); } catch (e) { /* localStorage to'liq */ }
+        // Sessiya tayyor — boshqa DC'lar uchun kalitlarni bo'sh paytda
+        // oldindan yig'amiz (keyingi ochilishlar sovuq bo'lmasin).
+        scheduleWarmDcs(3500);
         return c;
       })
       .catch(function (e) {
@@ -2406,7 +2553,11 @@
     // --- TEZ YO'L: minimal MTProto klient ------------------------------
     var fast = S.fast;
     var badDc = !!(S.fastBadDc && dc && S.fastBadDc[dc]);
-    if (fast && !S.fastBroken && !badDc && loc && loc.id != null) {
+    // GramJS shu DC'da ochiq qolgan bo'lsa (masalan ulanishni yopa olmadik)
+    // tez yo'lni ishlatmaymiz — aks holda ikki ulanish bitta auth_key'ni
+    // ishlatib `AUTH_KEY_DUPLICATED` olardi.
+    var gramLive = gramDcFresh(dc);
+    if (fast && !S.fastBroken && !badDc && !gramLive && loc && loc.id != null) {
       var rawLoc = {
         id: loc.id,
         accessHash: loc.accessHash,
@@ -2526,6 +2677,8 @@
       // GramJS shu DC uchun yangi auth_key yaratgan bo'lishi mumkin — uni
       // darhol saqlaymiz, shunda keyingi sahifada tez klient ishlatadi.
       harvestDcKeys();
+      // GramJS endi shu DC'da ulangan — tez klient u yerda ochilmasin.
+      markGramDc(dc);
       var b = res.bytes || res;
       var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
       return finishRead(u8, skip, length, aligned, hid);
@@ -4240,6 +4393,10 @@
     // WebSocket'ni yopadi ("Connection to dc 2 was lost") va keyingi klik
     // 1–3 s qayta ulanishni kutadi. Ping taymeri shuni oldini oladi.
     try { bindKeepAlive(); } catch (e) {}
+    // GramJS klienti (login yoki idle prefetch) tayyor bo'lsa — kaliti yo'q
+    // DC'larni ham oldindan ochamiz. Klient hali yo'q bo'lsa `warmDcs()`
+    // hech narsa qilmaydi; `ensureSession()` tugagach yana rejalashtiriladi.
+    try { scheduleWarmDcs(4500); } catch (e) {}
     try {
       if (!('serviceWorker' in navigator)) return;
       // Faqat O'RNATAMIZ — reload qilmaymiz. Foydalanuvchi saytga kirishi
@@ -4878,6 +5035,8 @@
     // DC ulanishini darhol tekshirish/ping (diagnostika va `online` uchun).
     keepAlive: function () { kaTick(true); },
     ping: function () { return kaPingFast(); },
+    // Kaliti yo'q DC'larni bo'sh paytda ochish (keyingi ochilish tez bo'lsin).
+    warmDcs: function () { return warmDcs(); },
     // Keyingi videoni oldindan tayyorlash (faqat metama'lumot keshlanadi).
     prefetch: prefetch,
     // Saytga kirganda BARCHA videolarning metama'lumotini bitta server

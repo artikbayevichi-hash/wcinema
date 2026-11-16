@@ -1464,6 +1464,18 @@
                 return dcKeys.has(Number(dcId));
             },
 
+            /**
+             * Shu DC'ga ulanish HOZIR ochiqmi?
+             *
+             * Kerak: GramJS bir DC'da ulangan bo'lsa, xuddi shu auth_key bilan
+             * ikkinchi WebSocket ochilsa Telegram `AUTH_KEY_DUPLICATED` berib
+             * sessiyani bekor qiladi. GramJS tomoni bu bayroqni tekshiradi.
+             */
+            isOpen: function (dcId) {
+                const c = clients.get(Number(dcId));
+                return !!(c && c.ready && !c.closed);
+            },
+
             /** Buzilgan kalitni tashlab, ulanishni yopamiz. */
             dropDcKey: function (dcId) {
                 const id = Number(dcId);

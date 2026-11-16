@@ -212,6 +212,28 @@ php cli/prefix-build.php --list
 Qayta qurish kerak bo'lganda `--force`. Yangilash paytida yozuv avval
 manifestdan o'chiriladi — eski siljish bilan noto'g'ri bayt berilmaydi.
 
+### 3.7. tweb uslubi: DC kalitlari va "dum"ni oldindan olish
+
+tweb tezligining asosiy sababi — login paytida **har bir DC** uchun
+`auth_key` eksport qilingan va hujjat metama'lumoti oqim manzilining o'zida
+turadi. Biz login oqimiga tegmasdan xuddi shu holatga kelamiz:
+
+- **DC kalitlari.** Sahifa bo'sh turganda `TgStream.warmDcs()` navbat bilan
+  kerakli DC'larga GramJS orqali bir marta ulanadi (`auth.exportAuthorization`
+  → `auth.importAuthorization`), kalit localStorage'ga yoziladi. Keyingi
+  ochilishda minimal klient sovuq DH handshake'siz ulanadi (`~200 ms`).
+  Mobil internetda (`canSeed()` false) ishlamaydi.
+- **AUTH_KEY_DUPLICATED himoyasi.** Bitta kalit bilan ikki ulanish ochilsa
+  Telegram sessiyani bekor qiladi. Shuning uchun: tez klient shu DC'da ochiq
+  bo'lsa GramJS umuman ulanmaydi; kalit yig'ilgach GramJS ulanishi darhol
+  yopiladi; yopilmasa — o'sha DC uchun tez yo'l 10 daqiqa chetlab o'tiladi.
+- **Manzil o'z-o'zini tavsiflaydi.** `tgfile/?...&doc=...&dc=...&ah=...&fr=...`
+  — qo'shimcha RPC yo'q, SW noma'lum parametrlarni jimgina tashlab yuboradi.
+- **Dum birinchi so'rovda.** SW `Range` `0` dan boshlangan birinchi so'rovda
+  o'zi `prefetchTail()` ni ishga tushiradi (tweb `preloadChunks()` kabi):
+  `moov` oxirida turgan fayllar uchun indeks darhol tayyor bo'ladi. Bu
+  trafik baribir sarflanadigan o'qish — qo'shimcha yuk emas.
+
 ---
 
 ## 4. Qanday ishlaydi (qisqa oqim)
