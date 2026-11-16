@@ -699,7 +699,7 @@ if (!headers_sent()) {
     }
     unset($__https);
 
-    if (session_status() === PHP_SESSION_NONE) {
+    if (!defined('WC_NO_SESSION') && session_status() === PHP_SESSION_NONE) {
         session_start();
     }
 }

@@ -438,7 +438,7 @@ async function indexRegion(size, doc) {
   if (head) reg = moovRegionInHead(head, size);
   if (!reg) {
     try {
-      const probe = await readWindow(doc, 0, Math.min(CHUNK, size));
+      const probe = await readWindow(doc, 0, Math.min(CHUNK, size), size);
       if (probe && probe.length >= 16) {
         headNote(key, probe);                 // keyingi safar bepul
         reg = moovRegionInHead(probe, size);
@@ -492,7 +492,7 @@ function prefetchTail(size, doc) {
     indexRegion(size, doc).then(function (reg) {
       if (!reg || reg.inHead || !(reg.start > 0)) return;
       const moovOff = reg.start - (reg.start % CHUNK);
-      readWindow(doc, moovOff, Math.min(CHUNK, size - moovOff)).then(noop, noop);
+      readWindow(doc, moovOff, Math.min(CHUNK, size - moovOff), size).then(noop, noop);
     }).catch(noop);
 
     const bytes = await tailP;
@@ -788,9 +788,15 @@ async function pruneCache() {
   }
 }
 
-// Grid bo'lagini o'qish: avval diskdan, bo'lmasa sahifadan (Telegram).
-// Bir xil bo'lak ikki joydan parallel so'ralsa — `INFLIGHT` birlashtiradi.
-async function readWindow(doc, off, len) {
+// Grid bo'lagini o'qish: avval diskdan, keyin PREFIKSDAN (R2 yoki mahalliy
+// disk), bo'lmasa sahifadan (Telegram). Bir xil bo'lak ikki joydan parallel
+// so'ralsa — `INFLIGHT` birlashtiradi.
+//
+// `size` — fayl hajmi (ixtiyoriy): berilsa prefiks manbasidan (bosh 4 MB va
+// oxiridagi `moov` oynasi) o'qishga urinamiz. Aynan shu narsa begona DC'dagi
+// (dc=4) videolarni ham bir zumda ochadi: bosh va dum bizning serverdan,
+// qolgani Telegram'dan.
+async function readWindow(doc, off, len, size) {
   if (!doc || !CACHE_OK) return toU8(await readFromPage(off, len));
 
   const key = chunkKey(doc, off, len);
@@ -802,10 +808,23 @@ async function readWindow(doc, off, len) {
   if (p) return p;
 
   p = (async function () {
+    // Prefiks (R2 yoki mahalliy `storage/prefix`) — Telegram'ga chiqmasdan.
+    // Faqat sozlama ALLAQACHON ma'lum bo'lsa: birinchi baytni 500 ms
+    // kutdirmaymiz (sahifa `r2info` ni oldindan yuboradi).
+    if (size > 0 && R2_INFO && R2_INFO.enabled) {
+      try {
+        const pre = await r2Range(doc, off, off + len, size, R2_INFO);
+        if (pre && pre.length === len) {
+          cachePut(key, pre);
+          return pre;
+        }
+      } catch (e) { /* prefiks yordamchi — Telegram davom etadi */ }
+    }
     const u8 = toU8(await readFromPage(off, len));
     if (u8.length === len) cachePut(key, u8);
     return u8;
   })();
+
 
   INFLIGHT.set(key, p);
   p.then(function () { if (INFLIGHT.get(key) === p) INFLIGHT.delete(key); },
@@ -848,7 +867,7 @@ function maybePrefetch(doc, size, off, sent) {
   if (INFLIGHT.has(key)) return;
 
   PF.active++;
-  readWindow(doc, w, len).then(noop, noop).then(function () { PF.active--; });
+  readWindow(doc, w, len, size).then(noop, noop).then(function () { PF.active--; });
 }
 
 // ============================================================================
@@ -887,7 +906,7 @@ function seedWholeFile(doc, size) {
 
   // `readWindow` avval keshni tekshiradi — allaqachon yozilgan bo'lsa
   // tarmoqqa chiqmaydi, shuning uchun bu qadam deyarli bepul.
-  readWindow(doc, w, len).then(noop, noop).then(function () { SF.active--; });
+  readWindow(doc, w, len, size).then(noop, noop).then(function () { SF.active--; });
 }
 
 // ============================================================================
@@ -946,22 +965,51 @@ function r2MarkMiss(doc) {
 }
 
 // Server javobini tekshirib, ichki ko'rinishga keltiradi (yaroqsiz — null).
+//
+// `base` ikki xil bo'lishi mumkin:
+//   * statik prefiks obyekti — `https://cdn.../p` (unga `/<doc>` qo'shiladi);
+//   * SHABLON — `https://sayt/api/prefix.php?doc={doc}&exp=…&sig=…`, unda
+//     `{doc}` o'rniga hujjat id'si qo'yiladi (mahalliy prefiks serveri).
+// `tail` — fayl OXIRIDAGI alohida saqlangan qism (MP4 `moov` indeksi)
+// qayerdan boshlanishi: `size - tail` (R2 obyekti uchun 0).
 function r2Normalize(j) {
   if (!j || typeof j !== 'object') return null;
-  if (!j.enabled) return { enabled: false, base: '', prefix: 0, put: false };
+  if (!j.enabled) return { enabled: false, base: '', tpl: false, prefix: 0, tail: 0, put: false };
   if (!j.base) return null;
+  const raw = String(j.base);
+  const tpl = raw.indexOf('{doc}') >= 0;
   let base;
   try {
-    const u = new URL(String(j.base), self.location.origin);
+    const probe = tpl ? raw.split('{doc}').join('0') : raw;
+    const u = new URL(probe, self.location.origin);
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
-    base = u.toString().replace(/\/+$/, '');
+    if (tpl) base = raw.replace(/\/+$/, '');
+    else base = u.toString().replace(/\/+$/, '');
   } catch (e) {
     return null;
+  }
+  let docs = null;
+  if (j.docs && typeof j.docs === 'object') {
+    docs = {};
+    let n = 0;
+    for (const k in j.docs) {
+      if (!Object.prototype.hasOwnProperty.call(j.docs, k)) continue;
+      const e = j.docs[k];
+      if (!e || typeof e !== 'object') continue;
+      docs[String(k)] = {
+        head: Math.max(0, Math.floor(Number(e.head) || 0)),
+        tail: Math.max(0, Math.floor(Number(e.tail) || 0))
+      };
+      if (++n >= 1000) break;                     // xotira chegarasi
+    }
   }
   return {
     enabled: true,
     base: base,
+    tpl: tpl,
     prefix: Math.max(0, Math.floor(Number(j.prefix) || 0)),
+    tail: Math.max(0, Math.floor(Number(j.tail) || 0)),
+    docs: docs,
     put: !!j.put
   };
 }
@@ -1041,7 +1089,29 @@ function r2InfoSoon(ms) {
 }
 
 function r2ObjUrl(info, doc) {
-  return info.base + '/p/' + encodeURIComponent(String(doc));
+  const id = encodeURIComponent(String(doc));
+  if (info && info.tpl) return info.base.split('{doc}').join(id);
+  return info.base + '/p/' + id;
+}
+
+// Hujjat uchun prefiks hududlari. `null` — bu hujjatga prefiks YO'Q.
+//
+// `docs` xaritasi (mahalliy rejim) bo'lsa — undan aniq javob olamiz, ya'ni
+// mavjud bo'lmagan hujjat uchun umuman HTTP so'rov yubormaymiz (404 RTT
+// birinchi bayt yo'lida keraksiz). R2 obyekt rejimida `docs` yo'q — barcha
+// hujjatlar uchun yagona `prefix` ishlatiladi.
+function r2DocInfo(info, doc) {
+  if (!info || !info.enabled) return null;
+  if (!info.docs) {
+    if (!info.prefix) return null;
+    return { head: info.prefix, tail: Math.max(0, Number(info.tail) || 0) };
+  }
+  const e = info.docs[String(doc)];
+  if (!e) return null;
+  return {
+    head: Math.max(0, Math.floor(Number(e.head) || 0)),
+    tail: Math.max(0, Math.floor(Number(e.tail) || 0))
+  };
 }
 
 // R2 dan prefiksni OQIB, `push` orqali navbatga beradi.
@@ -1057,9 +1127,10 @@ async function r2PrefixInto(doc, size, push, known) {
   if (r2Missed(doc)) return 0;
 
   const info = known || await r2InfoSoon(R2_INFO_WAIT);
-  if (!info || !info.enabled || !info.prefix) return 0;
+  const di = r2DocInfo(info, doc);
+  if (!di || !di.head) return 0;
 
-  const target = Math.min(info.prefix, size) - (Math.min(info.prefix, size) % 4096);
+  const target = Math.min(di.head, size) - (Math.min(di.head, size) % 4096);
   if (target < 4096) return 0;
 
   const ctrl = new AbortController();
@@ -1131,24 +1202,45 @@ async function r2PrefixInto(doc, size, push, known) {
   return got;
 }
 
-// Range so'rovi prefiks ichida bo'lsa — R2 dan aniq oraliqni olamiz.
-async function r2Range(doc, start, end, size) {
+// Range so'rovi prefiks hududida bo'lsa — prefiks manbasidan aniq oraliqni olamiz.
+//
+// Ikki hudud bor:
+//   * BOSH — [0, prefix): fayl sarlavhasi (`ftyp`/`mdat` boshi);
+//   * DUM  — [size - tail, size): MP4 `moov` indeksi. Telegram fayllari
+//     "faststart" EMAS (indeks oxirida) — aynan shu qism birinchi kadrni
+//     belgilaydi, shuning uchun u ham mahalliy bo'lishi kerak.
+// Qolgan oraliqlar avvalgidek Telegram'dan keladi.
+async function r2Range(doc, start, end, size, known) {
   if (!doc) return null;
   if (Date.now() < R2_DEAD_UNTIL) return null;
   if (r2Missed(doc)) return null;
 
-  // Range so'rovi birinchi baytni bloklaydi — 500 ms dan ortiq kutmaymiz.
-  const info = await r2InfoSoon(500);
-  if (!info || !info.enabled || !info.prefix) return null;
-  if (start >= info.prefix || start >= size) return null;
+  // `known` bo'lsa — kutmaymiz (birinchi bayt yo'li). Aks holda 500 ms.
+  const info = known || await r2InfoSoon(500);
+  const di = r2DocInfo(info, doc);
+  if (!di || !di.head) return null;
 
-  // Prefiks obyektidan nariga so'ramaymiz: qolgani Telegram'dan keladi.
-  const last = Math.min(end, info.prefix - 1, size - 1);
+  size = Math.max(0, Number(size) || 0);
+  if (size && start >= size) return null;
+
+  let last;
+  if (start < di.head) {
+    // Bosh prefiks ichida boshlanadi: davomi Telegram'da.
+    last = Math.min(end, di.head, size || end) - 1;
+  } else {
+    const tailStart = di.tail > 0 ? Math.max(0, size - di.tail) : size;
+    if (!di.tail || start < tailStart) return null;
+    // Dum oynasi: [tailStart, size).
+    last = Math.min(end, size) - 1;
+  }
   if (last < start) return null;
 
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(function () { ctrl.abort(); }, 1200);
+    // 512 KB bo'lak: R2 edge'da ~50–200 ms, o'z serverimizda ham shunga yaqin.
+    // 2.5 s — yuklama ostidagi sekin javobni ham qoplaydi; undan keyin
+    // Telegram'ga o'tamiz (u HAR QANDAY holatda sekinroq).
+    const timer = setTimeout(function () { ctrl.abort(); }, 2500);
     const res = await fetch(r2ObjUrl(info, doc), {
       mode: 'cors',
       credentials: 'omit',
@@ -1328,6 +1420,9 @@ self.addEventListener('message', (e) => {
   // Ilgari prefetch faqat birinchi media-javob ichida boshlanardi — ya'ni
   // brauzer allaqachon kutib turgan paytda.
   if (d.type === 'warmtail') {
+    // Prefiks sozlamasini HOZIR so'rab qo'yamiz: birinchi `readWindow`
+    // (dum oynasi) `r2InfoSoon(500)` da kutmasin — javob keshda bo'ladi.
+    r2Info(false).catch(noop);
     if (d.size > 0) prefetchTail(Number(d.size), String(d.doc || ''));
     return;
   }
@@ -1614,7 +1709,15 @@ async function readRangeGrid(start, goal, size, doc, lanes) {
     const batch = [];
     let b = w;
     while (batch.length < par && b < end) {
-      const len = Math.min(CHUNK, size - b);
+      // Birinchi oyna (fayl boshidan, so'ralgan oraliq 512 KB dan kichik):
+      // tweb kabi so'ralgan oraliq bilan CHEKLAYMIZ. Ilgari 128 KB kerak
+      // bo'lsa ham to'liq 512 KB so'ralardi va birinchi bayt 4 barobar
+      // kechikardi (sekin tarmoqda ~1–2 s farq). MIN_CHUNK (64 KB) ga
+      // tekislaymiz — kalitlar hamon takrorlanadigan bo'lib qoladi.
+      let len = Math.min(CHUNK, size - b);
+      if (b === 0 && end < CHUNK) {
+        len = Math.min(len, Math.ceil((end - b) / MIN_CHUNK) * MIN_CHUNK);
+      }
       if (len <= 0) break;
       batch.push({ off: b, want: len });
       b += len;
@@ -1622,7 +1725,7 @@ async function readRangeGrid(start, goal, size, doc, lanes) {
     if (!batch.length) break;
 
     const res = await Promise.all(batch.map(async function (j) {
-      try { return { u8: await readWindow(doc, j.off, j.want) }; }
+      try { return { u8: await readWindow(doc, j.off, j.want, size) }; }
       catch (err) { return { err: err }; }
     }));
     STATS.par += batch.length;
@@ -1904,8 +2007,9 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
       if (docId) {
         // Sahifa sozlamani oldindan yuborgan bo'lsa — kutish YO'Q.
         const info = await r2InfoSoon(R2_INFO_WAIT);
-        if (info && info.enabled && info.prefix) {
-          seedTarget = (info.put && size > info.prefix) ? Math.min(info.prefix, size) : 0;
+        const di = r2DocInfo(info, docId);
+        if (di && di.head) {
+          seedTarget = (info.put && size > di.head) ? Math.min(di.head, size) : 0;
           usedR2 = await r2PrefixInto(docId, size, function (u8) {
             // R2 dan kelgan birinchi bo'laklarda ham `esds` tuzatiladi
             // (faststart MP4'da `moov` fayl boshida bo'ladi).
@@ -1924,7 +2028,7 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
       if (usedR2 > 0) {
         STATS.r2++;
         STATS.requests++;
-        say('⚡ R2 prefiks ' + (usedR2 / 1048576).toFixed(1) + ' MB — Telegram kutishisiz');
+        say('⚡ prefiks ' + (usedR2 / 1048576).toFixed(1) + ' MB — Telegram kutishisiz');
         stats({
           ttfb: Date.now() - born,
           first: usedR2,

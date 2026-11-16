@@ -48,6 +48,50 @@ $r2AllDay   = max(1, (int) r2_env('R2_GLOBAL_DAY', '2000'));
 $r2Prefix  = max(1024 * 1024, min(8 * 1024 * 1024, $r2Prefix));
 $r2Prefix -= $r2Prefix % 4096;              // Telegram blok tekisligi
 
+// ------------------------------------------------- MAHALLIY PREFIKS (R2'siz)
+// R2 sozlanmagan bo'lsa ham prefiks ishlashi kerak: fayllar serverning o'zida
+// (`storage/prefix/`) saqlanadi (cli/prefix-build.php yozadi). SW uchun shartnoma
+// bir xil — `base` + `prefix` (+ `tail` va `docs`), faqat manzil boshqa.
+$pxEnabled = filter_var(r2_env('PREFIX_LOCAL', '1'), FILTER_VALIDATE_BOOLEAN);
+$pxHead    = (int) r2_env('PREFIX_HEAD_BYTES', '4194304');
+$pxTail    = (int) r2_env('PREFIX_TAIL_BYTES', (string) (6 * 1024 * 1024));
+$pxTtl     = max(600, (int) r2_env('PREFIX_TTL', '43200'));   // 12 soat
+$pxHead    = max(0, min(64 * 1024 * 1024, $pxHead));
+$pxTail    = max(0, min(64 * 1024 * 1024, $pxTail));
+$pxHead   -= $pxHead % 4096;
+$pxTail   -= $pxTail % 4096;
+
+$pxSecret = r2_env('PREFIX_SECRET', '');
+if ($pxSecret === '') {
+    $pxSecret = $r2Secret;
+}
+if ($pxSecret === '' && defined('ADMIN_PANEL_KEY')) {
+    $pxSecret = (string) ADMIN_PANEL_KEY;
+}
+
+/** storage/prefix/manifest.json — `doc => {size, head, tail, at}`. */
+function px_manifest()
+{
+    $f = dirname(__DIR__) . '/storage/prefix/manifest.json';
+    $raw = @file_get_contents($f);
+    $m = $raw !== false ? json_decode((string) $raw, true) : null;
+    if (!is_array($m)) {
+        return [];
+    }
+    $docs = (isset($m['docs']) && is_array($m['docs'])) ? $m['docs'] : $m;
+    return is_array($docs) ? $docs : [];
+}
+
+/** Joriy so'rovning o'z manzili (SW same-origin fetch qilishi uchun). */
+function px_self_dir()
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        ? 'https' : 'http';
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $dir  = str_replace('\\', '/', (string) dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/api/x.php')));
+    return $scheme . '://' . $host . rtrim($dir, '/');
+}
+
 // O'qish uchun baza: custom domain bo'lsa — u (Workers limitini tejaydi),
 // aks holda Worker'ning o'zi. O'qish (GET) uchun imzo SHART EMAS — prefiks
 // ochiq obyekt; imzo faqat yozish (PUT) uchun kerak. Shu sababli oldindan
@@ -143,6 +187,51 @@ if (isset($_GET['stats'])) {
 // ------------------------------------------------------------------- INFO
 if (isset($_GET['info'])) {
     header('Cache-Control: public, max-age=300');
+
+    // ---- MAHALLIY PREFIKS: R2 yo'q bo'lsa ham birinchi kadr tez bo'lsin ----
+    //
+    // `docs` xaritasi muhim: SW hujjat prefiksi BORLIGINI darhol biladi va
+    // yo'q hujjat uchun 404 so'rovini yubormaydi (birinchi bayt yo'lida
+    // ortiqcha RTT bo'lmasin).
+    if (!$r2Read && $pxEnabled && $pxSecret !== '') {
+        $localDocs = [];
+        foreach (px_manifest() as $d => $e) {
+            $d = preg_replace('/[^0-9]/', '', (string) $d);
+            if ($d === '' || !is_array($e)) {
+                continue;
+            }
+            $sz = (int) ($e['size'] ?? 0);
+            $hs = (int) ($e['head'] ?? 0);
+            $ts = (int) ($e['tail'] ?? 0);
+            if ($sz <= 0 || $hs <= 0) {
+                continue;
+            }
+            $localDocs[$d] = [
+                'head' => min($hs, $pxHead > 0 ? $pxHead : $hs),
+                'tail' => $ts,
+                'size' => $sz,
+            ];
+            if (count($localDocs) >= 500) {
+                break;
+            }
+        }
+        if ($localDocs) {
+            $exp = time() + $pxTtl;
+            $sig = hash_hmac('sha256', "PREFIX\n" . $exp, $pxSecret);
+            ok([
+                'enabled' => true,
+                'base'    => px_self_dir() . '/prefix.php?doc={doc}&exp=' . $exp . '&sig=' . $sig,
+                'prefix'  => $pxHead,
+                'tail'    => $pxTail,
+                'docs'    => $localDocs,
+                'local'   => true,
+                'put'     => false,
+                'ttl'     => $pxTtl,
+                'min'     => 4096,
+            ]);
+        }
+    }
+
     ok([
         'enabled' => $r2Read,
         'base'    => $r2ReadBase,

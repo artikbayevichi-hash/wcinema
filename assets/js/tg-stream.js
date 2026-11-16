@@ -4348,7 +4348,13 @@
         var msg = (e && (e.errorMessage || e.message)) || String(e);
         // Telegram bu hujjatni rad etdi — tez yo'l BU HUJJAT uchun
         // ishlamaydi. Yozuvni tozalab, eski (GramJS) yo'lga qaytamiz.
-        if (/FILE_REFERENCE|AUTH_KEY_UNREGISTERED|LIMIT_INVALID/.test(msg)) {
+        //
+        // DIQQAT: `AUTH_KEY_UNREGISTERED` bu ro'yxatda YO'Q. U hujjat emas,
+        // begona DC uchun kalit yo'qligi (`dc=4` kabilar). Bunday holatda
+        // metama'lumot SAQLANADI: GramJS o'sha DC kalitini olib beradi
+        // (`harvestDcKeys`), keyingi ochilishda tez yo'l ishlaydi. Ilgari bu
+        // yerda ham yozuv o'chirilardi — har safar 300 ms + RTT yo'qotardik.
+        if (/FILE_REFERENCE|LIMIT_INVALID/.test(msg)) {
           try { if (S.pvCache && S.pvCache[key]) delete S.pvCache[key]; } catch (x) {}
           try {
             var raw = localStorage.getItem(DOC_META_KEY);
