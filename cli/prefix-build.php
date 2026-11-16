@@ -163,6 +163,37 @@ function px_manifest_put($file, array $entry)
     return $ok;
 }
 
+/** Manifestdan hujjatni flock ostida olib tashlaydi (atomik). */
+function px_manifest_del($file, $doc)
+{
+    $lock = @fopen($file . '.lock', 'c+');
+    if (!$lock) {
+        return false;
+    }
+    @flock($lock, LOCK_EX);
+    $m = px_manifest_read($file);
+    if (!isset($m['docs'][(string) $doc])) {
+        @flock($lock, LOCK_UN);
+        fclose($lock);
+        return true;
+    }
+    unset($m['docs'][(string) $doc]);
+    $tmp = $file . '.' . getmypid() . '.tmp';
+    $ok = @file_put_contents(
+        $tmp,
+        json_encode($m, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+    ) !== false;
+    if ($ok) {
+        $ok = @rename($tmp, $file);
+    }
+    if (!$ok) {
+        @unlink($tmp);
+    }
+    @flock($lock, LOCK_UN);
+    fclose($lock);
+    return $ok;
+}
+
 /**
  * DUM prefiksi `moov` indeksini TO'LIQ qoplaydimi?
  *
@@ -353,6 +384,9 @@ if ($opt['verify']) {
         } else {
             $lines[] = '✓ `moov` ' . round($moov['size'] / 1048576, 1) . ' MB dum ichida';
         }
+        if (($hd % 524288) !== 0 || ($tl > 0 && (($size - $tl) % 524288) !== 0)) {
+            $lines[] = '! chegara 512 KB ga tekis emas (qayta qurish tavsiya)';
+        }
         if ($lines && strpos(implode(' ', $lines), '!') !== false) {
             $bad++;
         }
@@ -450,12 +484,28 @@ try {
             if ($headLen < 4096) {
                 throw new RuntimeException('fayl juda kichik (' . $size . ' bayt)');
             }
+            // Prefiks chegaralari 512 KB ga TEKISLANADI (SW shunday o'qiydi):
+            // Service Worker bo'laklarni 512 KB oynalarda, oynani pastga
+            // tekislab so'raydi. Chegara tekis bo'lmasa, chegara ustidagi oyna
+            // prefiksga sig'may Telegram'ga ketardi.
+            $al = 512 * 1024;
+            if ($headLen < $size && ($headLen % $al) !== 0) {
+                $up = $headLen + ($al - $headLen % $al);
+                if ($up < $size) {
+                    $headLen = $up;
+                }
+            }
             if ($headLen >= $size) {
                 $headLen = $size;                 // butun fayl boshga sig'adi
                 $tailLen = 0;
             } else {
                 $tailLen = min($tailBytes, $size - $headLen);
                 $tailLen -= $tailLen % 4096;
+                $tStart = $size - $tailLen;
+                if ($tStart > 0 && ($tStart % $al) !== 0) {
+                    $tStart -= $tStart % $al;
+                    $tailLen = $size - $tStart;
+                }
                 if ($tailLen < 4096) {
                     $tailLen = 0;
                 }
@@ -510,6 +560,11 @@ try {
             }
 
             // Ikkala fayl ham yozildi — endi ularni o'z nomiga ko'chiramiz.
+            // AVVAL manifestdan olib tashlaymiz: almashtirish paytida eski
+            // yozuv qolib ketsa, `api/prefix.php` yangi fayldan eski siljish
+            // bilan noto'g'ri bayt berishi mumkin (bir lahzaga bo'lsa ham).
+            px_manifest_del($manifest, $docId);
+
             @chmod($tmp, 0644);
             if (!@rename($tmp, $headFile)) {
                 @unlink($tmp);

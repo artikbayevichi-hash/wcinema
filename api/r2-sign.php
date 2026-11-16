@@ -85,8 +85,15 @@ function px_manifest()
 /** Joriy so'rovning o'z manzili (SW same-origin fetch qilishi uchun). */
 function px_self_dir()
 {
-    $scheme = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
-        ? 'https' : 'http';
+    // Proksi (tunnel/nginx) orqasida `HTTPS` bo'sh bo'lishi mumkin, lekin
+    // sahifa https bo'lsa SW ham https so'rashi SHART (aks holda aralash
+    // kontent bloklanadi). Shuning uchun yo'naltirilgan sarlavhalarni ham
+    // hisobga olamiz.
+    $proto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    $https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || $proto === 'https'
+        || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+    $scheme = $https ? 'https' : 'http';
     $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
     $dir  = str_replace('\\', '/', (string) dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/api/x.php')));
     return $scheme . '://' . $host . rtrim($dir, '/');

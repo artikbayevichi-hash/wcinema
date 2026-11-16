@@ -179,6 +179,39 @@ Keyin videoni oching. Konsolda:
 Birinchi foydalanuvchi prefiksni **Telegram'dan o'qib, R2 ga yozadi**
 (cache-aside). Keyingi barcha foydalanuvchilar uni **edge'dan** oladi.
 
+### 3.6. R2 bo'lmasa: mahalliy prefiks (bosh + dum)
+
+Cloudflare R2 shart emas — prefiksni **o'z serveringiz** ham bera oladi
+(`PREFIX_LOCAL=1`, standart holat). Bu Telegram'dagi videolar uchun muhim:
+ular "faststart" **emas**, `moov` indeksi faylning **oxirida** turadi. Ya'ni
+birinchi kadr uchun ham bosh, ham **dum** kerak.
+
+```powershell
+# bitta video (bosh 4 MB + dum 6 MB)
+php cli/prefix-build.php --url=https://t.me/kanal/12
+
+# hammasi (katalogdagi telegram-meta videolar)
+php cli/prefix-build.php --all --limit=20
+
+# tekshirish / ro'yxat
+php cli/prefix-build.php --verify
+php cli/prefix-build.php --list
+```
+
+- Natija: `storage/prefix/<doc>.head`, `<doc>.tail` + `manifest.json`
+  (`git`ga kirmaydi — `/storage/` `.gitignore`da).
+- `api/prefix.php` ularni `Range` bilan beradi (200/206/416). Sessiya
+  ochilmaydi, shuning uchun parallel bo'laklar bir-birini kutmaydi.
+- Chegaralar **512 KB ga tekislanadi** (SW shu oynalarda o'qiydi), shuning
+  uchun `--tail` biroz kattaroq chiqadi (masalan 6 336 KB).
+- `exp/sig` — `HMAC(secret, "PREFIX\n<exp>")`, 12 soat (`PREFIX_TTL`).
+  Sir: `PREFIX_SECRET` → `R2_SIGN_SECRET` → `ADMIN_PANEL_KEY`.
+- Service Worker manzilni `api/r2-sign.php?info=1` dan oladi (`base`,
+  `docs` xaritasi). Prefiksi yo'q hujjat uchun 404 so'ralmaydi.
+
+Qayta qurish kerak bo'lganda `--force`. Yangilash paytida yozuv avval
+manifestdan o'chiriladi — eski siljish bilan noto'g'ri bayt berilmaydi.
+
 ---
 
 ## 4. Qanday ishlaydi (qisqa oqim)
