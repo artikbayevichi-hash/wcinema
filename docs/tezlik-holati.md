@@ -61,6 +61,23 @@ va `perf-head.php` quyidagini chiqaradi:
 Tekshirilgan: `watch.php?id=40&e=53` HTML'ida aynan shu qator bor.
 Bu **birinchi kadrni** tezlashtiradi; video baytlari tezligiga ta'sir qilmaydi.
 
+### 2.1.1. Avtomatik poster — Telegramnikidek, faylsiz
+
+Admin panelga video (yoki anime qismi) havolasiz poster bilan qo'shilsa, endi
+`api/tg-thumb.php?ch=<kanal>&post=<raqam>` manzili avtomatik yoziladi. Bu Telegram
+video hujjatining **o'zi saqlagan kadr** — biz rasm yuklamaymiz va CDN imzoli
+URL'ini bazaga saqlamaymiz (u ~1 kunda o'lib qolardi).
+
+- `create_content`, `add_episode`, `update_episode`, `bulk_episodes` — hammasi.
+- `Catalog::getPlayback()` ichida player posteri shu kadr bilan tanlanadi;
+  `watch.php` endi diskdagi kesh bor-yo'qligini tekshirmaydi.
+- Kadr hujjatda yo'q/olinsa, `api/tg-thumb.php` postning `og:image` ga 302 qiladi.
+- Eski qismlar uchun: `php cli/tg-poster-backfill.php` (tarmoqsiz, faqat DB).
+- Admin UI'dagi rasm yuklash maydoni o'chirildi (`upload_image` → 410).
+
+Texnik kesh (`uploads/tg_thumbs/`) faqat server tomonida, bir marta yoziladi;
+bu **admin fayl yuklash emas**. Video baytlari bu yerdan o'tmaydi.
+
 ### 2.2. `cdn_supported` — izoh bilan qulflandi
 
 `tg-mtproto.js` → `buildGetFile()` endi flags = **1** (faqat `precise`)

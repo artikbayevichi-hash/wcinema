@@ -20,7 +20,6 @@ ServerTiming::init('wc-page', 'bootstrap + catalog + boot');
 
 require_once __DIR__ . '/includes/MediaFlow.php';
 $mediaflowEnabled = MediaFlow::isEnabled();
-require_once __DIR__ . '/includes/TgMeta.php';   // Telegram video thumb (poster)
 require_once __DIR__ . '/includes/TgPreview.php'; // kichik faststart preview (agar tayyor)
 require_once __DIR__ . '/includes/StreamBootstrap.php'; // qo'shimcha so'rovlar SQL keshi
 
@@ -153,22 +152,10 @@ if ($item) {
     $playback = $selected ? $catalog->getPlayback($catalog->getEpisode((int) $selected['id']))
                           : $catalog->getPlayback($item);
 
-    // TELEGRAM VIDEO THUMB -> POSTER (tezkor idrok):
-    // Har bir video hujjatining tayyor thumb'i backfill paytida diskka
-    // keshlangan (`uploads/tg_thumbs/`). Agar mavjud bo'lsa — uni VIDEO
-    // POSTER'i qilib beramiz: foydalanuvchi bayt kutayotganda ham darhol
-    // rasm ko'radi. Kesh yo'q/eskirgan bo'lsa — eski tg-resolve posteri
-    // saqlanadi (api/tg-thumb.php o'zi ham self-heal qiladi).
-    if (is_array($playback) && ($playback['type'] ?? '') === 'telegram'
-        && !empty($playback['channel']) && (int) ($playback['post'] ?? 0) > 0) {
-        $thumbFile = TgMeta::thumbCachePath($playback['channel'], (int) $playback['post']);
-        if (is_file($thumbFile)) {
-            $__base = defined('APP_BASE_PATH') ? rtrim((string) APP_BASE_PATH, '/') : '';
-            $playback['poster'] = $__base . '/api/tg-thumb.php?ch='
-                . rawurlencode((string) $playback['channel'])
-                . '&post=' . (int) $playback['post'];
-        }
-    }
+    // Telegram posteri endi `Catalog::getPlayback()` ichida tanlanadi:
+    // har bir video uchun uning O'Z thumb'i (`api/tg-thumb.php`) ishlatiladi,
+    // kesh bor-yo'qligini bu yerda tekshirish shart emas — endpoint o'zi
+    // tiklaydi. Bu ham oddiy film, ham anime qismlari uchun bir xil.
 
     // Pleer orqasidagi POSTER (YouTube uslubi).
     // Videо yuklanmaganda pleer qora quti bo'lib qolmasligi uchun kontent

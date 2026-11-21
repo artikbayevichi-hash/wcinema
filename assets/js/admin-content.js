@@ -25,6 +25,10 @@ window.ADM_MODULES.content = function (C) {
             return C.BASE + '/api/tg-resolve.php?url=' + encodeURIComponent(u) + '&mode=img';
         }
         if (/^https?:\/\//i.test(u)) return u;
+        // Telegram hujjatining o'z kadri (fayl yuklanmaydi)
+        if (/^api\/tg-thumb\.php\?/i.test(u) || /^\/api\/tg-thumb\.php\?/i.test(u)) {
+            return C.BASE + '/' + u.replace(/^\/+/, '');
+        }
         if (/^uploads\//.test(u)) return C.BASE + '/' + u;
         return '';
     }
@@ -265,9 +269,9 @@ window.ADM_MODULES.content = function (C) {
             + '</div><div class="cx-side">'
             + '<div class="field"><label>Poster</label><div class="cx-drop" id="drop">'
             + (p ? '<img id="pprev" src="' + esc(p) + '" alt="">' : '<img id="pprev" alt="" hidden>')
-            + '<span id="dtxt"' + (p ? ' hidden' : '') + '>Rasmni shu yerga tashlang<br>yoki bosing (JPG/PNG/WEBP, 5 MB)</span>'
-            + '<input type="file" id="pfile" accept="image/jpeg,image/png,image/webp" hidden></div>'
-            + '<input name="poster" id="pin" value="' + esc(it.poster) + '" maxlength="500" placeholder="https://… yoki t.me/…" style="margin-top:8px"></div>'
+            + '<span id="dtxt"' + (p ? ' hidden' : '') + '>Telegram videosi qo‘shilganda poster avtomatik olinadi.<br>Rasm yuklash shart emas.</span>'
+            + '</div>'
+            + '<input name="poster" id="pin" value="' + esc(it.poster) + '" maxlength="500" placeholder="Avtomatik (yoki maxsus URL)" style="margin-top:8px"></div>'
             + (isNew ? '<div class="field cx-video-field"><label>Telegram video havolasi <span class="muted">(kino/multfilm uchun)</span></label><input name="first_episode_url" id="firstEpisodeUrl" maxlength="1000" placeholder="https://t.me/kanal/123"><small class="muted">Saqlanganda avtomatik 1-qism bo‘ladi.</small></div>' : '')
             + '</div></div>'
             + '<div class="cx-actions"><button class="btn" type="submit">Saqlash</button> <a class="btn ghost" href="#/content">Bekor qilish</a></div>'
@@ -296,13 +300,7 @@ window.ADM_MODULES.content = function (C) {
         }
         if (type) { type.addEventListener('change', syncType); syncType(); }
 
-        /* poster yuklash */
-        var drop = $('#drop'), file = $('#pfile');
-        drop.onclick = function () { file.click(); };
-        file.onchange = function () { if (file.files[0]) upload(file.files[0]); };
-        ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
-        ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
-        drop.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) upload(f); });
+        /* Poster faylga yuklanmaydi: Telegram hujjatining o'z kadri ishlatiladi. */
         $('#pin').addEventListener('change', function () { showPoster(this.value); });
 
         /* saqlash */
@@ -350,16 +348,6 @@ window.ADM_MODULES.content = function (C) {
         im.hidden = !p; if (p) im.src = p;
         $('#dtxt').hidden = !!p;
     }
-    function upload(f) {
-        if (f.size > 5 * 1024 * 1024) { toast('Rasm 5 MB dan oshmasin', 'err'); return; }
-        $('#dtxt').hidden = false; $('#dtxt').textContent = 'Yuklanmoqda…';
-        post(API, { action: 'upload_image', file: f }).then(function (r) {
-            $('#dtxt').innerHTML = 'Rasmni shu yerga tashlang<br>yoki bosing (JPG/PNG/WEBP, 5 MB)';
-            if (r && r.success) { $('#pin').value = r.url; showPoster(r.url); toast('Rasm yuklandi'); }
-            else { toast((r && r.message) || 'Yuklanmadi', 'err'); showPoster($('#pin').value); }
-        });
-    }
-
     /* ---------- qismlar ---------- */
     function epForm(e, cfg) {
         e = e || {};

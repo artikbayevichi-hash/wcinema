@@ -14,6 +14,7 @@
 
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/Cache.php';
+require_once __DIR__ . '/TgMeta.php';   // Telegram thumb poster (fayl yuklanmaydi)
 
 class Catalog {
 
@@ -332,6 +333,8 @@ class Catalog {
      *                                            ham rasm ko'rinadi.
      *   4) `t.me` / `telegram.me` post       → `api/tg-resolve.php?...&mode=img`
      *                                            proksi (og:image ni topadi).
+     *   4b) `api/tg-thumb.php?...`           → Telegram hujjatining o'z thumb'i
+     *                                            (admin poster yuklamaydi).
      *   5) Boshqa absolute manzil             → o'z holicha.
      *
      * @param string|null $poster       Xom poster qiymati (DB dan).
@@ -778,7 +781,11 @@ class Catalog {
             // sinxron so'rov ham yubormaymiz. Brauzer videoni Telegram'dan oladi,
             // sovuq HLS kutishi va origin trafikining oldi olinadi.
             if ($hlsEnabled && $publicTgPost) {
-                return $this->playbackTelegram((string) $url, $item['poster'] ?? null, null);
+                return $this->playbackTelegram(
+                    (string) $url,
+                    self::telegramThumbPoster($url) ?: ($item['poster'] ?? null),
+                    null
+                );
             }
 
             // (2) Postni aniqlash: t.me sahifasi + "?embed=1" widget tahlili
@@ -975,6 +982,30 @@ class Catalog {
         return $out;
     }
 
+    /**
+     * Telegramning O'ZI yaratgan video kadrini poster qilib beradi.
+     *
+     * Telegram yuklangan videodan bir kadr oladi va uni hujjat ichida
+     * saqlaydi. Biz ham shundan foydalanamiz: hech qanday rasm fayli
+     * yuklanmaydi, bazaga faqat lokal `api/tg-thumb.php` manzili yoziladi.
+     * Endpoint kadrni MTProto'dan olib kichik keshga qo'yadi; kesh yo'q
+     * bo'lsa ham o'zi tiklaydi. Shu sabab player har bir qism uchun
+     * "telefondagi Telegram kabi" poster ko'rsatadi.
+     *
+     * @param string|null $url t.me / telegram.me post havolasi
+     * @return string|null Lokal poster manzili yoki null
+     */
+    public static function telegramThumbPoster($url) {
+        $ref = TgMeta::parseUrl($url);
+        if (!$ref || (int) ($ref['post'] ?? 0) <= 0) {
+            return null;
+        }
+        $base = defined('APP_BASE_PATH') ? rtrim((string) APP_BASE_PATH, '/') : '';
+        return $base . '/api/tg-thumb.php?ch='
+            . rawurlencode((string) $ref['channel'])
+            . '&post=' . (int) $ref['post'];
+    }
+
     private function playbackNone($warning) {
         return [
             'type' => 'none', 'url' => null, 'mime' => null,
@@ -997,7 +1028,7 @@ class Catalog {
      * relay qilmaydi. Private kanalga a'zolik va Telegram cheklovlari saqlanadi.
      *
      * @param string $url    t.me post manzili
-     * @param string|null $poster  Telegram CDN poster (og:image)
+     * @param string|null $poster  Telegram CDN poster (og:image) — zaxira
      * @param array|null $tg   TgResolve natijasi (og'iltirish uchun)
      */
     private function playbackTelegram($url, $poster = null, $tg = null) {
@@ -1024,7 +1055,8 @@ class Catalog {
             'deep'    => $deep,         // tg:// - telefonda ilova ichida ochiladi
             'channel' => $channel,      // @wcinemauz (ko'rsatish uchun)
             'post'    => $post,
-            'poster'  => $poster,
+            // Telegramning o'z thumb'i asos; TgResolve og:image faqat zaxira.
+            'poster'  => self::telegramThumbPoster($url) ?: $poster,
             'mime'    => null,
             'seek'    => false,
             'warning' => $big
@@ -1079,7 +1111,7 @@ class Catalog {
         if ($base !== '' && preg_match('#^(?:uploads/|assets/)#i', ltrim($poster, '/'))) {
             return $base . '/' . ltrim($poster, '/');
         }
-        if ($base !== '' && preg_match('#^api/tg-resolve\.php\?#i', ltrim($poster, '/'))) {
+        if ($base !== '' && preg_match('#^api/(?:tg-resolve|tg-thumb)\.php\?#i', ltrim($poster, '/'))) {
             return $base . '/' . ltrim($poster, '/');
         }
         if (preg_match('#^data:image/#i', $poster)) {

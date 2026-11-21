@@ -33,6 +33,29 @@ function thumbNotFound()
     exit;
 }
 
+/**
+ * Thumb hujjatda yo'q/olinsa — Telegram postining og:image ga o'tamiz.
+ * Bu `t.me` sahifasining o'zi yaratgan rasm; hech qanday fayl yuklanmaydi.
+ */
+function thumbFallback($ch, $post)
+{
+    require_once __DIR__ . '/../includes/TgResolve.php';
+    $url = (strpos($ch, 'c') === 0 && ctype_digit(substr($ch, 1)))
+        ? 'https://t.me/c/' . substr($ch, 1) . '/' . $post
+        : 'https://t.me/' . $ch . '/' . $post;
+    try {
+        $img = (new TgResolve())->image($url);
+        if ($img && preg_match('#^https?://#i', $img)) {
+            while (ob_get_level() > 0) { @ob_end_clean(); }
+            http_response_code(302);
+            header('Location: ' . $img);
+            header('Cache-Control: public, max-age=3600');
+            exit;
+        }
+    } catch (\Throwable $e) {}
+    thumbNotFound();
+}
+
 function thumbServe($path)
 {
     $bytes = (string) @file_get_contents($path);
@@ -61,6 +84,7 @@ $row = TgMeta::getThumb($ch, $post);
 // qayta yechib, yangi thumb ma'lumotini saqlab qayta urinamiz.
 $needRefresh = !$row || empty($row['fr']) || empty($row['type']);
 $dlApi = null;
+$serve = false;
 try {
     require_once __DIR__ . '/../includes/TgPull.php';
     TgPull::sessionLockAcquire(15);
@@ -74,15 +98,16 @@ try {
             : 'https://t.me/' . $ch . '/' . $post;
         $info = TgPull::fetchDocInfo($dlApi, $url);
         $doc  = is_array($info['doc'] ?? null) ? $info['doc'] : null;
-        if (!$doc) thumbNotFound();
+        // finally (sessiya qulfini bo'shatish) ishlashi uchun chiqmaymiz.
+        if (!$doc) throw new \RuntimeException('thumb-doc-yoq');
         $t = TgMeta::extractThumb($doc);
-        if (!$t) thumbNotFound();
+        if (!$t) throw new \RuntimeException('thumb-kadr-yoq');
         TgMeta::saveThumb($ch, $post, $t);
         $row = TgMeta::getThumb($ch, $post);
     }
 
     if (TgMeta::cacheThumbBytes($dlApi, $ch, $post, $row) > 0 && is_file($cache)) {
-        thumbServe($cache);
+        $serve = true;
     }
 } catch (\Throwable $e) {
     // jim: mijoz eski poster ga o'tadi
@@ -90,4 +115,5 @@ try {
     if ($dlApi !== null) TgPull::sessionLockRelease();
 }
 
-thumbNotFound();
+if ($serve) thumbServe($cache);
+thumbFallback($ch, $post);

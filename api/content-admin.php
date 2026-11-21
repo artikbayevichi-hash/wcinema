@@ -87,6 +87,31 @@ function tgMetaStoreUrl($url)
     try { TgMeta::fetchAndStore($url, 5); } catch (\Throwable $e) {}
 }
 
+/**
+ * Qismga poster fayli yuklanmaydi: Telegram video hujjatining o'z kadrini
+ * lokal `api/tg-thumb.php` orqali ko'rsatamiz. Faqat t.me havolasi bo'lsa
+ * ishlaydi. Admin avval o'zi maxsus poster yozgan bo'lsa — u o'zgaradi emas.
+ */
+function autoEpisodePoster($url, $current = '')
+{
+    $current = trim((string) $current);
+    if ($current !== '' && strpos($current, 'api/tg-thumb.php?ch=') === false) {
+        return null;   // foydalanuvchi qo'ygan maxsus poster — hurmat qilinadi
+    }
+    return Catalog::telegramThumbPoster($url);
+}
+
+/** Kontent posteri bo'sh bo'lsa — birinchi qismning Telegram posterini qo'yamiz. */
+function autoContentPosterFromEpisode($db, $contentId, $url)
+{
+    $row = $db->fetchOne("SELECT poster FROM content WHERE id = ?", [(int) $contentId]);
+    if (!$row || trim((string) ($row['poster'] ?? '')) !== '') return;
+    $poster = Catalog::telegramThumbPoster($url);
+    if ($poster) {
+        $db->update('content', ['poster' => $poster], 'id = ?', [(int) $contentId]);
+    }
+}
+
 /** Ko'p havola (bulk) uchun: BITTA sessiyada hammasini saqlaymiz. */
 function tgMetaStoreUrls($urls)
 {
@@ -463,9 +488,9 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         }
     }
 
-    // Poster bo'sh bo'lsa — Telegram video postining preview manzilini
-    // vaqtincha olamiz. Keyingi blok uni uploads/posters/ ichiga saqlaydi,
-    // shuning uchun Telegram CDN URL muddati tugasa ham poster ishlaydi.
+    // Poster bo'sh bo'lsa — birinchi video postining Telegram thumb'ini
+    // avtomatik qo'yamiz. Hech qanday rasm fayli yuklanmaydi: bazada faqat
+    // lokal `api/tg-thumb.php?...` manzili saqlanadi.
     if (empty($fields['poster'])) {
         $srcUrl = trim(input('first_episode_url', '', 1000));
         if ($srcUrl === '' && $action === 'update_content') {
@@ -482,26 +507,20 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
                 }
             }
         }
-    if ($srcUrl !== ''
-            && preg_match('#(^|\.)(t\.me|telegram\.me)$#i',
-                (string) parse_url($srcUrl, PHP_URL_HOST))) {
-            $fields['poster'] = $srcUrl;
+        $autoPoster = Catalog::telegramThumbPoster($srcUrl);
+        if ($autoPoster) {
+            $fields['poster'] = $autoPoster;
         }
     }
 
-    // Poster DISKKA HAM, CDN MANZILIGA HAM AYLANTIRILMAYDI.
+    // Poster ADMIN TOMONIDAN HECH QAYERGA YUKLANMAYDI.
     //
-    // Ilgari bu yerda `downloadImage()` rasmni `uploads/posters/` ga
-    // yozardi; keyin `TgResolve::image()` CDN manzilini olib, BAZAGA
-    // `https://cdn*.telesco.pe/file/...` yozilardi. Telegram CDN havolalari
-    // imzolangan va ~1 kunda o'ladi — natijada butun saytda posterlar
-    // ko'rinmay qolgan (2026-11: 13 tadan 12 tasi 404).
-    //
-    // Endi bazada BARQAROR `https://t.me/<kanal>/<post>` havolasi saqlanadi,
-    // uni ko'rsatish paytida `Catalog::posterSrc()` ->
-    // `api/tg-resolve.php?mode=img` 302 orqali har safar YANGI CDN
-    // manziliga aylantiradi (server keshi 6 soat). Ya'ni poster hech qachon
-    // "eskirib" qolmaydi va server diskiga hech narsa yozilmaydi.
+    // Ilgari `downloadImage()` rasmni posterlar papkasiga yozardi; keyin
+    // CDN manzili bazaga saqlanardi, lekin u ~1 kunda o'lib qolardi.
+    // Endi Telegram videoning O'ZI yaratgan kadr ishlatiladi: bazada barqaror
+    // lokal manzil turadi, `api/tg-thumb.php` kadrni hujjatdan oladi va
+    // kichik texnik keshga qo'yadi. Shu sabab poster hech qachon eskirmaydi
+    // va admin hech qanday fayl qo'ymaydi.
 
     if ($action === 'create_content') {
         $fields['user_id'] = (int) $userId;
@@ -515,7 +534,7 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
         $firstUrl = trim(input('first_episode_url', '', 1000));
         $episodeId = 0;
         if ($firstUrl !== '') {
-            $episodeId = (int) $db->insert('episodes', [
+            $epFields = [
                 'content_id'     => (int) $id,
                 'season'         => 1,
                 'episode_number' => 1,
@@ -523,7 +542,12 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
                 'video_type'     => 'direct',
                 'video_url'      => $firstUrl,
                 'duration'       => max(0, inputInt('first_episode_duration')) ?: null,
-            ]);
+            ];
+            // Anime qismlariga ham avtomatik Telegram posteri (fayl yo'q).
+            if (isset(existingCols($db, 'episodes', ['thumbnail' => 500])['thumbnail'])) {
+                $epFields['thumbnail'] = autoEpisodePoster($firstUrl);
+            }
+            $episodeId = (int) $db->insert('episodes', $epFields);
             // Metama'lumotni darhol bazaga saqlaymiz (kanal/post/fayl ID/...).
             if ($episodeId) {
                 tgMetaStoreUrl($firstUrl);
@@ -655,6 +679,15 @@ if (in_array($action, ['add_episode', 'update_episode'], true)) {
         }
     }
 
+    // Poster maydoni formada yo'q/bo'sh bo'lsa — Telegram kadrini qo'yamiz.
+    $postedThumb = trim((string) (isset($_POST['thumbnail']) ? input('thumbnail', '', 500) : ''));
+    if ($postedThumb === '') {
+        $autoThumb = autoEpisodePoster($url, $epRow['thumbnail'] ?? '');
+        if ($autoThumb !== null && isset(existingCols($db, 'episodes', ['thumbnail' => 500])['thumbnail'])) {
+            $fields['thumbnail'] = $autoThumb;
+        }
+    }
+
     if ($action === 'add_episode') {
         $fields['content_id'] = $contentId;
         $epId = $db->insert('episodes', $fields);
@@ -664,6 +697,10 @@ if (in_array($action, ['add_episode', 'update_episode'], true)) {
     } else {
         $db->update('episodes', $fields, 'id = ?', [$epId]);
     }
+
+    // Serial/anime yaratilganda birinchi qism kelguncha kontent posteri
+    // bo'sh qolardi — endi u ham shu qismning Telegram kadridan to'ldiriladi.
+    autoContentPosterFromEpisode($db, $contentId, $url);
 
     // Qo'shilgan/tahrirlangan videoning Telegram metama'lumotini saqlaymiz.
     tgMetaStoreUrl($url);
@@ -814,15 +851,23 @@ if ($action === 'bulk_episodes') {
     }
     $dur = max(0, inputInt('duration')) ?: null;
     $prem = in_array(input('is_premium', '0', 4), ['1', 'on', 'true', 'yes'], true) ? 1 : 0;
+    $hasThumbCol = isset(existingCols($db, 'episodes', ['thumbnail' => 500])['thumbnail']);
     foreach ($items as $i => $it) {
         $num = $start + $i;
-        $db->insert('episodes', [
+        $ep = [
             'content_id' => $contentId, 'season' => $season, 'episode_number' => $num,
             'title' => $it['title'] !== '' ? mb_substr($it['title'], 0, 255) : ('Qism ' . $num),
             'video_type' => $type, 'video_url' => $it['url'],
             'duration' => $dur, 'is_premium' => $prem,
-        ]);
+        ];
+        // Har bir qismga o'z Telegram posteri (fayl yuklanmaydi).
+        if ($hasThumbCol) {
+            $ep['thumbnail'] = autoEpisodePoster($it['url']);
+        }
+        $db->insert('episodes', $ep);
     }
+    // Anime/serialda kontent posteri bo'sh bo'lsa — birinchi qismdan olamiz.
+    autoContentPosterFromEpisode($db, $contentId, $items[0]['url']);
     // Barcha qismlarning metama'lumotini BITTA sessiyada bazaga yozamiz.
     tgMetaStoreUrls(array_column($items, 'url'));
     // Har biri uchun 20 soniyali preview navbati yaratiladi (bitta worker).
@@ -878,27 +923,9 @@ if ($action === 'reorder_episodes') {
 }
 
 if ($action === 'upload_image') {
-    $f = $_FILES['file'] ?? null;
-    if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp_name'])) {
-        fail('Fayl yuklanmadi', 400);
-    }
-    if ($f['size'] > 5 * 1024 * 1024) {
-        fail('Rasm 5 MB dan oshmasin', 400);
-    }
-    $info = @getimagesize($f['tmp_name']);
-    $exts = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
-    if (!$info || !isset($exts[$info[2]])) {
-        fail('Faqat JPG, PNG yoki WEBP', 400);
-    }
-    $dir = __DIR__ . '/../uploads/posters';
-    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
-        fail('uploads/posters papkasini yaratib bo‘lmadi', 500);
-    }
-    $name = bin2hex(random_bytes(8)) . '.' . $exts[$info[2]];
-    if (!move_uploaded_file($f['tmp_name'], $dir . '/' . $name)) {
-        fail('Faylni saqlab bo‘lmadi', 500);
-    }
-    contentOk('Rasm yuklandi', ['url' => 'uploads/posters/' . $name]);
+    // Poster fayl sifatida yuklanmaydi. Telegram video hujjatining o'z kadri
+    // `api/tg-thumb.php` orqali olinadi; hech qanday rasm fayli yozilmaydi.
+    fail('Poster fayl sifatida yuklanmaydi — Telegram videosidan avtomatik olinadi', 410);
 }
 
 if ($action === 'tmdb_search') {
