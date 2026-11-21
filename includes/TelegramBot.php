@@ -11,7 +11,9 @@ class TelegramBot {
     public function __construct($botToken = null) {
         $this->botToken = $botToken ?: TELEGRAM_BOT_TOKEN;
         $this->botUsername = TELEGRAM_BOT_USERNAME;
-        $this->apiUrl = "https://api.telegram.org/bot" . $this->botToken;
+        $base = defined('TG_BOT_API_BASE') && trim((string) TG_BOT_API_BASE) !== ''
+            ? trim((string) TG_BOT_API_BASE) : 'https://api.telegram.org';
+        $this->apiUrl = $base . "/bot" . $this->botToken;
         $this->curlTimeout = 60;
     }
 

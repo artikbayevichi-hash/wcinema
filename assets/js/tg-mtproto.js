@@ -555,7 +555,19 @@
     function buildGetFile(loc, offset, limit) {
         const w = new TgWriter();
         w.u32(TL.UPLOAD_GET_FILE);
-        w.u32(1);                 // flags: precise (bit 0)
+        // flags: precise (bit 0). `cdn_supported` (bit 1) ATAYLAB qo'yilmaydi.
+        //
+        // Sabab (core.telegram.org/cdn + /mtproto/transports):
+        //   • CDN DC manzili `help.getConfig` `dc_options.cdn` da faqat
+        //     `ip:port` (raw TCP) ko'rinishida keladi;
+        //   • brauzer raw TCP ocholmaydi, CDN uchun `apiws` endpoint esa
+        //     hujjatlashtirilmagan — TLS/SNI kafolati yo'q;
+        //   • redirect kelsa, uni bajara olmaymiz va `cdn_supported=0` bilan
+        //     qayta so'rov yuborishga majbur bo'lamiz — bu +1 RTT, ya'ni
+        //     sekinlashuv.
+        // Shuning uchun CDN faqat server-side gateway (TCP) yo'lida ma'noga
+        // ega; brauzer to'g'ridan-to'g'ri DC dan `upload.getFile` oladi.
+        w.u32(1);
         w.u32(TL.INPUT_DOCUMENT_FILE_LOCATION);
         w.long(loc.id);
         w.long(loc.accessHash);
@@ -640,15 +652,27 @@
     const WS_PORT = 443;
 
     /**
-     * DC manzili. `media` — Telegram'ning fayl (media) klasteri:
-     * `<dc>-1.web.telegram.org`. Telegram Web K ham, GramJS ham yuklab olishni
-     * aynan shu klasterga yuboradi (u fayl trafigi uchun ajratilgan, auth_key
-     * o'sha DC'ning o'zi — `-1` faqat boshqa frontend).
+     * DC manzillari (tartib muhim — birinchi ishlagani tanlanadi).
+     *
+     * 1) `kws<dc>[-1]` — Telegram Web K (github.com/morethanwords/tweb,
+     *    src/lib/mtproto/dcConfigurator.ts) aynan shulardan foydalanadi:
+     *      wss://kws2-1.web.telegram.org/apiws  (download/media)
+     *      wss://kws2.web.telegram.org/apiws    (client/auth)
+     *    Ilgari biz faqat eski `pluto/venus/...` subdomainlariga ulanardik —
+     *    ular ko'p tarmoqlarda o'chirilgan yoki bloklangan, shuning uchun
+     *    `wss://venus.web.telegram.org/apiws failed` xatosi chiqardi.
+     *
+     * 2) eski `pluto/venus/...` — zaxira sifatida saqlanadi (ba'zi DC/rayonlarda
+     *    ishlaydi). `media` = fayl klasteri, `-1` qo'shimchasi bilan.
      */
-    function dcHost(dcId, media) {
-        const h = DC_HOSTS[dcId];
-        if (!h) throw new Error('Noma\'lum DC: ' + dcId);
-        return h + (media ? '-1' : '') + '.web.telegram.org';
+    function dcHosts(dcId, media) {
+        const legacy = DC_HOSTS[dcId];
+        if (!legacy) throw new Error('Noma\'lum DC: ' + dcId);
+        const s = media ? '-1' : '';
+        return [
+            'kws' + dcId + s + '.web.telegram.org',
+            legacy + s + '.web.telegram.org',
+        ];
     }
 
     // `msg_id` bitta auth_key uchun YAGONA va o'sib boruvchi bo'lishi shart.
@@ -797,20 +821,27 @@
         if (this.ready) return Promise.resolve(this);
         if (this._connecting) return this._connecting;
         const self = this;
-        // Media klaster (`-1`) avval, u ishlamasa — DC'ning oddiy manzili.
+        // Avval media klaster (`-1`), keyin oddiy DC. Har biri uchun yangi
+        // (`kws<dc>`) va eski (`venus`...) manzillar navbat bilan sinab ko'riladi.
         const hosts = [];
         try {
-            if (this.media) hosts.push(dcHost(this.dcId, true));
-            hosts.push(dcHost(this.dcId, false));
+            if (this.media) {
+                dcHosts(this.dcId, true).forEach(function (h) { hosts.push({ host: h, media: true }); });
+            }
+            dcHosts(this.dcId, false).forEach(function (h) { hosts.push({ host: h, media: false }); });
         } catch (e) {
             return Promise.reject(e);
         }
         let idx = 0;
         const attempt = function () {
-            return self._open(hosts[idx++]).catch(function (e) {
+            const entry = hosts[idx++];
+            return self._open(entry.host).catch(function (e) {
                 if (idx >= hosts.length) throw e;
-                self.media = false;
-                if (self.onMediaBroken) { try { self.onMediaBroken(); } catch (x) {} }
+                // Media klasteri butunlay ishlamadi — endi oddiy DC'ga o'tamiz.
+                if (self.media && !entry.media) {
+                    self.media = false;
+                    if (self.onMediaBroken) { try { self.onMediaBroken(); } catch (x) {} }
+                }
                 return attempt();
             });
         };
@@ -1592,7 +1623,9 @@
             buildInitConnection: buildInitConnection,
             buildInvokeWithLayer: buildInvokeWithLayer,
             MtConnection: MtConnection,
-            dcHost: dcHost,
+            dcHosts: dcHosts,
+            // Eski nom — tashqi sinovlar uchun birinchi (afzal) manzil.
+            dcHost: function (dcId, media) { return dcHosts(dcId, media)[0]; },
             TL: TL
         }
     };

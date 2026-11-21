@@ -87,6 +87,59 @@ const waiting = [];                  // javob kutayotgan so'rovlar
 // ishonchli qiymat. (Telegramning hujjatida aytilgan maksimum 1 MB.)
 let CHUNK = 512 * 1024;
 const MIN_CHUNK = 64 * 1024;   // shundan kichikga tushmaymiz
+const MAX_CHUNK = 1024 * 1024; // Telegram ruxsat etadigan yuqori chegara
+const CHUNK_SLOW = 256 * 1024; // 2G/3G/saveData — birinchi bayt tezroq
+
+// Tarmoq haqidagi maslahat (sahifadan `provide` xabarida keladi).
+// SW `navigator.connection` ni ko'rmaydi, shuning uchun qarorni sahifa
+// qabul qiladi, SW esa faqat qo'llaydi. Bu — MASLAHAT: noto'g'ri qiymat
+// kelsa ham Telegram chegarasidan oshmaymiz.
+let NET_HINT = { saveData: false, effectiveType: '', downlink: 0, rtt: 0 };
+
+/**
+ * Tarmoq sharoitiga mos bo'lak hajmi.
+ *
+ * Nima uchun kerak:
+ *   • 2G/3G da 512 KB so'rov bir necha sekund kutadi — 256 KB bilan
+ *     birinchi bayt tezroq keladi;
+ *   • tez 4G/Wi-Fi da 1 MB so'rov RTT sonini ikki barobar kamaytiradi
+ *     (Telegram 1 MB gacha ruxsat beradi; 4 MB rad etilgan).
+ *
+ * 1 MB dan oshmaymiz: `upload.getFile` 1 MB blok chegarasidan oshsa
+ * `LIMIT_INVALID` qaytaradi. 256 KB dan kichikga ham tushmaymiz — bu
+ * bo'lak keshi va parallel o'qish uchun eng kichik foydali birlik.
+ */
+function chooseChunkForHint(h) {
+  h = h || {};
+  const et = String(h.effectiveType || '').toLowerCase();
+  const dl = Number(h.downlink) || 0;
+  const rtt = Number(h.rtt) || 0;
+  if (h.saveData) return CHUNK_SLOW;
+  if (et === 'slow-2g' || et === '2g' || et === '3g') return CHUNK_SLOW;
+  if (dl > 0 && dl < 1.5) return CHUNK_SLOW;
+  if (rtt > 400) return CHUNK_SLOW;
+  // Faqat aniq "tez" signalda 1 MB. `downlink` ba'zi brauzerlarda
+  // 10 Mbps dan pastda ham "4g" deb keladi — shuning uchun 20 Mbps.
+  if (et === '4g' && dl >= 20) return MAX_CHUNK;
+  return 512 * 1024;
+}
+
+function applyNetHint(h) {
+  if (!h || typeof h !== 'object') return;
+  NET_HINT = {
+    saveData: !!h.saveData,
+    effectiveType: String(h.effectiveType || '').toLowerCase(),
+    downlink: Number(h.downlink) || 0,
+    rtt: Number(h.rtt) || 0
+  };
+  const next = chooseChunkForHint(NET_HINT);
+  if (next !== CHUNK) {
+    CHUNK = next;
+    say('📶 bo‘lak hajmi: ' + (CHUNK / 1024) + ' KB'
+      + ' · ' + (NET_HINT.effectiveType || 'noma’lum')
+      + (NET_HINT.downlink ? ' · ~' + NET_HINT.downlink + ' Mbps' : ''));
+  }
+}
 
 // Bitta HTTP javobida qancha bayt qaytaramiz?
 //
@@ -145,6 +198,10 @@ const TAIL_MAX_ENTRIES = 2;                 // RAMni cheklovchi
 
 // Indeks (moov) ANIQ oynasi: `{ start, len }` yoki `{ inHead: true }`.
 const IDX_WIN = new Map();
+// Keyframe jadvali: [[sekund, bayt ofseti], ...]. `moov` ichidagi
+// `stss`+`stsz`+`stsc`+`stco/co64` jadvallaridan olinadi. Faqat kontent
+// ma'lumoti — foydalanuvchi/sessiya/chipta yo'q.
+const KF_MAP = new Map();
 // Bosh baytlar (0 dan boshlab, ketma-ket) — MP4 qutilarini yurish uchun.
 const HEAD_SEEN = new Map();
 // Bosh bayt kelishini kutayotganlar (sahifa `warmtail` ni erta yuboradi).
@@ -426,6 +483,250 @@ function headWait(key, ms) {
   });
 }
 
+// Sahifa SQL keshidan olgan indeks xaritasini qabul qiladi. Bu ko'rsatma
+// `indexRegion()` ning bosh baytlarni kutishini butunlay yo'q qiladi: issiq
+// ochilishda moov qayerdaligi allaqachon ma'lum.
+function cleanIndex(m, size) {
+  if (!m || typeof m !== 'object') return null;
+  if (m.inHead === true) return { inHead: true };
+  const start = Number(m.start), len = Number(m.len);
+  if (!Number.isFinite(start) || !Number.isFinite(len)) return null;
+  if (start < 0 || len <= 0 || len > IDX_MAX || start >= size) return null;
+  return { start: Math.floor(start), len: Math.floor(Math.min(len, size - start)) };
+}
+
+function storeKf(key, kf, dur) {
+  if (!Array.isArray(kf) || !kf.length) return false;
+  KF_MAP.set(key, { kf: kf, dur: Number(dur) || 0 });
+  while (KF_MAP.size > 64) KF_MAP.delete(KF_MAP.keys().next().value);
+  return true;
+}
+
+function setIndexHint(doc, size, moov, kf, dur) {
+  const reg = cleanIndex(moov, size);
+  if (!reg) return false;
+  const key = tailKey(doc, size);
+  if (!IDX_WIN.has(key)) IDX_WIN.set(key, reg);
+  if (kf) storeKf(key, kf, dur);
+  return true;
+}
+
+// Birinchi tomoshabin topgan xaritani sahifaga qaytaramiz — u faqat kontent
+// ma'lumoti (doc/size/koordinata + ixtiyoriy keyframe jadvali), foydalanuvchi
+// yoki chipta emas.
+function reportIndex(doc, size, reg, kf, dur) {
+  if (!doc || !(size > 0) || !reg) return;
+  self.clients.matchAll().then(function (list) {
+    for (const c of list) {
+      try {
+        c.postMessage({
+          type: 'indexfound', doc: String(doc), size: Number(size),
+          moov: reg, kf: kf || [], dur: Number(dur) || 0
+        });
+      } catch (e) { /* sahifa yopilgan bo'lishi mumkin */ }
+    }
+  }).catch(noop);
+}
+
+// ---------------------------------------------------------- KEYFRAME XARITASI
+// `moov` ichidagi jadvallardan haqiqiy sync-sample ofsetlarini chiqaramiz:
+//   stss  -> qaysi sample'lar keyframe
+//   stsz  -> har bir sample hajmi
+//   stsc  -> chunk boshiga necha sample tushadi
+//   stco/co64 -> chunk'larning fayldagi ofseti
+//   stts + mdhd -> sekundlar
+// Natija: [[sekund, bayt], ...]. Video baytlari bu yerdan O'TMAYDI.
+function parseKeyframes(u8, size) {
+  if (!u8 || u8.length < 32) return null;
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const MAX_BOXES = 20000;
+  const boxAt = function (from, end) {
+    const out = [];
+    let off = from;
+    while (off + 8 <= end && out.length < MAX_BOXES) {
+      let sz = dv.getUint32(off, false);
+      let hdr = 8;
+      const type = String.fromCharCode(u8[off + 4], u8[off + 5], u8[off + 6], u8[off + 7]);
+      if (sz === 1) {
+        if (off + 16 > end) return null;
+        sz = dv.getUint32(off + 8, false) * 4294967296 + dv.getUint32(off + 12, false);
+        hdr = 16;
+      } else if (sz === 0) {
+        sz = end - off;
+      }
+      if (sz < hdr || off + sz > end) return null;
+      out.push({ type: type, from: off, body: off + hdr, end: off + sz });
+      off += sz;
+    }
+    return out;
+  };
+  const child = function (boxes, type) {
+    for (let i = 0; i < boxes.length; i++) if (boxes[i].type === type) return boxes[i];
+    return null;
+  };
+  const all = boxAt(0, u8.length);
+  if (!all) return null;
+  const moov = child(all, 'moov');
+  if (!moov) return null;
+  const mChildren = boxAt(moov.body, moov.end);
+  if (!mChildren) return null;
+
+  let mdhd = null, timescale = 0, durRaw = 0;
+  let stbl = null;
+  for (const trak of mChildren) {
+    if (trak.type !== 'trak') continue;
+    const tChildren = boxAt(trak.body, trak.end);
+    if (!tChildren) continue;
+    const mdia = child(tChildren, 'mdia');
+    if (!mdia) continue;
+    const mdChildren = boxAt(mdia.body, mdia.end);
+    if (!mdChildren) continue;
+    const hdlr = child(mdChildren, 'hdlr');
+    if (!hdlr || hdlr.body + 12 > hdlr.end) continue;
+    if (String.fromCharCode(u8[hdlr.body + 8], u8[hdlr.body + 9],
+                            u8[hdlr.body + 10], u8[hdlr.body + 11]) !== 'vide') continue;
+    const mh = child(mdChildren, 'mdhd');
+    if (mh && mh.body + 20 <= mh.end) {
+      const ver = u8[mh.body];
+      if (ver === 1) {
+        if (mh.body + 28 <= mh.end) {
+          timescale = dv.getUint32(mh.body + 20, false);
+          durRaw = dv.getUint32(mh.body + 24, false) * 4294967296
+                 + dv.getUint32(mh.body + 28, false);
+        }
+      } else {
+        timescale = dv.getUint32(mh.body + 12, false);
+        durRaw = dv.getUint32(mh.body + 16, false);
+      }
+    }
+    const minf = child(mdChildren, 'minf');
+    if (!minf) continue;
+    const miChildren = boxAt(minf.body, minf.end);
+    if (!miChildren) continue;
+    const sb = child(miChildren, 'stbl');
+    if (sb) stbl = sb;
+    if (stbl) break;
+  }
+  if (!stbl || !(timescale > 0)) return null;
+  const sChildren = boxAt(stbl.body, stbl.end);
+  if (!sChildren) return null;
+
+  // --- stts: sample -> vaqt -----------------------------------------------
+  const stts = child(sChildren, 'stts');
+  if (!stts || stts.body + 8 > stts.end) return null;
+  const sttsN = dv.getUint32(stts.body + 4, false);
+  const sttsArr = [];
+  for (let i = 0; i < sttsN && stts.body + 8 + i * 8 + 8 <= stts.end; i++) {
+    sttsArr.push([dv.getUint32(stts.body + 8 + i * 8, false),
+                  dv.getUint32(stts.body + 12 + i * 8, false)]);
+  }
+
+  // --- stsz: sample hajmlari ----------------------------------------------
+  const stsz = child(sChildren, 'stsz');
+  if (!stsz || stsz.body + 12 > stsz.end) return null;
+  const fixed = dv.getUint32(stsz.body + 4, false);
+  const sampleCount = dv.getUint32(stsz.body + 8, false);
+  const sizes = fixed > 0 ? null : [];
+  if (!sizes) {
+    for (let i = 0; i < sampleCount && stsz.body + 12 + (i + 1) * 4 <= stsz.end; i++) {
+      sizes.push(dv.getUint32(stsz.body + 12 + i * 4, false));
+    }
+  }
+  const sampleSize = function (i) { return fixed > 0 ? fixed : (sizes[i] || 0); };
+
+  // --- stsc: chunk -> sample soni -----------------------------------------
+  const stsc = child(sChildren, 'stsc');
+  if (!stsc || stsc.body + 8 > stsc.end) return null;
+  const stscN = dv.getUint32(stsc.body + 4, false);
+  const stscArr = [];
+  for (let i = 0; i < stscN && stsc.body + 8 + i * 12 + 12 <= stsc.end; i++) {
+    stscArr.push([dv.getUint32(stsc.body + 8 + i * 12, false),
+                  dv.getUint32(stsc.body + 12 + i * 12, false)]);
+  }
+  if (!stscArr.length) return null;
+
+  // --- stco / co64: chunk ofsetlari ---------------------------------------
+  let coff = child(sChildren, 'co64') || child(sChildren, 'stco');
+  if (!coff || coff.body + 8 > coff.end) return null;
+  const wide = coff.type === 'co64';
+  const chunkN = dv.getUint32(coff.body + 4, false);
+  const chunks = [];
+  const step = wide ? 8 : 4;
+  for (let i = 0; i < chunkN && coff.body + 8 + (i + 1) * step <= coff.end; i++) {
+    const v = wide
+      ? dv.getUint32(coff.body + 8 + i * 8, false) * 4294967296
+        + dv.getUint32(coff.body + 12 + i * 8, false)
+      : dv.getUint32(coff.body + 8 + i * 4, false);
+    chunks.push(v);
+  }
+  if (!chunks.length) return null;
+
+  // --- stss: keyframe sample'lari (yo'q bo'lsa hamma sample sync) ----------
+  const stss = child(sChildren, 'stss');
+  const keySet = new Set();
+  let hasStss = false;
+  if (stss && stss.body + 8 <= stss.end) {
+    hasStss = true;
+    const n = dv.getUint32(stss.body + 4, false);
+    for (let i = 0; i < n && stss.body + 8 + (i + 1) * 4 <= stss.end; i++) {
+      keySet.add(dv.getUint32(stss.body + 8 + i * 4, false));
+    }
+  }
+  if (!hasStss && !keySet.size && sampleCount > 4000) {
+    // `stss` yo'q = hamma sample sync. Jadvalni 4000 taga qisqartiramiz.
+    const stride = Math.ceil(sampleCount / 4000);
+    for (let s = 1; s <= sampleCount; s += stride) keySet.add(s);
+  }
+
+  const out = [];
+  let sampleNo = 1, sampleT = 0, ti = 0, tLeft = 0, tDelta = 0, si = 0;
+  const maxSamples = Math.min(sampleCount || 0, 2000000);
+  outer:
+  for (let ci = 0; ci < chunks.length && sampleNo <= maxSamples; ci++) {
+    while (si + 1 < stscArr.length && stscArr[si + 1][0] <= ci + 1) si++;
+    const per = stscArr[si][1];
+    if (!(per > 0) || per > 100000) break;
+    let off = chunks[ci];
+    for (let j = 0; j < per && sampleNo <= maxSamples; j++) {
+      const sz = sampleSize(sampleNo - 1);
+      const isKey = hasStss ? keySet.has(sampleNo) : keySet.has(sampleNo);
+      if (isKey && off >= 0 && off < size) {
+        out.push([Math.round((sampleT / timescale) * 1000) / 1000, off]);
+        if (out.length >= 4000) break outer;
+      }
+      if (tLeft <= 0) {
+        if (ti >= sttsArr.length) break outer;
+        tLeft = sttsArr[ti][0];
+        tDelta = sttsArr[ti][1];
+        ti++;
+      }
+      sampleT += tDelta;
+      tLeft--;
+      off += sz;
+      sampleNo++;
+    }
+  }
+  if (!out.length) return null;
+  const dur = durRaw > 0 ? Math.round((durRaw / timescale) * 1000) / 1000 : 0;
+  return { kf: out, dur: dur };
+}
+
+// Birinchi marta topilgan `moov` baytlaridan keyframe jadvalini chiqarib,
+// sahifaga (keyin esa DB'ga) yuboramiz. Baytlar allaqachon oqim uchun
+// o'qilgan — qo'shimcha so'rov faqat `moov` 1 MB dan katta bo'lganda.
+async function finishIndex(doc, size, key, reg, moovBytes) {
+  let kf = [], dur = 0;
+  const cached = KF_MAP.get(key);
+  if (cached) { kf = cached.kf; dur = cached.dur; }
+  else if (moovBytes) {
+    try {
+      const parsed = parseKeyframes(moovBytes, size);
+      if (parsed) { kf = parsed.kf; dur = parsed.dur; storeKf(key, kf, dur); }
+    } catch (e) { /* MP4 tuzilishi notanish bo'lsa jimsiz o'tkazamiz */ }
+  }
+  reportIndex(doc, size, reg, kf, dur);
+}
+
 // Indeks (moov) aniq oraliqini topamiz: avval bosh baytlardan (bepul),
 // bo'lmasa 512 KB lik BIRINCHI bo'lakni o'qiymiz — u baribir oqim uchun
 // kerak (kalit `chunkKey` bilan AYNAN bir xil), ya'ni ortiqcha trafik yo'q.
@@ -433,13 +734,14 @@ async function indexRegion(size, doc) {
   const key = tailKey(doc, size);
   const known = IDX_WIN.get(key);
   if (known) return known;
-  let reg = null;
-  const head = HEAD_SEEN.get(key) || await headWait(key, 1200);
+  let reg = null, head = null;
+  head = HEAD_SEEN.get(key) || await headWait(key, 1200);
   if (head) reg = moovRegionInHead(head, size);
   if (!reg) {
     try {
       const probe = await readWindow(doc, 0, Math.min(CHUNK, size), size);
       if (probe && probe.length >= 16) {
+        head = probe;
         headNote(key, probe);                 // keyingi safar bepul
         reg = moovRegionInHead(probe, size);
       }
@@ -453,6 +755,14 @@ async function indexRegion(size, doc) {
   if (reg) {
     IDX_WIN.set(key, reg);
     while (IDX_WIN.size > 64) IDX_WIN.delete(IDX_WIN.keys().next().value);
+
+    let moovBytes = reg.inHead ? head : null;
+    if (!reg.inHead) {
+      try {
+        moovBytes = await readRange(reg.start, Math.min(reg.len, IDX_MAX), size, doc, 2);
+      } catch (e) { moovBytes = null; }
+    }
+    finishIndex(doc, size, key, reg, moovBytes).catch(noop);
   }
   return reg;
 }
@@ -489,14 +799,42 @@ function prefetchTail(size, doc) {
     // `moov` indeksini PARALLEL aniqlaymiz: natija `IDX_WIN` ga yoziladi
     // (keyingi so'rovlar uchun bepul), topilsa uning sarlavhasi turgan
     // bo'lak ham qizdiriladi. HECH QANDAY so'rov buni kutmaydi.
-    indexRegion(size, doc).then(function (reg) {
-      if (!reg || reg.inHead || !(reg.start > 0)) return;
-      const moovOff = reg.start - (reg.start % CHUNK);
-      readWindow(doc, moovOff, Math.min(CHUNK, size - moovOff), size).then(noop, noop);
-    }).catch(noop);
+    //
+    // ISSIQ YO'L: xarita bazadan keldi — 1200 ms lik `headWait` umuman
+    // ishlamaydi, moov sarlavhasi darhol, dum oynasi bilan BIR VAQTDA olinadi.
+    const hint = IDX_WIN.get(key);
+    if (hint && !hint.inHead && hint.start > 0) {
+      const moovOff = hint.start - (hint.start % CHUNK);
+      if (moovOff < size) {
+        readWindow(doc, moovOff, Math.min(CHUNK, size - moovOff), size).then(function (bytes) {
+          // Keshda kf bo'lmasa (eski yozuv), endi uni hisoblab yuboramiz.
+          if (KF_MAP.has(key) || !bytes) return;
+          try {
+            const p = parseKeyframes(bytes, size);
+            if (p && p.kf.length) { storeKf(key, p.kf, p.dur); reportIndex(doc, size, hint, p.kf, p.dur); }
+          } catch (e) { /* jim */ }
+        }, noop);
+      }
+    } else if (!hint) {
+      indexRegion(size, doc).then(function (reg) {
+        if (!reg || reg.inHead || !(reg.start > 0)) return;
+        const moovOff = reg.start - (reg.start % CHUNK);
+        readWindow(doc, moovOff, Math.min(CHUNK, size - moovOff), size).then(noop, noop);
+      }).catch(noop);
+    }
 
     const bytes = await tailP;
     if (!bytes || !bytes.length) return null;
+    // Birinchi tomoshabin dum oynasini mahalliy keshga yozadi. Keyingi
+    // ochilishda `moov` Telegram DC'ga emas, shu serverga so'raladi.
+    if (pxNeedTailSeed(doc) && bytes.length >= 1024 * 1024) {
+      r2Seed(doc, size, [bytes], bytes.length, 'tail');
+      if (R2_INFO && R2_INFO.docs && !R2_INFO.docs[String(doc)]) {
+        R2_INFO.docs[String(doc)] = { head: 0, tail: bytes.length };
+      } else if (R2_INFO && R2_INFO.docs && R2_INFO.docs[String(doc)]) {
+        R2_INFO.docs[String(doc)].tail = bytes.length;
+      }
+    }
     const it = { start: aligned, bytes: bytes };
     TAIL_CACHE.set(key, it);
     while (TAIL_CACHE.size > TAIL_MAX_ENTRIES) {
@@ -542,7 +880,9 @@ async function waitIndex(doc, size, ms) {
   const p = TAIL_PROMISE.get(key);
   if (!p) return;
   const reg = IDX_WIN.get(key);
-  if (reg && reg.inHead) return;               // indeks boshda — kutish kerak emas
+  // Xarita ma'lum (boshda yoki SQL keshidan kelgan) — endi hech narsa
+  // kutishga hojat yo'q: moov bo'lagi allaqachon parallel o'qilayapti.
+  if (reg) return;
   let timer = null;
   const t = new Promise(function (res) {
     timer = setTimeout(res, Math.max(1000, ms || IDX_PAUSE_MS));
@@ -1114,6 +1454,16 @@ function r2DocInfo(info, doc) {
   };
 }
 
+// Mahalliy keshinga dum (`moov`) oynasini yozish kerakmi? Real R2 da bitta
+// obyekt bor — alohida dum yozuvi yo'q, shuning uchun faqat `docs` xaritasi
+// (mahalliy rejim) uchun tekshiramiz.
+function pxNeedTailSeed(doc) {
+  if (!SEED_OK || !R2_INFO || !R2_INFO.enabled || !R2_INFO.put) return false;
+  if (!R2_INFO.docs) return false;
+  const e = R2_INFO.docs[String(doc)];
+  return !e || !(Number(e.tail) > 0);
+}
+
 // R2 dan prefiksni OQIB, `push` orqali navbatga beradi.
 // Qaytaradi: nechta bayt berildi (4096 ga karrali, 0 = R2 ishlamadi).
 //
@@ -1210,6 +1560,7 @@ async function r2PrefixInto(doc, size, push, known) {
 //     "faststart" EMAS (indeks oxirida) — aynan shu qism birinchi kadrni
 //     belgilaydi, shuning uchun u ham mahalliy bo'lishi kerak.
 // Qolgan oraliqlar avvalgidek Telegram'dan keladi.
+// `end` — EKSKLUZIV (`readWindow` va brauzer Range so'rovi bilan bir xil).
 async function r2Range(doc, start, end, size, known) {
   if (!doc) return null;
   if (Date.now() < R2_DEAD_UNTIL) return null;
@@ -1266,13 +1617,15 @@ async function r2Range(doc, start, end, size, known) {
 // Telegram'dan o'qilgan prefiksni R2 ga yozish (cache-aside).
 // Faqat sahifa `seed` ruxsatini bergan bo'lsa va foydalanuvchi login
 // qilgan bo'lsa ishlaydi (imzoni server beradi).
-function r2Seed(doc, parts, bytes) {
+function r2Seed(doc, size, parts, bytes, part) {
+  const kind = part === 'tail' ? 'tail' : 'head';
   if (!SEED_OK || !doc || !bytes) return;
   if (bytes < 1024 * 1024) return;                  // juda kichik — foydasi yo'q
 
   (async function () {
     try {
-      const signUrl = r2ApiUrl('?doc=' + encodeURIComponent(String(doc)));
+      const signUrl = r2ApiUrl('?doc=' + encodeURIComponent(String(doc))
+        + '&size=' + encodeURIComponent(String(size)));
       if (!signUrl) return;
       const sres = await fetch(signUrl, { credentials: 'same-origin', cache: 'no-store' });
       if (!sres.ok) return;
@@ -1282,14 +1635,19 @@ function r2Seed(doc, parts, bytes) {
       const body = new Blob(parts, { type: 'video/mp4' });
       if (body.size < 1024 * 1024) return;
 
-      const pres = await fetch(j.put, {
+      // R2 da bitta obyekt bor; mahalliy keshda bosh va dum alohida fayllar.
+      const url = kind === 'tail' ? (j.putTail || j.put) : j.put;
+      const pres = await fetch(url, {
         method: 'PUT',
         body: body,
         credentials: 'omit',
         mode: 'cors',
         headers: { 'Content-Type': 'video/mp4' }
       });
-      if (pres.ok) say('⬆ R2 prefiks saqlandi (' + (body.size / 1048576).toFixed(1) + ' MB)');
+      if (pres.ok) {
+        say('⬆ prefiks saqlandi (' + kind + ' '
+          + (body.size / 1048576).toFixed(1) + ' MB)');
+      }
     } catch (e) {
       /* jim — bu fon vazifasi, oqimga ta'sir qilmaydi */
     }
@@ -1319,7 +1677,9 @@ function stats(patch) {
     par: STATS.par,
     r2: STATS.r2,
     cache: CACHE_HITS,
-    stored: CACHE_PUTS
+    stored: CACHE_PUTS,
+    chunk: CHUNK,
+    net: NET_HINT.effectiveType || ''
   }, patch || {});
   self.clients.matchAll()
     .then((list) => {
@@ -1376,6 +1736,7 @@ self.addEventListener('message', (e) => {
     if (old && old !== provider) {
       try { old.close(); } catch (err) { /* allaqachon yopilgan */ }
     }
+    applyNetHint(d.net);
     PROVIDES++;
     say('Sahifa javobgar bo\'ldi · fayl hajmi: ' + d.size + ' bayt'
       + (PROVIDES > 1 ? ' · #' + PROVIDES + '-ulash' : ''));
@@ -1399,6 +1760,39 @@ self.addEventListener('message', (e) => {
   // JSON'ni bir marta olib, shu yerga uzatadi — SW keshida darhol tayyor.
   if (d.type === 'r2info') {
     r2AcceptInfo(d.info);
+    return;
+  }
+
+  // --- Sahifa SQL keshidan MP4 indeks xaritasini yubordi ----------------
+  // Issiq yo'lda SW bosh baytlarni o'qib moov o'rnini qidirish uchun
+  // 1200 ms kutmaydi — koordinata tayyor holda keladi.
+  if (d.type === 'index') {
+    setIndexHint(String(d.doc || ''), Number(d.size), d.moov, d.kf, d.dur);
+    return;
+  }
+
+  // --- Seek: keyframe jadvalidan eng yaqin ofsetniOLDINDAN o'qish --------
+  // Pleer qayta qurilishni boshlashidan oldin keladi — shunda birinchi
+  // keyframe oqimi Telegram'dan emas, SW keshidan olinadi.
+  if (d.type === 'seekhint') {
+    const sk = tailKey(String(d.doc || ''), Number(d.size));
+    const ent = KF_MAP.get(sk);
+    const t = Number(d.t);
+    if (ent && ent.kf.length && Number.isFinite(t)) {
+      let best = null;
+      for (let i = 0; i < ent.kf.length; i++) {
+        const p = ent.kf[i];
+        if (!Array.isArray(p) || !Number.isFinite(p[1])) continue;
+        if (p[0] <= t) best = p;
+        else if (best === null) best = p;
+        else break;
+      }
+      if (best) {
+        const off = Math.max(0, Math.min(Number(best[1]) - (Number(best[1]) % CHUNK), Number(d.size) - 1));
+        readWindow(String(d.doc || ''), off, Math.min(CHUNK, Number(d.size) - off), Number(d.size))
+          .then(noop, noop);
+      }
+    }
     return;
   }
 
@@ -1992,7 +2386,14 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
       const total = seedBytes;
       seedParts = [];
       seedBytes = 0;
-      r2Seed(docId, parts, total);
+      r2Seed(docId, size, parts, total, 'head');
+      // Xotiradagi sozlamani ham yangilaymiz: bu sahifa keyingi ochilishda
+      // 404 so'rov yubormay, tayyor prefiksni darhol oladi.
+      if (R2_INFO && R2_INFO.docs) {
+        const e = R2_INFO.docs[String(docId)] || { head: 0, tail: 0 };
+        e.head = Math.max(Number(e.head) || 0, total);
+        R2_INFO.docs[String(docId)] = e;
+      }
     }
   }
 
@@ -2020,6 +2421,11 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
             addHead(part);
             notify();
           }, info);
+        } else if (info && info.put && info.docs) {
+          // Mahalliy keshda bu hujjat hali yo'q: birinchi tomoshabin bosh
+          // oynani Telegram'dan o'qib, uni keshga yozadi (keyingilari shu
+          // yerdan oladi). `docs` xaritasi borligi = mahalliy rejim.
+          seedTarget = Math.min(info.prefix || 4 * 1024 * 1024, size);
         }
       }
 
@@ -2331,7 +2737,7 @@ self.addEventListener('fetch', (e) => {
     // bormasdan, edge'dan darhol javob beramiz.
     if (docId) {
       const r2want = Math.min(want, size - start);
-      const r2u8 = await r2Range(docId, start, start + r2want - 1, size);
+      const r2u8 = await r2Range(docId, start, start + r2want, size);
       if (r2u8 && r2u8.length) {
         STATS.requests++;
         STATS.bytes += r2u8.length;

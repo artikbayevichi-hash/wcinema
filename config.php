@@ -197,11 +197,51 @@ define('DB_PASS', env_value('DB_PASS', ''));
 define('TELEGRAM_BOT_TOKEN', env_value('TELEGRAM_BOT_TOKEN', ''));
 define('TELEGRAM_BOT_USERNAME', env_value('TELEGRAM_BOT_USERNAME', 'w_cinema_uz_bot'));
 
+// Bot API bazaviy manzili. Bo'sh bo'lsa rasmiy bulutli server ishlatiladi.
+// Lokal telegram-bot-api (`--local`) ishga tushurilganda masalan:
+//   TG_BOT_API_BASE=http://127.0.0.1:8081
+// bulutli 20 MB chegarasi o'rniga fayllarni chegarasiz yuklab olish mumkin.
+define('TG_BOT_API_BASE', rtrim(trim((string) env_value('TG_BOT_API_BASE', '')), '/'));
+
 // MTProto pull (Telegram'dan video nusxalash) uchun: my.telegram.org dan
 // olinadi. Bo'sh bo'lsa admin paneldagi "Telegram'dan yuklab olish" tugmasi
 // ishlamaydi (xatolik aniq ko'rsatiladi).
 define('TG_API_ID',   (int) env_value('API_ID', ''));
 define('TG_API_HASH', env_value('API_HASH', ''));
+
+// ---------------------------------------------------------------------------
+// Server-side MTProto gateway (ixtiyoriy, standart holatda O'CHIQ).
+//
+// Nima uchun: ba'zi qurilmalarda brauzerdagi MTProto (WebSocket) bloklanadi
+// yoki juda sekin ishlaydi. Gateway video baytlarni serverdagi bot sessiyasi
+// orqali olib, brauzerga oddiy HTTP Range/206 qilib beradi. Bu Telegram Web
+// uslubidagi "upload.getFile(offset, limit)" ning server tomondagi ko'chirmasi.
+//
+// Yoqish: .env da TG_GATEWAY_ENABLED=1 va alohida jarayon:
+//   php cli/tg-gateway.php --port=8099
+//
+// MUHIM: bu yo'l server trafigini oshiradi (video server orqali o'tadi).
+// Shuning uchun u faqat zaxira yo'l sifatida ishlatiladi, asosiy emas.
+// ---------------------------------------------------------------------------
+$_gwOn = strtolower(trim((string) env_value('TG_GATEWAY_ENABLED', '0')));
+define('TG_GATEWAY_ENABLED', in_array($_gwOn, ['1', 'true', 'yes', 'on'], true));
+unset($_gwOn);
+define('TG_GATEWAY_HOST', trim((string) env_value('TG_GATEWAY_HOST', '127.0.0.1')) ?: '127.0.0.1');
+define('TG_GATEWAY_PORT', max(1, min(65535, (int) env_value('TG_GATEWAY_PORT', '8099'))));
+// Chipta amri: 1 soat. Video davomida yangi Range so'rovlari shu chipta
+// bilan ishlaydi; muddat tugasa pleyer yangi chipta so'rashi kerak.
+define('TG_GATEWAY_TTL', max(60, (int) env_value('TG_GATEWAY_TTL', '3600')));
+// Bo'sh bo'lsa kalit API_HASH + ADMIN_PANEL_KEY dan hosil qilinadi.
+define('TG_GATEWAY_SECRET', trim((string) env_value('TG_GATEWAY_SECRET', '')));
+
+// Pleyer qaysi yo'lni ishlatadi:
+//   off     — gateway umuman ishlatilmaydi (standart);
+//   primary — private/Telegram postlar uchun AVVAL gateway sinaladi, xato
+//             bo'lsa brauzerdagi MTProto'ga qaytadi.
+// `primary` uchun TG_GATEWAY_ENABLED=1 ham shart.
+$_gwMode = strtolower(trim((string) env_value('TG_GATEWAY_MODE', 'off')));
+define('TG_GATEWAY_MODE', $_gwMode === 'primary' ? 'primary' : 'off');
+unset($_gwMode);
 
 // Pull ishchi jarayoni ishlaydigan CLI PHP manzili.
 // Apache (mod_php) ostida PHP_BINARY httpd.exe ni qaytaradi — shuning uchun
@@ -391,6 +431,36 @@ define('TELEGRAM_REQUIRE_START', (bool) env_value('TELEGRAM_REQUIRE_START', '1')
 
 // Bot API'ga fayl YUKLAB yuborish limiti
 define('TELEGRAM_MAX_UPLOAD', 50 * 1024 * 1024); // 50 MB
+
+// ---------------------------------------------------------------------------
+// TEZ PREVIEW (birinchi kadr): kichik faststart video Telegram'da
+// ---------------------------------------------------------------------------
+// Asl film 1 GB+ bo'lsa ham, tomoshabin avval 2–5 MB lik qisqa preview ko'radi.
+// Preview ham Telegram posti bo'lgani uchun baytlar BRAUZER <- TELEGRAM CDN
+// yo'li bilan keladi — sayt origin'i video trafikida ishtirok etmaydi.
+// Preview yaratish uchun bot preview kanalga POST yozish huquqiga ega bo'lishi
+// SHART. Kanal ommaviy bo'lishi kerak (brauzer o'z sessiyasi bilan yecha oladi).
+// Bo'sh qolsa — preview funksiyasi O'CHIQ (hech qanday so'rov yuborilmaydi).
+$__pvCh = ltrim(trim((string) env_value('TG_PREVIEW_CHANNEL', env_value('REELS_CHANNEL', ''))), '@');
+define('TG_PREVIEW_CHANNEL', preg_match('/^[A-Za-z0-9_]{3,64}$/', $__pvCh) ? $__pvCh : '');
+define('TG_PREVIEW_ENABLED', TG_PREVIEW_CHANNEL !== '');
+define('TG_PREVIEW_SEC',   max(5, min(30, (int) env_value('TG_PREVIEW_SEC', '20'))));
+define('TG_PREVIEW_HEIGHT', max(240, min(720, (int) env_value('TG_PREVIEW_HEIGHT', '480'))));
+define('TG_PREVIEW_MAX_MB', max(1, min(20, (int) env_value('TG_PREVIEW_MAX_MB', '5'))));
+// RAW rejim: har bir video BOSHIDAN shu hajmdagi bo'lak (MB) olinadi va
+// o'z holicha yangi guruhga yuklanadi. Bulutli Bot API 20 MB chegarasi bor.
+define('TG_PREVIEW_CLIP_MB', max(1, min(19, (int) env_value('TG_PREVIEW_CLIP_MB', '19'))));
+
+// INSTANT KADR: 19 MB lik intro ham sekin (2G/3G) tarmoqda 2 s ichida
+// yetib bormaydi. Server shu intro'dan 1 s, 240p, ~100–200 KB lik juda
+// kichik faststart MP4 yasab, XUDI SHU guruhga yuklaydi. Brauzer AVVAL
+// shuni ko'rsatadi (birinchi kadr ~1–2 s), keyin 19 MB intro, keyin asl
+// video. Qo'shimcha yuklab olish yo'q — instant klip ALLAQACHON olingan
+// 19 MB bo'lakdan lokal ravishda yaratiladi. Video baytlari yana faqat
+// brauzer <-> Telegram orasida yuradi.
+define('TG_PREVIEW_INSTANT_SEC',    max(1, min(5, (int) env_value('TG_PREVIEW_INSTANT_SEC', '1'))));
+define('TG_PREVIEW_INSTANT_HEIGHT', max(144, min(360, (int) env_value('TG_PREVIEW_INSTANT_HEIGHT', '240'))));
+define('TG_PREVIEW_INSTANT_KB',     max(32, min(512, (int) env_value('TG_PREVIEW_INSTANT_KB', '160'))));
 
 // ---------------------------------------------------------------------------
 // Katalog (content / episodes)

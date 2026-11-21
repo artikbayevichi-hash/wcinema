@@ -788,6 +788,10 @@
       testBandwidth: false,
       maxBufferLength: 60,
       maxMaxBufferLength: 60,
+      // Xotira chegarasi: 60 s yuqori bitrateli (4K) oqim 150–250 MB
+      // buffer berishi mumkin. 60 MB — hls.js standartiga mos xavfsiz cap;
+      // sekin tarmoqda ABR baribir pastroq sifatni tanlaydi.
+      maxBufferSize: 60 * 1000 * 1000,
       backBufferLength: 30,
       maxBufferHole: 1,
       nudgeMaxRetry: 10000,
@@ -797,9 +801,16 @@
       startPosition: 0,
       liveDurationInfinity: false,
       startFragPrefetch: true,
+      // ABR: birinchi baholash 1.8 Mbps (Web K bilan bir xil). Pastga
+      // tushish 0.8, yuqoriga chiqish 0.7 koeffitsiyenti bilan — tarmoq
+      // tez bo'lsa ham sifat sakrab o'zgarmaydi.
       abrEwmaDefaultEstimate: 1800000,
+      abrEwmaFastVoD: 3.0,
+      abrEwmaSlowVoD: 9.0,
       abrBandWidthFactor: 0.8,
-      abrBandWidthUpFactor: 0.7
+      abrBandWidthUpFactor: 0.7,
+      maxStarvationDelay: 4,
+      maxLoadingDelay: 4
     });
     inst.hls = hls;
 
@@ -1328,7 +1339,14 @@
     v.setAttribute('playsinline', '');
     v.setAttribute('webkit-playsinline', '');
     v.setAttribute('preload', 'metadata');
-    v.setAttribute('crossorigin', 'anonymous');
+    // To'g'ridan-to'g'ri Telegram CDN (telesco.pe) manzilida CORS header
+    // bo'lmasligi mumkin — `crossorigin` qo'yilsa video UMUMAN ochilmaydi.
+    // Boshqa manbalarda eski xatti-harakat (anonymous) saqlanadi.
+    if (media && media.crossOrigin === false) {
+      v.removeAttribute('crossorigin');
+    } else {
+      v.setAttribute('crossorigin', 'anonymous');
+    }
     if (media && media.poster) v.setAttribute('poster', media.poster);
     root.appendChild(v);
     host.appendChild(root);

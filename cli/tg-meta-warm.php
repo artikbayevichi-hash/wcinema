@@ -31,6 +31,9 @@ ini_set('display_errors', '0');
 
 require __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/TgPull.php';
+// Metama'lumot disk keshiga qo'shimcha ravishda BAZAGA ham yoziladi.
+require_once __DIR__ . '/../includes/TgMeta.php';
+TgMeta::ensure();
 
 const TG_DOC_CACHE_VER = 2;
 const TG_DOC_CACHE_TTL = 1800;
@@ -189,6 +192,7 @@ try {
         }
         list($ch, $post) = explode('/', $key, 2);
         tgdCacheWrite($ch, (int) $post, $out);
+        TgMeta::save($ch, (int) $post, $out, 'bot');   // doimiy saqlash
         $ok++;
     }
     echo 'ok: ' . $ok . '/' . count($need) . ' — ' . round(microtime(true) - $t0, 1) . ' s' . PHP_EOL;

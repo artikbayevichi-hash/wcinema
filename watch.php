@@ -13,8 +13,16 @@
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
+// Server-Timing: sahifa tayyorlanish vaqti (faqat ms, maxfiy ma'lumot yo'q).
+// Brauzer tomonidagi video_start o'lchovi tg-perf.js da alohida yuboriladi.
+require_once __DIR__ . '/includes/ServerTiming.php';
+ServerTiming::init('wc-page', 'bootstrap + catalog + boot');
+
 require_once __DIR__ . '/includes/MediaFlow.php';
 $mediaflowEnabled = MediaFlow::isEnabled();
+require_once __DIR__ . '/includes/TgMeta.php';   // Telegram video thumb (poster)
+require_once __DIR__ . '/includes/TgPreview.php'; // kichik faststart preview (agar tayyor)
+require_once __DIR__ . '/includes/StreamBootstrap.php'; // qo'shimcha so'rovlar SQL keshi
 
 $user   = $auth->getCurrentUser();
 $userId = $user ? (int) $user['id'] : null;
@@ -75,10 +83,11 @@ $hasPlaylist = false;
 
 if ($item) {
     // DIQQAT: maydon nomlari `api/content.php` bilan BIR XIL bo'lishi shart
-    // (`number`, `has_video`, ...). Sababi: `watch.js` dagi qism almashtirish
-    // shu endpoint javobini oladi va `S.episodes` ni to'liq almashtiradi.
-    // Nomlar farq qilsa, birinchi ochilishda raqamlar chiqib, keyin
-    // barcha qismlar "undefined" bo'lib ko'rinardi.
+    // (`number`, `has_video`, ...). Qism almashtirishda `S.episodes` endi
+    // almashtirilmaydi (faqat player yangilanadi), lekin `prefetch()`,
+    // `epRow()` va sarlavha shu maydonlarga tayanadi — shuning uchun
+    // birinchi ochilishdagi format keyingi holat bilan bir xil bo'lishi
+    // shart (aks holda qism raqamlari "undefined" bo'lib qolardi).
     //
     // `tg_channel` + `tg_post` ham shu yerda kerak: birinchi ochilishda
     // `watch.js` darhol KEYINGI qismni oldindan yuklashi (`TgStream.prefetch`)
@@ -143,6 +152,23 @@ if ($item) {
     // variantlari ham shu yerda) - `$episodes` allaqachin qisqa qilingan.
     $playback = $selected ? $catalog->getPlayback($catalog->getEpisode((int) $selected['id']))
                           : $catalog->getPlayback($item);
+
+    // TELEGRAM VIDEO THUMB -> POSTER (tezkor idrok):
+    // Har bir video hujjatining tayyor thumb'i backfill paytida diskka
+    // keshlangan (`uploads/tg_thumbs/`). Agar mavjud bo'lsa — uni VIDEO
+    // POSTER'i qilib beramiz: foydalanuvchi bayt kutayotganda ham darhol
+    // rasm ko'radi. Kesh yo'q/eskirgan bo'lsa — eski tg-resolve posteri
+    // saqlanadi (api/tg-thumb.php o'zi ham self-heal qiladi).
+    if (is_array($playback) && ($playback['type'] ?? '') === 'telegram'
+        && !empty($playback['channel']) && (int) ($playback['post'] ?? 0) > 0) {
+        $thumbFile = TgMeta::thumbCachePath($playback['channel'], (int) $playback['post']);
+        if (is_file($thumbFile)) {
+            $__base = defined('APP_BASE_PATH') ? rtrim((string) APP_BASE_PATH, '/') : '';
+            $playback['poster'] = $__base . '/api/tg-thumb.php?ch='
+                . rawurlencode((string) $playback['channel'])
+                . '&post=' . (int) $playback['post'];
+        }
+    }
 
     // Pleer orqasidagi POSTER (YouTube uslubi).
     // Videо yuklanmaganda pleer qora quti bo'lib qolmasligi uchun kontent
@@ -217,11 +243,23 @@ $WATCH = [
     'episodes'  => $episodes,
     'selectedId' => $selected ? (int) $selected['id'] : 0,
     'playback'  => $playback,
-    // Telegram RASMIY embed pleyeri O'CHIRILGAN: sayt faqat o'z MTProto
-    // pleyerimizdan (Service Worker + tg-stream.js) foydalanadi. Pleyer
-    // tanlash paneli ham olib tashlangan. Qaytarish kerak bo'lsa, shu
-    // qiymatni yana massiv qilib to'ldirish kifoya.
-    'tgEmbed'   => null,
+    // Telegram RASMIY embed pleyeri — FAQAT OMMAVIY kanal postlarida.
+    // Video baytlari to'g'ridan-to'g'ri Telegram CDN'dan brauzerga keladi
+    // (sayt origin'i ularni KO'RMAYDI) — bu eng tez yo'l.
+    // Katta fayllarda Telegram embed "Media is too big" beradi, shuning
+    // uchun `api/tg-embed.php` bir marta tekshiradi va `watch.js` o'z
+    // pleyerimizga (MTProto + SW) avtomatik qaytadi.
+    // XUSUSIY kanal (`t.me/c/<id>/<post>`) da `channel` null bo'ladi —
+    // bunday postlarda embed UMUMAN yoqilmaydi, faqat MTProto ishlaydi
+    // (`api/tg-embed.php` ham faqat username formatini qabul qiladi).
+    'tgEmbed'   => (is_array($playback) && ($playback['type'] ?? '') === 'telegram'
+                    && !empty($playback['channel'])
+                    && (int) ($playback['post'] ?? 0) > 0
+                    && preg_match('/^[A-Za-z0-9_]{3,64}$/', (string) $playback['channel'])
+                    && !preg_match('/^c\d+$/', (string) $playback['channel']))
+                   ? ['channel' => (string) $playback['channel'],
+                      'post'    => (int) $playback['post']]
+                   : null,
     'progress'  => $progress,
     'hasPlaylist' => $hasPlaylist,
     'related'   => $related,
@@ -232,15 +270,103 @@ $WATCH = [
 ];
 
 // ---------------------------------------------------------------------------
-// JORIY VIDEO METAMA'LUMOTI — BU YERDA BERILMAYDI (2026-11-12)
+// JORIY VIDEO METAMA'LUMOTI — FAQAT FOYDALANUVCHI (gram) HAVOLASI INLINE
 // ---------------------------------------------------------------------------
-// Ilgari server (BOT sessiyasi, MadelineProto) yechgan `file_reference` keshdan
-// olinib, HTML ichiga qo'shilardi. Amalda bu havola tomoshabinning O'Z
-// akkauntida `FILE_REFERENCE_INVALID` bilan rad etilardi: har ochilish
-// "rad etish -> `fresh=1` (3-6 s) -> yana rad etish -> GramJS" zanjiriga
-// tushardi va video umuman ochilmasdi. Shuning uchun bu blok OLIB TASHLANDI.
-// Hujjat endi faqat foydalanuvchining O'Z sessiyasi (GramJS) bilan yechiladi
-// va `tg-stream.js` ichida 30 daqiqaga lokal keshlanadi.
+// 2026-11-12 da BOT sessiyasi olgan `file_reference` HTML ichiga qo'shilganida
+// tomoshabbin akkauntida `FILE_REFERENCE_INVALID` chiqqan edi. Endi FAQAT
+// `source='gram'` yozuvlari olinadi — ular aynan foydalanuvchining O'Z
+// sessiyasida yaratilgan va `tg-meta-write.php` orqali bazaga yozilgan.
+// Bot manbali yozuvlar `tg-stream.js` da allaqachon rad etiladi, shuning
+// uchun ularni yuborish ham xavfsiz emas, ham ma'nosiz.
+//
+// NATIJA: birinchi video ochilishidagi `api/tg-doc.php` so'rovi (1 RTT)
+// yo'qoladi — ma'lumot tayyor holda HTML bilan birga keladi. Qo'shni qismlar
+// ham qo'shiladi: keyingi qismga o'tganda yana so'rov kerak bo'lmaydi.
+$__inlineDocMeta = [];
+// Qisqa preview manzillari ham HTML bilan birga keladi — `api/tg-preview.php`
+// ga alohida so'rov kerak bo'lmaydi. Preview yo'q bo'lsa bo'sh massiv.
+$__inlinePreview = [];
+if ($item) {
+    $__tgRefs = [];
+    if (is_array($playback) && !empty($playback['channel'])
+        && (int) ($playback['post'] ?? 0) > 0) {
+        $__tgRefs[] = [$playback['channel'], (int) $playback['post']];
+    }
+    foreach ($episodes as $e) {
+        if (!empty($e['tg_channel']) && (int) ($e['tg_post'] ?? 0) > 0) {
+            $__tgRefs[] = [$e['tg_channel'], (int) $e['tg_post']];
+        }
+    }
+    $__seenRef = [];   // gram doc meta (og'irroq) — 20 ta
+    $__seenPv  = [];   // preview (engil) — barcha qismlar uchun
+    foreach ($__tgRefs as $r) {
+        $ch = (string) $r[0]; $po = (int) $r[1];
+        // Kalit tg-stream.js dagi `String(channel) + '/' + post` bilan AYNAN
+        // bir xil bo'lishi shart — kanal nomini kichik harfga o'zgartirmaymiz.
+        $kk = $ch . '/' . $po;
+        if (isset($__seenPv[$kk])) continue;
+        $__seenPv[$kk] = 1;
+
+        // Preview ALOHIDA Telegram posti — asl video file_reference'iga
+        // BOG'LIQ EMAS. Shuning uchun uni `source='gram'` tekshiruvidan
+        // QAT'I NAZAR qo'shamiz (bot meta bo'lsa ham ishlayveradi).
+        // 200 tagacha inline qilamiz: anime/serialning istalgan qismi bosilsa
+        // ham preview uchun qo'shimcha so'rov kerak bo'lmaydi.
+        if (count($__inlinePreview) < 200) {
+            $pv = TgPreview::get($ch, $po);
+            if ($pv) {
+                $__inlinePreview[$kk] = [
+                    'ch' => $pv['ch'], 'p' => $pv['p'],
+                    'size' => $pv['size'], 'mime' => $pv['mime'],
+                    'w' => $pv['w'], 'h' => $pv['h'], 'dur' => $pv['dur'],
+                ];
+                // 1 s lik instant kadr — 19 MB intro'dan OLDIN o'ynatiladi.
+                // U ham alohida Telegram posti, baytlar saytdan o'tmaydi.
+                if (!empty($pv['instant'])) {
+                    $__inlinePreview[$kk]['instant'] = $pv['instant'];
+                }
+            }
+        }
+
+        // FAQAT foydalanuvchi havolasi: bot yoki disk keshidan kelgani
+        // brauzerda rad etiladi — uni yubormaymiz. HTML hajmini cheklash
+        // uchun faqat dastlabki 20 ta noyob ref olinadi.
+        if (isset($__seenRef[$kk]) || count($__seenRef) >= 20) continue;
+        $__seenRef[$kk] = 1;
+        $m = TgMeta::get($ch, $po);
+        if (!$m || ($m['source'] ?? '') !== 'gram'
+            || empty($m['fr']) || empty($m['id'])) continue;
+        $t = (int) ($m['t'] ?? 0);
+        if ($t <= 0) $t = time();
+        $__inlineDocMeta[$kk] = [
+            't'      => $t * 1000,              // server SONIYA -> brauzer MS
+            'id'     => (string) $m['id'],
+            'ah'     => (string) ($m['ah'] ?? ''),
+            'fr'     => (string) $m['fr'],
+            'dc'     => (int) ($m['dc'] ?? 0),
+            'size'   => (int) ($m['size'] ?? 0),
+            'mime'   => (string) ($m['mime'] ?? ''),
+            'fn'     => (string) ($m['fn'] ?? ''),
+            'w'      => (int) ($m['w'] ?? 0),
+            'h'      => (int) ($m['h'] ?? 0),
+            'dur'    => (int) ($m['dur'] ?? 0),
+            'source' => 'gram',
+        ];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// VIDEO BOOTSTRAP: barcha umumiy ma'lumotlar BITTA SQL yozuvida.
+// Birinchi ochishda quriladi, keyingilarida faqat o'qiladi — brauzer endi
+// tg-embed / r2-info / doc / preview so'rovlarini yubormaydi.
+// E'TIJOR: $__inlineDocMeta (chiptali, faqat shu foydalanuvchiniki) alohida.
+// ---------------------------------------------------------------------------
+$__boot = is_array($playback)
+    ? StreamBootstrap::load($playback, [
+        'content_id' => $item ? (int) $item['id'] : 0,
+        'episode_id' => $selected ? (int) $selected['id'] : 0,
+    ])
+    : null;
 
 $NAV_ACTIVE = 'home';
 ?>
@@ -256,6 +382,25 @@ $NAV_ACTIVE = 'home';
              Boshqa sahifalarda bu allaqachon bor edi; watch sahifasida
              yo'q edi — birinchi video ochilishidagi eng katta kechikish
              shu yerdan kelardi. */ ?>
+    <?php
+    /* POSTER PRELOAD — "birinchi kadr"ning eng arzon qismi.
+     *
+     * Pleer ochilishida foydalanuvchi birinchi bo'lib posterni ko'radi.
+     * Uni HTML parse paytida `fetchpriority=high` bilan oldindan yuklasak,
+     * qora ekran va keyingi layout siljishi (CLS) yo'qoladi. Manba:
+     *   1) Telegram video thumb'i (`api/tg-thumb.php` yoki lokal kesh);
+     *   2) bo'lmasa — kontent posteri (`Catalog::resolvePoster`).
+     *
+     * `perf-head.php` faqat `https://`, `//`, `/...` va `uploads/...`
+     * manzillarni preload qiladi — `data:` SVG fallback jimgina o'tkazib
+     * yuboriladi, ya'ni bu yerda qo'shimcha tekshiruv shart emas. */
+    $PERF_POSTER = '';
+    if (is_array($playback) && !empty($playback['poster'])) {
+        $PERF_POSTER = (string) $playback['poster'];
+    } elseif ($watchPoster !== '') {
+        $PERF_POSTER = (string) $watchPoster;
+    }
+    ?>
     <?php require __DIR__ . '/includes/perf-head.php'; ?>
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
@@ -281,42 +426,20 @@ $NAV_ACTIVE = 'home';
     <?php /* Qora fonli bloklar (Qismlar, izoh yozish, stiker/GIF) + Ambient light uslubi.
              Eng OXIRIDA turishi shart. Qaytarish uchun shu qatorni olib tashlang. */ ?>
     <link rel="stylesheet" href="assets/css/watch-dark.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/watch-dark.css') ?: 1; ?>">
-    <?php /* GramJS bundle'ni OLDINDAN yuklash (735 KB siqilgan).
+    <?php /* GramJS bundle (5.4 MB / 718 KB gzip) ENDI OLDINDAN YUKLANMAYDI.
 
-        Bu sahifadagi eng katta va eng sekin kutiladigan manba. Odatda u
-        `tg-stream.js` dan KEYIN, `<body>` oxiridagi inline qizdirish bloki
-        ishga tushgandagina so'raladi — ya'ni 8 ta CSS, 45 KB HTML va
-        `tg-probe.js` (29 KB) parser'dan o'tguncha kutadi.
+        Nima uchun: video oqimining 99% holatida 25 KB li `tg-mtproto.js`
+        yetadi (`upload.getFile` uchun GramJS'ning butun API qatlami kerak
+        emas). 718 KB ni har bir watch sahifasida majburan yuklash sekin
+        tarmoqda video baytlaridan oldin kanalni egallab, birinchi kadrni
+        sekinlashtirardi.
 
-        Preload shu kutishni yo'q qiladi: yuklab olish HTML bilan PARALLEL
-        boshlanadi. Manzil `tg-stream.js` dagi `bundleGz()` hosil qiladigan
-        manzil bilan AYNAN bir xil bo'lishi shart (`window.APP.base` +
-        `/assets/js/tg-client.bundle.js.gz`), aks holda brauzer keshdan
-        topa olmaydi va fayl IKKI MARTA yuklanadi — shuning uchun bu yerdagi
-        `base` ham `$WATCH['base']` dan olinadi, qo'lda yozilmaydi.
-
-        `crossorigin="anonymous"` shart, chunki `loadBundle()` faylni
-        `fetch(url, { credentials: 'same-origin' })` bilan oladi. Preload
-        rejimi shunga mos kelmasa brauzer keshni ishlatmaydi.
-
-        `?v=` ham SHART: `bundleGz()` manzilga `window.__WCBUNDLEV`
-        (`.gz` faylning mtime'i, `includes/perf-head.php` da qo'yiladi)
-        qo'shadi. Versiya yozilmasa preload bir manzilga, `fetch` esa
-        boshqasiga ketadi va 735 KB ikki marta yuklanadi.
-
-        CSS'lardan KEYIN qo'yilgan: uslublar render'ni bloklagani uchun
-        ular birinchi bo'lib o'tishi kerak, aks holda sahifa ko'rinishi
-        kechikadi. Bu sahifaga kirish uchun MTProto kaliti shart
-        (`includes/nav.php` dagi guard), ya'ni bundle BEKOR yuklanmaydi.
-
-        `fetchpriority="low"` — MUHIM: tez yo'l (metama'lumot keshi) ishlaganda
-        bu 718 KB umuman kerak emas. Yuqori prioritetda u video baytlaridan
-        oldin tarmoqni egallab, birinchi kadrni sekinlashtirardi. Endi u fon
-        rejimida, video va CSS/JS'dan KEYIN yuklanadi. */ ?>
-    <?php if (!$mediaflowEnabled): ?>
-    <link rel="preload" as="fetch" crossorigin="anonymous" fetchpriority="low"
-          href="<?php echo htmlspecialchars($WATCH['base'], ENT_QUOTES); ?>/assets/js/tg-client.bundle.js.gz<?php echo !empty($__bundleV) ? '?v=' . (int) $__bundleV : ''; ?>">
-    <?php endif; ?>
+        Endi bundle faqat haqiqatan kerak bo'lganda — `ensureSession()`
+        ichida `loadBundle()` orqali — yuklanadi. Ya'ni:
+          • ommaviy post + anonim CDN  -> umuman yuklanmaydi;
+          • tez MTProto klient ishlagan -> umuman yuklanmaydi;
+          • faqat tez yo'l rad etganda (masalan, eski `file_reference`
+            yoki DC kaliti yo'q bo'lsa) -> o'sha paytda yuklanadi. */ ?>
     <?php /* Oqim zanjiri skriptlari pastda (nav va kontentdan keyin) turadi.
              Preload ularni HTML parse bilan PARALLEL yuklaydi — pleer mount'i
              bir necha yuz millisekundga erta boshlanadi. */ ?>
@@ -631,7 +754,31 @@ $NAV_ACTIVE = 'home';
         miniApp: <?php echo json_encode($WATCH['miniApp']); ?>
     };
     window.WATCH = <?php echo json_encode($WATCH, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    // Foydalanuvchi (gram) havolalari tayyor holda HTML bilan keladi —
+    // `tg-stream.js` ularni lokal keshga uradi va `api/tg-doc.php` so'rovini
+    // umuman qilmaydi. Faqat `source='gram'` yozuvlari (xavfsiz).
+    window.__WCDOCMETA = <?php echo json_encode($__inlineDocMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    // Tayyor qisqa preview'lar (agar bor): avval ular o'ynatiladi, keyin
+    // asl video. Baytlar yana to'g'ridan-to'g'ri Telegram'dan keladi.
+    window.__WCPREVIEW = <?php echo json_encode($__inlinePreview, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    // SQL keshidan olingan umumiy ma'lumotlar + faqat shu sessiyaga tegishli chipta.
+    // Brauzer endi qo'shimcha API so'rovi yubormaydi - faqat video oqimi ishlaydi.
+    // `?boot=0` — faqat A/B o'lchash uchun: kesh chiqarilmaydi va eski
+    // ketma-ketlik (tg-embed / r2-sign / MTProto) ishlayveradi.
+    <?php if (!isset($_GET['boot']) || (string) $_GET['boot'] !== '0'): ?>
+    window.__WCBOOT = <?php echo json_encode(array_merge(
+        is_array($__boot) ? $__boot : [],
+        ['sessionDoc' => $__inlineDocMeta]
+    ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    <?php endif; ?>
+    <?php /* Server-side MTProto gateway (ixtiyoriy zaxira yo'l). Faqat
+             `TG_GATEWAY_ENABLED=1` + `TG_GATEWAY_MODE=primary` bo'lsa
+             yoqiladi. O'chiq bo'lsa sahifaga umuman qo'shilmaydi. */ ?>
+    <?php if (defined('TG_GATEWAY_ENABLED') && TG_GATEWAY_ENABLED && defined('TG_GATEWAY_MODE') && TG_GATEWAY_MODE === 'primary'): ?>
+    window.__WCGW = { enabled: true, mode: 'primary', url: 'api/tg-gateway.php' };
+    <?php endif; ?>
 </script>
+<script src="assets/js/stream-bootstrap.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/stream-bootstrap.js') ?: 1; ?>"></script>
 <script src="assets/js/tg-probe.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-probe.js') ?: 1; ?>"></script>
 <?php /* Minimal MTProto klient (25 KB) — 5.4 MB GramJS bundle'ini video oqimi
          uchun umuman kerak qilmaydi. `tg-stream.js` dan OLDIN yuklanadi:
@@ -780,6 +927,10 @@ $NAV_ACTIVE = 'home';
          uchun ham foyda: yana bir katta fayl (telegram ulanishlari yo'q). */ ?>
 <script src="assets/player/player.js?v=<?php echo @filemtime(__DIR__ . '/assets/player/player.js') ?: 1; ?>"></script>
 <script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
+<?php /* Ixtiyoriy server gateway mijozi — faqat `TG_GATEWAY_MODE=primary`. */ ?>
+<?php if (defined('TG_GATEWAY_ENABLED') && TG_GATEWAY_ENABLED && defined('TG_GATEWAY_MODE') && TG_GATEWAY_MODE === 'primary'): ?>
+<script src="assets/js/tg-gateway.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-gateway.js') ?: 1; ?>"></script>
+<?php endif; ?>
 <script src="assets/js/watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch.js') ?: 1; ?>"></script>
 <script src="assets/js/tv-watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tv-watch.js') ?: 1; ?>"></script>
 <?php /* Ambient light (YouTube kengaytmasi kabi). Standart holati o'chiq. */ ?>

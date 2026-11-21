@@ -31,8 +31,12 @@
 //   oldindan yuklash uchun.
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
+require_once __DIR__ . '/../includes/ServerTiming.php';
+ServerTiming::init('wc-doc', 'doc resolve + cache');
 // Kesh formati va o'qish/yozish — `watch.php` bilan BIR XIL (bitta manba).
 require_once __DIR__ . '/../includes/TgDocCache.php';
+// Doimiy (DB) metama'lumot: admin qo'shgan videolarning ma'lumoti bazada saqlanadi.
+require_once __DIR__ . '/../includes/TgMeta.php';
 
 // ---------------------------------------------------------------------------
 // CHIQISHNI TOZALASH
@@ -63,7 +67,23 @@ function apiFail($message, $status = 400) {
 const TG_DOC_MAX_BATCH  = 120;
 
 // ---------------------------------------------------------------------------
-// Kesh (disk) — `includes/TgDocCache.php`
+// KESH: avval BAZA (doimiy), keyin disk (vaqtinchalik)
+// ---------------------------------------------------------------------------
+// Admin qo'shgan hamma videolarning metama'lumoti `telegram_meta` jadvalida
+// saqlanadi. Shuning uchun o'qish BAZADAN boshlanadi — Telegram'ga umuman
+// murojaat qilmay, ~1 ms da javob qaytadi. Baza bo'sh bo'lsa (eski o'rnatish)
+// disk keshi ishlatiladi. Yozish ikkala joyga ham qilinadi.
+function tgDocRead($ch, $post)
+{
+    $db = TgMeta::get($ch, $post);
+    return $db ? $db : tgDocCacheRead($ch, $post);
+}
+function tgDocWrite($ch, $post, $out)
+{
+    tgDocCacheWrite($ch, $post, $out);   // disk (vaqtinchalik kesh)
+    TgMeta::save($ch, $post, $out, 'bot'); // baza (doimiy)
+}
+
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -259,7 +279,7 @@ if ($warm) {
     $pairs = tgCatalogPairsAll(150);
     $need  = [];
     foreach ($pairs as $p) {
-        $c = $fresh ? null : tgDocCacheRead($p['ch'], $p['post']);
+        $c = $fresh ? null : tgDocRead($p['ch'], $p['post']);
         if ($c && (time() - (int) ($c['t'] ?? 0)) < TG_DOC_CACHE_TTL) {
             continue;
         }
@@ -309,7 +329,7 @@ if ($warm) {
             }
             list($c2, $p2) = explode('/', $key, 2);
             if ($c2 !== '' && (int) $p2 > 0) {
-                tgDocCacheWrite($c2, (int) $p2, $out);
+                tgDocWrite($c2, (int) $p2, $out);
             }
         }
     } catch (\Throwable $e) {
@@ -361,7 +381,7 @@ if ($postsParam !== '') {
     $items = [];
     $need  = [];
     foreach ($allowed as $key => $pair) {
-        $cached = $fresh ? null : tgDocCacheRead($pair['ch'], $pair['post']);
+        $cached = $fresh ? null : tgDocRead($pair['ch'], $pair['post']);
         if ($cached && (time() - (int) ($cached['t'] ?? 0)) < TG_DOC_CACHE_TTL) {
             $cached['cached'] = true;
             $items[$key]      = $cached;
@@ -373,7 +393,7 @@ if ($postsParam !== '') {
     // 3) Keshdagi (eskirgan) nusxalarni zaxira sifatida saqlaymiz
     $stale = [];
     foreach ($need as $key => $pair) {
-        $s = tgDocCacheRead($pair['ch'], $pair['post']);
+        $s = tgDocRead($pair['ch'], $pair['post']);
         if ($s) {
             $stale[$key] = $s;
         }
@@ -393,7 +413,7 @@ if ($postsParam !== '') {
                 if (!$out) {
                     continue;
                 }
-                tgDocCacheWrite($need[$key]['ch'], $need[$key]['post'], $out);
+                tgDocWrite($need[$key]['ch'], $need[$key]['post'], $out);
                 $items[$key] = $out;
             }
         } catch (\Throwable $e) {
@@ -438,7 +458,7 @@ if ($ch === '' || $post <= 0) {
 }
 
 // ---------------------------------------------------------------- kesh (disk)
-$cached = $fresh ? null : tgDocCacheRead($ch, $post);
+$cached = $fresh ? null : tgDocRead($ch, $post);
 if ($cached && (time() - (int) ($cached['t'] ?? 0)) < TG_DOC_CACHE_TTL) {
     $cached['cached'] = true;
     apiOk($cached);
@@ -479,6 +499,6 @@ if (!$out) {
 }
 
 // -------------------------------------------------------------- keshga yozish
-tgDocCacheWrite($ch, $post, $out);
+tgDocWrite($ch, $post, $out);
 
 apiOk($out);

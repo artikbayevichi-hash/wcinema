@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 // Nima uchun kerak:
 //   Video Telegram CDN'dan (telesco.pe / cdn-telegram.org) va MTProto orqali
-//   (venus.web.telegram.org) keladi. Brauzer bu domenlarni FAQAT player
+//   (kws<dc>.web.telegram.org) keladi. Brauzer bu domenlarni FAQAT player
 //   ishga tushganda topadi — ya'ni DNS + TCP + TLS qadamlari videoning
 //   birinchi kadriga qadar kutadi (odatda 100–600 ms, sekin tarmoqda
 //   ko'proq).
@@ -37,12 +37,34 @@ if ($__perfPoster !== ''
 // ketadigan bo'lsa, unga ham oldindan ulanamiz.
 $__cfWorker = trim((string) env_value('CLOUDFLARE_WORKER_URL', ''));
 $__cfHost   = $__cfWorker !== '' ? (string) (parse_url($__cfWorker, PHP_URL_HOST) ?: '') : '';
+
+// MTProto asl ulanishi `kws<dc>.web.telegram.org` ga ketadi (tg-mtproto.js
+// dagi `dcHosts`). Eski `venus` domeni faqat zaxira — unga preconnect qilsak,
+// haqiqiy ulanish boshqa domenga ketib, TLS handshake yana boshidan boshlanadi
+// (sekin tarmoqda bu 0.5–2 s kechikish beradi).
+//
+// `watch.php` joriy videoning `source='gram'` doc meta'sini HTML'ga inline
+// qilib bergan — DC'ni shu yerdan olamiz, qo'shimcha DB so'rovi yo'q.
+$__perfDc = 0;
+if (isset($__inlineDocMeta, $playback) && is_array($__inlineDocMeta)
+    && is_array($playback) && !empty($playback['channel'])
+    && (int) ($playback['post'] ?? 0) > 0) {
+    $__perfKey = (string) $playback['channel'] . '/' . (int) $playback['post'];
+    $__perfDc  = (int) ($__inlineDocMeta[$__perfKey]['dc'] ?? 0);
+}
 ?>
+<?php if ($__perfDc > 0): ?>
+<link rel="preconnect" href="https://kws<?php echo (int) $__perfDc; ?>.web.telegram.org" crossorigin>
+<link rel="preconnect" href="https://kws<?php echo (int) $__perfDc; ?>-1.web.telegram.org" crossorigin>
+<link rel="dns-prefetch" href="//kws<?php echo (int) $__perfDc; ?>.web.telegram.org">
+<link rel="dns-prefetch" href="//kws<?php echo (int) $__perfDc; ?>-1.web.telegram.org">
+<?php else: ?>
 <link rel="preconnect" href="https://venus.web.telegram.org" crossorigin>
+<link rel="dns-prefetch" href="//venus.web.telegram.org">
+<?php endif; ?>
 <link rel="preconnect" href="https://api.telegram.org" crossorigin>
 <link rel="preconnect" href="https://cdn.telesco.pe">
 <link rel="preconnect" href="https://telesco.pe">
-<link rel="dns-prefetch" href="//venus.web.telegram.org">
 <link rel="dns-prefetch" href="//cdn.telesco.pe">
 <link rel="dns-prefetch" href="//telesco.pe">
 <?php if ($__cfHost !== ''): ?>
@@ -58,6 +80,24 @@ $__cfHost   = $__cfWorker !== '' ? (string) (parse_url($__cfWorker, PHP_URL_HOST
 // ishlatiladi, shuning uchun eng boshida e'lon qilinadi.
 $__base  = rtrim((string) (parse_url(SITE_URL, PHP_URL_PATH) ?: ''), '/');
 
+// Sayt sozlamalarini (e'lon va h.q.) HTML ichiga INLINE qilamiz:
+// `site-banner.js` endi `api/site-config.php` ga ALOHIDA so'rov yubormaydi —
+// bu har bir sahifada bitta RTT (odatda 40–150 ms) kamayadi.
+$__siteCfg = [];
+if (class_exists('SiteSettings')) {
+    $__s = SiteSettings::all();
+    $__siteCfg = [
+        'success'     => true,
+        'site_name'   => $__s['site_name'] !== '' ? $__s['site_name'] : (defined('SITE_NAME') ? SITE_NAME : ''),
+        'notice'      => (string) $__s['notice'],
+        'notice_link' => (string) $__s['notice_link'],
+        'banner_url'  => (string) $__s['banner_url'],
+        'maintenance' => (int) $__s['maintenance'] === 1,
+    ];
+}
+?>
+<script>window.__WCSITECFG = <?php echo json_encode($__siteCfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;</script>
+<?php
 // Admin panel → Sozlamalar dagi e'lon (agar bo'lsa). `defer` — render'ni
 // bloklamaydi, e'lon bo'lmasa skript hech narsa qilmaydi.
 $__bannerV = @filemtime(__DIR__ . '/../assets/js/site-banner.js') ?: 1;

@@ -31,6 +31,19 @@ ini_set('display_errors', '1');
 set_time_limit(0);
 require __DIR__ . '/../includes/bootstrap.php';
 
+// HLS_MODE=off (standart sozlama): tomoshabin video'ni to'g'ridan-to'g'ri
+// brauzer -> Telegram DC dan oladi. Bunda prewarm kerak EMAS va zararli:
+// u bot sessiya qulfini band qilib, har bir videoning tez ochilishini
+// ta'minlaydigan api/tg-doc.php ni sekinlashtiradi.
+if (defined('HLS_MODE') && HLS_MODE === 'off') {
+    echo "HLS_MODE=off — HLS prewarm o'chirilgan (video brauzer -> Telegram DC).\n";
+    exit(0);
+}
+if (defined('HLS_ENABLED') && !HLS_ENABLED) {
+    echo "HLS_ENABLED=0 — HLS prewarm o'chirilgan.\n";
+    exit(0);
+}
+
 $once     = in_array('--once', $argv, true);
 $interval = 15;
 foreach ($argv as $a) {
@@ -66,6 +79,18 @@ function readMeta($dir)
     $raw = @file_get_contents($f);
     $d   = $raw ? json_decode($raw, true) : null;
     return is_array($d) ? $d : null;
+}
+
+/** meta.json ga xavfsiz qo'shimcha yozish (.tmp -> rename). */
+function patchMeta($dir, array $patch)
+{
+    $f = $dir . '/meta.json';
+    $d = readMeta($dir);
+    if (!is_array($d)) {
+        $d = [];
+    }
+    @file_put_contents($f . '.tmp', json_encode(array_merge($d, $patch), JSON_UNESCAPED_UNICODE));
+    @rename($f . '.tmp', $f);
 }
 
 // Kesh papkasining hozirgi hajmi (bayt).
@@ -148,9 +173,15 @@ while (true) {
                     continue;                          // jonli - tegmaymiz
                 }
             }
-            // Xatodan keyin 5 daqiqa kutamiz (cheksiz qayta urinish bo'lmasin)
-            if ($st === 'error' && (time() - (int) ($meta['ended'] ?? 0)) < 300) {
-                continue;
+            // Xatodan keyin eksponensial kutish: 5 d, 10 d, 20 d ... maks 24 soat.
+            // Ilgari har 5 daqiqada qayta urinib, bot sessiyasini band qilar va
+            // Telegram'ga yuzlab muvaffaqiyatsiz so'rov yuborardi.
+            if ($st === 'error') {
+                $tries   = max(0, (int) ($meta['attempts'] ?? 1));
+                $backoff = min(86400, 300 * (1 << min(8, $tries)));
+                if ((time() - (int) ($meta['ended'] ?? 0)) < $backoff) {
+                    continue;
+                }
             }
 
             // Disk kvotasi to'layotgan bo'lsa yangi video O'GIRMAYMIZ: aks holda hls.php
@@ -165,6 +196,7 @@ while (true) {
             if (!is_dir($dir)) {
                 @mkdir($dir, 0777, true);
             }
+            patchMeta($dir, ['attempts' => ((int) ($meta['attempts'] ?? 0)) + 1]);
             wlog("tayyorlanmoqda: epizod #{$r['eid']} / kontent #{$r['content_id']}  key=" . substr($key, 0, 10));
 
             $cmd = escapeshellarg(PHP_CLI_BIN) . ' ' . escapeshellarg(__DIR__ . '/hls-worker.php')

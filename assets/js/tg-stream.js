@@ -588,10 +588,40 @@
     } catch (e) { return null; }
   }
 
+  // Foydalanuvchining O'Z sessiyasi (GramJS) yechgan havolani serverga
+  // qayta yozamiz — `source='gram'`. Bu havola tomoshabbin akkauntida
+  // ishlaydi, shuning uchun keyingi ochilishda GramJS bundle'ini yuklash
+  // shart bo'lmaydi (serverdan tayyor metama'lumot olinadi).
+  // `keepalive` + jim catch: bu fon ishi, video ochilishini HECH qachon
+  // kutib turdirmaydi.
+  var _gramWrote = {};
+  function gramWriteback(key, m) {
+    if (!key || !m || !m.fr) return;
+    var kp = String(key).split('/');
+    var ch = kp[0] || '', post = Number(kp[1] || 0);
+    if (!ch || !(post > 0)) return;
+    if (_gramWrote[key]) return;      // bir sessiyada bir marta
+    _gramWrote[key] = 1;
+    try {
+      var body = new URLSearchParams({
+        ch: ch, post: String(post),
+        id: String(m.id || ''), ah: String(m.ah || ''), fr: String(m.fr || ''),
+        dc: String(m.dc || 0), size: String(m.size || 0),
+        mime: String(m.mime || ''), fn: String(m.fn || ''),
+        w: String(m.w || 0), h: String(m.h || 0), dur: String(m.dur || 0)
+      });
+      fetch(base() + '/api/tg-meta-write.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(), credentials: 'same-origin', keepalive: true
+      }).catch(function () {});
+    } catch (e) { /* jim: yozib qo'yish ixtiyoriy qulaylik */ }
+  }
+
   function docMetaPut(key, doc) {
     if (!key || !doc) return;
     var vi = videoInfo(doc);
-    docMetaSave(key, {
+    var meta = {
       t: Date.now(),
       id: String(doc.id),
       ah: String(doc.accessHash),
@@ -600,8 +630,11 @@
       size: bytesOf(doc),
       mime: doc.mime_type || '',
       fn: vi.filename || '',
-      w: vi.w || 0, h: vi.h || 0, dur: vi.duration || 0
-    });
+      w: vi.w || 0, h: vi.h || 0, dur: vi.duration || 0,
+      source: 'gram'
+    };
+    docMetaSave(key, meta);
+    gramWriteback(key, meta);
   }
 
   // `FILE_MIGRATE_X` kelganda metama'lumotdagi DC eskirgan bo'ladi.
@@ -641,6 +674,38 @@
     } catch (e) { /* kvota to'lgan bo'lishi mumkin — jim */ }
   }
 
+  // HTML ichida server tayyorlagan `source='gram'` havolalarini lokal keshga
+  // uramiz — `api/tg-doc.php` ga alohida so'rov (1 RTT) kerak bo'lmaydi.
+  // Faqat foydalanuvchining O'Z sessiyasida yaratilgan havolalar qabul
+  // qilinadi; bot manbali (`source='bot'`) yozuvlar FILE_REFERENCE_INVALID
+  // beradi, shuning uchun ular hech qachon ishlatilmaydi.
+  // Shu sessiyada GramJS olgan (yangiroq) yozuv ustun — ustma-ust yozmaymiz.
+  function seedInlineMeta() {
+    var inline = global.__WCDOCMETA;
+    if (!inline || typeof inline !== 'object') return 0;
+    var n = 0;
+    for (var key in inline) {
+      if (!Object.prototype.hasOwnProperty.call(inline, key)) continue;
+      var m = inline[key];
+      if (!m || m.source !== 'gram' || !m.fr || !m.id) continue;
+      if (docMetaGet(key)) continue;   // allaqachon bor (ehtimol yangiroq)
+      docMetaSave(key, {
+        t: Number(m.t) || Date.now(),
+        id: String(m.id),
+        ah: String(m.ah || ''),
+        fr: String(m.fr),
+        dc: m.dc,
+        size: m.size,
+        mime: m.mime || '',
+        fn: m.fn || '',
+        w: m.w || 0, h: m.h || 0, dur: m.dur || 0,
+        source: 'gram'
+      });
+      n++;
+    }
+    return n;
+  }
+
   // Serverdagi keshdan hujjat metama'lumoti. Server uni Telegram orqali
   // yechib, saqlaydi — brauzer esa faqat tayyor ma'lumotni oladi (taxminan
   // 10 ms). Bu — birinchi ochilish uchun ham tez yo'lni ochadi.
@@ -665,10 +730,13 @@
   // yana rad etish -> GramJS'ga qaytish. Foydalanuvchi uchun bu "video
   // umuman ochilmayapti" bo'lib ko'rinadi.
   //
-  // Shuning uchun bu yo'l O'CHIRILDI: hujjat har doim foydalanuvchining
-  // O'Z sessiyasi bilan yechiladi va 30 daqiqaga lokal keshlanadi
-  // (`DOC_META_TTL`), keyingi ochilishlar 0 RPC bilan boshlanadi.
-  var USE_SERVER_DOC_META = false;
+  // 2026-11-17: yo'lm QAYTA YOQILDI, lekin FAQAT `source='gram'` yozuvlari
+  // uchun. Bular — foydalanuvchining O'Z sessiyasi yechib, `api/tg-meta-write.php`
+  // orqali bazaga yozilgan havolalar. Bot manbali (`source='bot'`) yozuvlar
+  // `docMetaFromServer()`/`prefetchMany()` da rad etiladi, shuning uchun
+  // avvalgi `FILE_REFERENCE_INVALID` muammosi takrorlanmaydi.
+  // Havola eskirsa yoki noto'g'ri bo'lsa — avvalgidek `gramFallback()` ishlaydi.
+  var USE_SERVER_DOC_META = true;
 
   function docMetaFromServer(opts, fresh) {
     // `api/tg-doc.php` hujjatni BOT sessiyasi bilan yechadi, lekin
@@ -697,6 +765,10 @@
         // bo'lishi mumkin. Bunday metama'lumotni ishlatmaganimizda eski
         // (GramJS) yo'l ishlaydi.
         if (!j || !j.ok || !j.id || !j.fr) return null;
+        // FAQAT foydalanuvchi sessiyasidan kelgan havola. Bot (`source='bot'`)
+        // yoki disk keshidan kelgan (source yo'q) javob RAD ETILADI — ular
+        // tomoshabbin akkauntida `FILE_REFERENCE_INVALID` berardi.
+        if (j.source !== 'gram') return null;
         return {
           // Serverdagi kesh vaqti (havola qachon yangilangan) — eskirishni
           // aniqlash uchun kerak. Yo'q bo'lsa — hozirgi vaqt.
@@ -788,6 +860,7 @@
           if (docMetaGet(key)) continue;
           var m = j.items[key];
           if (!m || !m.fr || !m.id) continue;
+          if (m.source !== 'gram') continue;   // faqat foydalanuvchi havolasi
           docMetaSave(key, {
             t: Date.now(),
             id: String(m.id),
@@ -1933,7 +2006,9 @@
 
       if (getSwController()) return true;
 
-      // 1) activate dagi clients.claim() yetib borishi kechikishi mumkin.
+      // 1) Darhol "homiylash" so'raymiz: Ctrl+F5 dan keyin sahifa nazoratsiz qoladi va
+      //    `activate` dagi clients.claim() qayta ishlamaydi. Kutib o'tirmaymiz.
+      try { if (reg && reg.active) reg.active.postMessage({ type: 'claim' }); } catch (e) { /* keyingi bosqich */ }
       if (await waitForController(3500)) return true;
 
       // 2) Aniq "homiylash" — bu har qachon ishlaydi, hatto sahifa SW
@@ -2095,10 +2170,50 @@
 
   function warmR2Cfg() {
     try {
+      // To'g'ridan-to'g'ri anonim CDN orqali o'ynatayotganda SW va MTProto
+      // ishlatilmaydi — r2/prefix sozlamasi ham kerak emas. Bu holda
+      // api/r2-sign.php?info=1 so'rovi UMUMAN yuborilmaydi.
+      if (isDirectBoot()) return;
       r2CfgFetch();                 // HTTP keshni oldindan isitamiz
       if (!('serviceWorker' in navigator)) return;
       pushR2Cfg();
     } catch (e) { /* ixtiyoriy tezlashtirish */ }
+  }
+
+  /**
+   * Ommaviy post uchun anonim CDN manzili tayyormi?
+   *
+   * Agar ha — na Service Worker, na MTProto, na GramJS kerak: `<video>`
+   * to'g'ridan-to'g'ri Telegram CDN'idan Range so'rovlari bilan o'qiydi.
+   * Bu holatda `warmFast()` ni chaqirmaymiz — behuda WebSocket ochmaymiz.
+   */
+  function isDirectBoot() {
+    try {
+      var SB = global.WCStreamBoot;
+      return !!(SB && typeof SB.directCdn === 'function' && SB.directCdn());
+    } catch (e) { return false; }
+  }
+
+  /**
+   * Tarmoq imkoniyatlari — SW bo'lak hajmini tanlashi uchun.
+   *
+   * `navigator.connection` hamma brauzerda yo'q; mavjud bo'lmagan maydonlar
+   * 0/'' bo'lib qoladi va SW o'zining standart 512 KB qiymatini ishlatadi.
+   * Bu FAQAT maslahat: Telegram 1 MB dan katta so'rovni rad etadi, shuning
+   * uchun SW tomonda ham qattiq yuqori chegara bor.
+   */
+  function netHint() {
+    var h = { saveData: false, effectiveType: '', downlink: 0, rtt: 0 };
+    try {
+      var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (c) {
+        h.saveData = !!c.saveData;
+        h.effectiveType = String(c.effectiveType || '').toLowerCase();
+        h.downlink = Number(c.downlink) || 0;
+        h.rtt = Number(c.rtt) || 0;
+      }
+    } catch (e) { /* jim */ }
+    return h;
   }
 
   function connect() {
@@ -2109,7 +2224,11 @@
       S.chan = new MessageChannel();
       S.chan.port1.onmessage = onRead;
       S.chan.port1.start();
-      ctl.postMessage({ type: 'provide', size: S.size }, [S.chan.port2]);
+      // `net` — bo'lak hajmini tarmoqqa moslash uchun maslahat (ixtiyoriy).
+      ctl.postMessage(
+        { type: 'provide', size: S.size, net: netHint() },
+        [S.chan.port2]
+      );
       // SW R2 keshini to'ldirishi uchun ruxsat (faqat Wi-Fi/ethernet).
       try { ctl.postMessage({ type: 'seed', ok: canSeed() }); } catch (e) {}
       // R2 prefiks sozlamasi — SW birinchi baytni kutmasligi uchun.
@@ -2121,6 +2240,9 @@
       // raqobatlashmaydi: ikkisi bir xil 512 KB bo'lakni bo'lishadi.
       var did = (S.loc && S.loc.id != null) ? S.loc.id
         : (S.doc && S.doc.id != null) ? S.doc.id : '';
+      // Issiq yo'l: xarita bazada tayyor — SW uni olgach, qo'shimcha
+      // `moov` qidirish so'rovi umuman yuborilmaydi.
+      pushIndexHint(S.size, did);
       warmTail(S.size, did);
       return true;
     } catch (e) {
@@ -2144,6 +2266,42 @@
         var c = swCtl();
         if (c) c.postMessage(msg);
       }).catch(function () { /* film ochilganda connect() yuboradi */ });
+    } catch (e) { /* ixtiyoriy tezlashtirish */ }
+  }
+
+  /**
+   * Birinchi tomoshabin topgan MP4 indeks xaritasini SW ga uzatish.
+   * Xarita SQL keshidan `__WCBOOT` orqali keladi — u yerda bo'lmasa
+   * SW o'zi topadi va `indexfound` bilan sahifaga qaytaradi.
+   */
+  function pushIndexHint(size, docId) {
+    try {
+      var SB = global.WCStreamBoot;
+      if (!SB || typeof SB.indexInfo !== 'function') return;
+      var info = SB.indexInfo(docId, size);
+      if (!info || !info.moov) return;
+      var ctl = swCtl();
+      if (ctl) {
+        ctl.postMessage({
+          type: 'index', doc: String(docId), size: Number(size),
+          moov: info.moov, kf: info.kf || [], dur: Number(info.dur) || 0
+        });
+      }
+    } catch (e) { /* ixtiyoriy tezlashtirish */ }
+  }
+
+  /**
+   * Seek paytida keyframe jadvalidan eng yaqin bo'lakni oldindan olamiz.
+   * SW jadvalni SQL'dan yoki birinchi tomoshabin topgan `moov` dan olgan
+   * bo'ladi. Bu faqat qo'shimcha tezlashtirish — xato bersa oddiy yo'l ishlaydi.
+   */
+  function prefetchSeek(size, docId, seconds) {
+    try {
+      var ctl = swCtl();
+      if (!ctl || !docId || !(Number(size) > 0) || !(Number(seconds) >= 0)) return;
+      ctl.postMessage({
+        type: 'seekhint', doc: String(docId), size: Number(size), t: Number(seconds)
+      });
     } catch (e) { /* ixtiyoriy tezlashtirish */ }
   }
 
@@ -3007,10 +3165,42 @@
   }
 
   // SW o'z xotirasini yo'qotganda "qayta ulan" deydi.
+  var reportedIndex = Object.create(null);
   navigator.serviceWorker &&
   navigator.serviceWorker.addEventListener('message', function (ev) {
     var d = ev.data || {};
     if (d.type === 'needProvider' && S.chan !== null) connect();
+
+    // Birinchi tomoshabin SW yordamida moov o'rnini topdi — uni kontent
+    // keshiga yozamiz. Faqat doc_id/size mos kelganda va katalogdagi video
+    // uchun; foydalanuvchi/sessiya ma'lumoti yuborilmaydi.
+    if (d.type === 'indexfound') {
+      try {
+        var o = S.mountOpts || {};
+        var did = (S.loc && S.loc.id != null) ? S.loc.id
+          : (S.doc && S.doc.id != null) ? S.doc.id : '';
+        if (!o.channel || !Number(o.post) || !did) return;
+        if (Number(d.size) !== Number(S.size) || String(d.doc) !== String(did)) return;
+        var ik = String(did) + ':' + Number(d.size);
+        if (reportedIndex[ik]) return;
+        reportedIndex[ik] = true;
+        fetch(base() + '/api/video-index.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            doc: String(did),
+            size: Number(S.size),
+            ch: String(o.channel).replace(/^@/, ''),
+            post: Number(o.post),
+            moov: d.moov,
+            kf: d.kf || [],
+            dur: Number(d.dur) || 0
+          }),
+          keepalive: true,
+          credentials: 'omit'
+        }).catch(function () { /* ixtiyoriy kesh — oqimga ta'sir qilmaydi */ });
+      } catch (e) { /* jim */ }
+    }
   });
 
   // SW yangilandi -> controller almashdi -> darhol qayta ulanamiz.
@@ -3078,6 +3268,12 @@
    * qayta yuklamaydi (aks holda hover saytni sakratib qo'yardi).
    * ------------------------------------------------------------------------ */
   function isPreview() { return !!(S.cfg && S.cfg.preview); }
+  // Hover preview halqali (loop) bo'lib turadi; INTRO esa tugagach asl
+  // videoga o'tishi shart — shuning uchun uni alohida ajratamiz.
+  function isIntro() { return !!(S.cfg && S.cfg.intro); }
+  // INSTANT (1 s) ham INTRO (19 MB) kabi halqalanmaydi — tugagach keyingi
+  // bosqichga o'tadi. Faqat hover preview halqali bo'lib turadi.
+  function isInstant() { return !!(S.cfg && S.cfg.instant); }
 
   // Player o'ynashga tayyor bo'lganda mount(onReady) ni BIR MARTA chaqiradi.
   // Reels shundan keyin pastdagi (keyingi) videoni oldindan yuklaydi.
@@ -3171,13 +3367,28 @@
     posterBgOff(node);                 // endi `<video poster>` o'zi ko'rsatadi
     var url = fileUrl() + '?size=' + size + '&t=' + Date.now()
       + '&mime=' + encodeURIComponent(mimeOf(probe)) + docQ();
-    node.innerHTML = '<video class="tgs-pv" id="playerVideo" muted playsinline loop '
-      + 'preload="metadata"'
+    var loop = (isIntro() || isInstant()) ? '' : ' loop';
+    node.innerHTML = '<video class="tgs-pv" id="playerVideo" muted playsinline'
+      + loop + ' preload="metadata"'
       + (opts.poster ? ' poster="' + esc(opts.poster) + '"' : '')
       + ' src="' + esc(url) + '"></video>';
     var v = document.getElementById('playerVideo');
     if (v) {
       v.muted = true;
+      // Instant va intro halqalanmaydi: ular tugagach keyingi bosqichga
+      // o'tishi shart. Hover preview esa halqali bo'lib turadi.
+      var teaser = isInstant() ? 'instant' : (isIntro() ? 'intro' : '');
+      v.loop = !teaser;
+      if (teaser) {
+        var evEnd = teaser === 'instant' ? 'wcinstantend' : 'wcintroend';
+        var evErr = teaser === 'instant' ? 'wcinstanterror' : 'wcintroerror';
+        v.addEventListener('ended', function () {
+          try { node.dispatchEvent(new CustomEvent(evEnd)); } catch (e) {}
+        }, { once: true });
+        v.addEventListener('error', function () {
+          try { node.dispatchEvent(new CustomEvent(evErr)); } catch (e) {}
+        }, { once: true });
+      }
       armReady(v);
       var p = v.play();
       if (p && p.catch) p.catch(function () { /* avtomatik o'ynash bloklangan */ });
@@ -3185,10 +3396,125 @@
   }
 
   /* ---------------------------------------------------------------------------
+   * INSTANT KADR: 1 s, ~150 KB lik klip. Sekin internetda ham birinchi kadr
+   * 2 s ichida chiqadi. Tugagach watch.js uni 19 MB intro (yoki to'g'ridan-
+   * to'g'ri asl video) bilan almashtiradi. Baytlar faqat Telegram CDN'dan.
+   * ------------------------------------------------------------------------ */
+  function mountInstant(node, opts) {
+    var inst = opts.instant || {};
+    if (!inst.ch || !Number(inst.p)) return;
+    var finish = function () {
+      if (typeof opts.onInstantEnd === 'function') {
+        try { opts.onInstantEnd(); } catch (e) {}
+      }
+    };
+    // SW boshqaruvi yo'qsa `run()` preview'ni UMUMAN ishga tushirmaydi —
+    // vaqtni bekorga kutmasdan keyingi bosqichga o'tamiz.
+    if (typeof swCtl === 'function' && !swCtl()) { finish(); return; }
+
+    stop();
+    S.mount = node;
+    S.mountOpts = opts;
+    S.cfg = { preview: true, instant: true, title: opts.title || '' };
+    S.onPlayerReady = null;
+    S.readyFired = false;
+    S.job++;
+    var job = S.job;
+    node.classList.add('tgs', 'tgs-instant');
+    posterBg(node, opts.poster);
+
+    var handed = false;
+    var timer = null;
+    function handoff() {
+      if (handed || job !== S.job) return;
+      handed = true;
+      if (timer) clearTimeout(timer);
+      try { node.removeEventListener('wcinstantend', handoff); } catch (e) {}
+      try { node.removeEventListener('wcinstanterror', handoff); } catch (e) {}
+      finish();                          // watch.js keyingi bosqichni mount qiladi
+    }
+    try { node.addEventListener('wcinstantend', handoff); } catch (e) {}
+    try { node.addEventListener('wcinstanterror', handoff); } catch (e) {}
+    // 1 s lik klip uchun 3 s zaxira: sekin tarmoqda yuklanib qolsa ham
+    // tomoshabin 3 s dan keyin albatta oldinga o'tadi (2 s maqsad buzilmasin).
+    var ms = Math.min(8000, Math.max(3000, (Number(inst.dur) || 1) * 1000 + 2500));
+    timer = setTimeout(handoff, ms);
+
+    run(node, {
+      channel: String(inst.ch),
+      post: Number(inst.p),
+      url: '', deep: '',
+      poster: opts.poster || ''
+    }, silentView(), job).catch(function () {
+      handoff();                         // instant ishlamadi -> keyingi bosqich
+    });
+  }
+
+  /* ---------------------------------------------------------------------------
+   * TEZ KADR (intro preview): kichik faststart videoni avval ko'rsatib,
+   * keyin ASL filmga o'tkazadi. Video baytlari ikkala holatda ham BRAUZER
+   * <- TELEGRAM CDN yo'li bilan keladi (sayt origin'i orqali emas).
+   * ------------------------------------------------------------------------ */
+  function mountIntro(node, opts) {
+    var intro = opts.intro || {};
+    if (!intro.ch || !Number(intro.p)) return;
+    var finish = function () {
+      if (typeof opts.onIntroEnd === 'function') {
+        try { opts.onIntroEnd(); } catch (e) {}
+      }
+    };
+    // SW boshqaruvi yo'qsa `run()` preview'ni UMUMAN ishga tushirmaydi —
+    // vaqtni bekorga kutmasdan darhol asl videoga o'tamiz.
+    if (typeof swCtl === 'function' && !swCtl()) { finish(); return; }
+
+    stop();
+    S.mount = node;
+    S.mountOpts = opts;
+    // `preview` rejimi: QR/login oqimi yo'q, video ovozsiz va boshqaruvsiz —
+    // kichik teaser sifatida. Handoff vaqti kelganda asl video mount qilinadi.
+    S.cfg = { preview: true, intro: true, title: opts.title || '' };
+    S.onPlayerReady = null;
+    S.readyFired = false;
+    S.job++;
+    var job = S.job;
+    node.classList.add('tgs', 'tgs-intro');
+    posterBg(node, opts.poster);
+
+    var handed = false;
+    var timer = null;
+    function onIntroDone() { handoff(); }
+    function handoff() {
+      if (handed || job !== S.job) return;
+      handed = true;
+      if (timer) clearTimeout(timer);
+      try { node.removeEventListener('wcintroend', onIntroDone); } catch (e) {}
+      try { node.removeEventListener('wcintroerror', onIntroDone); } catch (e) {}
+      finish();                          // watch.js asl videoga qayta mount qiladi
+    }
+    // Video o'z tugashiga yetganda (yoki xatoda) DARHOL asl videoga o'tamiz.
+    // Timer faqat zaxira: klip yuklanib qolsa ham 24 s dan keyin chiqamiz.
+    try { node.addEventListener('wcintroend', onIntroDone); } catch (e) {}
+    try { node.addEventListener('wcintroerror', onIntroDone); } catch (e) {}
+    var ms = Math.min(24000, Math.max(4000, (Number(intro.dur) || 20) * 1000));
+    timer = setTimeout(handoff, ms);
+
+    run(node, {
+      channel: String(intro.ch),
+      post: Number(intro.p),
+      url: '', deep: '',
+      poster: opts.poster || ''
+    }, silentView(), job).catch(function () {
+      handoff();                         // preview ishlamadi -> darhol asl video
+    });
+  }
+
+  /* ---------------------------------------------------------------------------
    * ASOSIY FUNKSIYA: filmni shu joyda o'ynatish
    * ------------------------------------------------------------------------ */
   function mount(node, opts) {
     if (opts && opts.preview) { mountPreview(node, opts); return; }
+    if (opts && opts.instant) { mountInstant(node, opts); return; }
+    if (opts && opts.intro) { mountIntro(node, opts); return; }
     stop();                                  // avvalgi filmni to'xtatamiz
     S.mount = node;
     S.mountOpts = opts;
@@ -3927,6 +4253,21 @@
   // haqiqiy sinov — shu oqimning o'zi.
   function renderAdaptivePlayer(node, opts, size, probe, why) {
     if (S.play || S.playAbort) return;          // allaqach boshlandi
+    // Telegram Web K kabi: brauzer o'zi o'ynay olmaydigan fayl (MKV/HEVC/AVI...) uchun
+    // minutlab konvertatsiya kutish o'rniga darhol "Telegram'da oching" ekrani.
+    // Eski xatti-harakat uchun sahifada `window.__WC_CONVERT = 'on'` qo'ying.
+    if (global.__WC_CONVERT !== 'on') {
+      if (isPreview()) return;
+      renderCta(node, opts, {
+        containerName: probe.containerName,
+        videoCodecs: probe.videoCodecs,
+        reason: 'Bu formatni brauzer o‘zi ochmaydi',
+        sub: 'Fayl formati (' + (probe.containerName || 'noma’lum') + ') brauzerda to‘g‘ridan-to‘g‘ri '
+          + 'o‘ynamaydi. Pastdagi tugma orqali Telegram ilovasida oching.',
+        channel: opts.channel, post: opts.post
+      }, { fallback: true });
+      return;
+    }
     posterBgOff(node);                           // `<video poster>` o'zi ko'rsatadi
 
     // Bekor qilish. Modal yopilganda `stop()` uni otadi — konvertatsiya
@@ -3975,7 +4316,7 @@
     var v = document.getElementById('playerVideo');
     if (v) v.setAttribute('data-wc-doc', currentDocId());
     if (isPreview() && v) {
-      v.muted = true; v.loop = true;
+      v.muted = true; v.loop = !isIntro();
       // Oddiy rejimda avtomatik o'ynashni UDP boshqaradi; preview'da UDP
       // o'chirilgani uchun o'zimiz ishga tushiramiz (muted — ruxsat).
       var kick = function () {
@@ -4043,6 +4384,7 @@
         durationHint: info.duration || 0,
         filename: info.filename,
         read: read,
+        prefetchSeek: function (sec) { prefetchSeek(size, currentDocId(), sec); },
         signal: ctl.signal,
         log: function (m) { lastLog = Date.now(); if (note) note.textContent = m; },
         progress: function (i) {
@@ -4387,16 +4729,24 @@
       // Telegram DC'ga ulanishni OLDINDAN boshlaymiz (TLS handshake sahifa
       // yuklanishi bilan parallel). Video bosilganda ulanish tayyor bo'ladi —
       // ~150–300 ms tejaladi.
-      warmFast();
+      //
+      // MUHIM: ommaviy post anonim CDN orqali o'ynaydigan bo'lsa (SQL
+      // bootstrap `embed.cdn` bergan bo'lsa) MTProto umuman kerak emas.
+      // Bunday sahifada WebSocket ochish behuda: kanalni video baytlaridan
+      // oldin egallaydi. Shuning uchun faqat Telegram yo'li uchun qizdiramiz.
+      if (!isDirectBoot()) {
+        warmFast();
+        // Ulanishni tirik ushlab turish: ~60 s harakatsizlikdan keyin Telegram
+        // WebSocket'ni yopadi ("Connection to dc 2 was lost") va keyingi klik
+        // 1–3 s qayta ulanishni kutadi. Ping taymeri shuni oldini oladi.
+        try { bindKeepAlive(); } catch (e) {}
+        // GramJS klienti (login yoki idle prefetch) tayyor bo'lsa — kaliti
+        // yo'q DC'larni ham oldindan ochamiz. Klient hali yo'q bo'lsa
+        // `warmDcs()` hech narsa qilmaydi; `ensureSession()` tugagach yana
+        // rejalashtiriladi. Bu ham GramJS bundle'ini YUKLAMAYDI.
+        try { scheduleWarmDcs(4500); } catch (e) {}
+      }
     } catch (e) {}
-    // Ulanishni tirik ushlab turish: ~60 s harakatsizlikdan keyin Telegram
-    // WebSocket'ni yopadi ("Connection to dc 2 was lost") va keyingi klik
-    // 1–3 s qayta ulanishni kutadi. Ping taymeri shuni oldini oladi.
-    try { bindKeepAlive(); } catch (e) {}
-    // GramJS klienti (login yoki idle prefetch) tayyor bo'lsa — kaliti yo'q
-    // DC'larni ham oldindan ochamiz. Klient hali yo'q bo'lsa `warmDcs()`
-    // hech narsa qilmaydi; `ensureSession()` tugagach yana rejalashtiriladi.
-    try { scheduleWarmDcs(4500); } catch (e) {}
     try {
       if (!('serviceWorker' in navigator)) return;
       // Faqat O'RNATAMIZ — reload qilmaymiz. Foydalanuvchi saytga kirishi
@@ -4700,6 +5050,104 @@
     return prefetch(Object.assign({}, opts, {
       warmBytes: (opts.warmBytes != null) ? opts.warmBytes : (4 * 1024 * 1024)
     }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // KEYINGI QISM UCHUN "BOSGANINGDAN OCHILADI" REJIMI
+  // ---------------------------------------------------------------------------
+  //
+  // `prefetch()` faqat METAMA'LUMOT (id / access_hash / file_reference / dc)
+  // oladi — bu "qismni topish" vaqtini tejamaydi, lekin baytlarni olmaydi.
+  // Shu sababli qismga o'tganda brauzer yana Telegram'ga borib birinchi
+  // ~1 MB ni yuklaydi va BIRINCHI KADR shuncha kutadi.
+  //
+  // `warmNext()` aynan shu 1 MB ni hozir, joriy video o'ynayotgan paytda
+  // OLINDAN olib, SW ning disk keshiga (`wctg-chunks-v1`) yozib qo'yadi.
+  // Keyingi qism bosilganda uning birinchi Range so'rovi keshdan darhol
+  // qaytadi -> Telegram'ga umuman murojaat yo'q -> video darhol ochiladi.
+  //
+  // Xavfsizlik choralari:
+  //   • faqat chaqirilgan qism uchun, 5 daqiqada BIR marta (WARM_NEXT);
+  //   • metama'lumot yo'q bo'lsa avval serverdan olinadi;
+  //   • file_reference eskirsa kesh tozalanadi (keyingi safar yangisi olinadi).
+  var WARM_NEXT = {};
+
+  function downloadHead(opts, doc) {
+    var f = fastClient();
+    if (!f || typeof f.getFile !== 'function' || !doc || !doc.id) return Promise.resolve(false);
+    var size = bytesOf(doc) || Number(doc.size) || 0;
+    var want = Math.min(1024 * 1024, Number(opts.warmBytes) || 1024 * 1024);
+    want = Math.floor(want / 4096) * 4096;                 // Telegram: 4096 karrali
+    if (size && want > size) want = Math.floor(size / 4096) * 4096;
+    if (!want) return Promise.resolve(true);
+
+    var id = String(doc.id);
+    headSize(id, size);
+    return f.getFile({
+      id: doc.id,
+      accessHash: doc.accessHash,
+      fileReference: doc.fileReference,
+      thumbSize: '',
+      dcId: doc.dcId || doc.dc
+    }, 0, want).then(function (b) {
+      var u8 = b instanceof Uint8Array ? b : new Uint8Array(b);
+      headPut(id, 0, u8);                                  // RAM (probe uchun)
+      seedChunks(doc.id, u8, size);                        // SW disk keshiga
+      // `moov` indeksi fayl OXIRIDA bo'lsa, uni ham fon rejimida oldindan
+      // olamiz — aks holda birinchi kadr yana Telegram'ni kutadi.
+      warmTail(size, doc.id);
+      return true;
+    }).catch(function (e) {
+      var msg = (e && (e.errorMessage || e.message)) || String(e);
+      if (/FILE_REFERENCE/.test(msg)) {
+        var key = String(opts.channel) + '/' + Number(opts.post);
+        try { if (S.pvCache) delete S.pvCache[key]; } catch (x) {}
+        try {
+          var raw = localStorage.getItem(DOC_META_KEY);
+          if (raw) {
+            var all = JSON.parse(raw) || {};
+            if (all[key]) {
+              delete all[key];
+              localStorage.setItem(DOC_META_KEY, JSON.stringify(all));
+            }
+          }
+        } catch (x) {}
+        delete WARM_NEXT[key];
+      }
+      return false;
+    });
+  }
+
+  function warmNext(opts) {
+    opts = opts || {};
+    var key = (opts.channel && opts.post)
+      ? (String(opts.channel) + '/' + Number(opts.post)) : null;
+    if (!key) return Promise.resolve(false);
+    var now = Date.now();
+    if (WARM_NEXT[key] && (now - WARM_NEXT[key]) < 5 * 60 * 1000) {
+      return Promise.resolve(true);
+    }
+    WARM_NEXT[key] = now;
+
+    // Avval metama'lumotni ta'minlaymiz (tez yo'l -> kesh/Server, aks holda
+    // GramJS). `prefetch` keshda bor bo'lsa darhol qaytadi — qo'shimcha so'rov yo'q.
+    return Promise.resolve()
+      .then(function () { return prefetch(opts); })
+      .then(function () {
+        var pv = S.pvCache && S.pvCache[key];
+        var m = docMetaGet(key);
+        var doc = (pv && pv.doc) || (m ? docMetaToDoc(m) : null);
+        if (doc && doc.id && doc.accessHash && doc.fileReference) {
+          return downloadHead(opts, doc);
+        }
+        // Keshda ham yo'q — serverdan olib, keyin yuklaymiz.
+        return docMetaFromServer(opts).then(function (meta) {
+          if (!meta || !meta.fr || !meta.id) return false;
+          docMetaSave(key, meta);
+          return downloadHead(opts, docMetaToDoc(meta));
+        }).catch(function () { return false; });
+      })
+      .catch(function () { return false; });
   }
 
   function cancelPrefetch() {
@@ -5024,6 +5472,11 @@
     }, 1600);
   }, true);
 
+  // Sahifa yuklanishi bilanoq server tayyorlagan gram havolalarini keshga
+  // solamiz. Bu `mount()` chaqirilishidan OLDIN bajariladi — shuning uchun
+  // birinchi video ochilishida server so'rovi umuman yuborilmaydi.
+  try { seedInlineMeta(); } catch (e) {}
+
   global.TgStream = {
     mount: mount,
     stop: stop,
@@ -5046,6 +5499,9 @@
     // `file_reference` shunda to'g'ri akkauntga tegishli bo'ladi.
     prefetchManyGram: prefetchManyGram,
     warmMedia: warmMedia,
+    // Keyingi qismning birinchi ~1 MB ini joriy video o'ynayotganda
+    // SW disk keshiga oldindan yozadi -> qism bosilganda darhol ochiladi.
+    warmNext: warmNext,
     cancelPrefetch: cancelPrefetch,
     // Sahifadan chiqishda: oqim + prefetch + SW kanalini to'xtatish.
     release: release,

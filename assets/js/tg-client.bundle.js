@@ -79531,12 +79531,14 @@ ${host}`;
         3: "2001:0b28:f23d:f003:0000:0000:0000:000e"
       };
       var DC_PORT = 443;
+      // Telegram Web K (tweb) manzillari: wss://kws<dc>[-1].web.telegram.org/apiws.
+      // Eski pluto/venus/... subdomainlari ko'p tarmoqlarda ishlamaydi.
       exports.WEBSOCKET_DC_HOSTS = {
-        1: "pluto",
-        2: "venus",
-        3: "aurora",
-        4: "vesta",
-        5: "flora"
+        1: "kws1",
+        2: "kws2",
+        3: "kws3",
+        4: "kws4",
+        5: "kws5"
       };
       function webSocketDcAddress(dcId, mediaCluster = false) {
         const host = exports.WEBSOCKET_DC_HOSTS[dcId];

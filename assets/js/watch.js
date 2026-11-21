@@ -61,7 +61,10 @@
     embedFailedKey: '',     // qaysi postda (channel/post) ishlamadi
     userPickedOwn: false,   // foydalanuvchi "Bizning pleyer" ni o'zi tanladimi
     embedRetry: false,      // "Tez pleyer" bosildi -> tekshiruv natijasini aytamiz
-    durSaved: {}
+    durSaved: {},
+    instantDoneFor: '',     // 1 s lik instant kadr ko'rsatilgan channel/post
+    introDoneFor: '',       // 19 MB intro allaqachon ko'rsatilgan channel/post
+    gwTriedFor: ''          // server gateway urinilgan channel/post (loop himoyasi)
   };
 
   /* Reels klipining CTA havolasi `watch.php?c=..&e=..#t=95` shaklida keladi
@@ -244,6 +247,31 @@
     return Promise.resolve(nearby.length);
   }
 
+  /** Keyingi qismni oldindan tayyorlab qo'yadi (baytlari bilan). */
+  var nextWarmDone = {};   // "channel/post" -> true
+  function warmNextEpisode() {
+    if (S.switching) return;
+    var i = epIndex(S.selectedId);
+    var nx = i >= 0 ? S.episodes[i + 1] : null;
+    if (!nx || !nx.tg_channel || !nx.tg_post) return;
+    var key = nx.tg_channel + '/' + nx.tg_post;
+    if (nextWarmDone[key]) return;
+
+    // Trafik tejash: saveData yoqilgan yoki sekin ulanish (2G/3G) bo'lsa
+    // fon yuklash qilinmaydi — joriy video oqimi ustun.
+    var cn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    var et = (cn && cn.effectiveType) || '';
+    if (cn && (cn.saveData || /^(slow-)?2g$|^3g$/.test(et))) return;
+
+    nextWarmDone[key] = true;
+    if (!global.TgStream || typeof global.TgStream.warmNext !== 'function') return;
+    try {
+      global.TgStream.warmNext({
+        channel: nx.tg_channel, post: nx.tg_post, warmBytes: 1024 * 1024
+      });
+    } catch (e) { /* ixtiyoriy qulaylik — xato ko'rsatmaymiz */ }
+  }
+
   function watchUrl(epId) {
     return base + '/watch.php?c=' + D.id + (epId ? '&e=' + epId : '');
   }
@@ -297,13 +325,15 @@
   function pmode() {
     var m = '';
     try { m = String(localStorage.getItem(PMODE_KEY) || ''); } catch (e) {}
-    if (m === 'fast' || m === 'own') return m;
-    // Boshlang'ich tanlov: O'Z PLEYERIMIZ. Sabab: Telegram embed katta
-    // kinolarni oqizmaydi ("Media is too big"), faqat kichik videolarda
-    // ishlaydi. Shuning uchun embed faqat tekshiruvdan o'tgach va
-    // foydalanuvchi "Tez pleyer" ni tanlaganda ishlatiladi.
-    // Vaqtga sakrash kerak bo'lsa (davom etish yoki `#t=95`) embed buni
-    // bila olmaydi — bu ham 'own' foydasiga.
+    if (m === 'fast' || m === 'own') return m;   // foydalanuvchi aniq tanladi
+    // OMMAVIY postlarda eng tez yo'lni STANDART qilamiz: Telegram rasmiy
+    // embed pleyeri video baytlarini to'g'ridan-to'g'ri o'z CDN'idan beradi —
+    // sayt origin'i ularni umuman KO'RMAYDI. `effectivePmode()` embed faqat
+    // `api/tg-embed.php` "playable" deganda yoqadi; katta fayllarda avtomatik
+    // o'z MTProto pleyerimizga qaytamiz (xavfsiz zaxira).
+    // Vaqtga sakrash (davom etish yoki `#t=95`) kerak bo'lsa embed bila
+    // olmaydi — bunday hollarda o'z pleyerni tanlaymiz.
+    if (tgEmbed() && !S.hashStart && !(Number(S.resumeAt) > 5)) return 'fast';
     return 'own';
   }
 
@@ -392,6 +422,29 @@
     clearEmbedBad();
   }
 
+  // SQL bootstrap'dan kelgan tayyor javobni brauzer keshiga uramiz.
+  // Natija: embedState() darhol 'ok'/'bad' qaytaradi va checkEmbed()
+  // UMUMAN chaqirilmaydi -> api/tg-embed.php ga so'rov yuborilmaydi.
+  function seedEmbedFromBoot() {
+    var SB = global.WCStreamBoot;
+    if (!SB) return;
+    var e = SB.embed();
+    if (!e || e.reason === 'unknown') return;   // server bilmadi -> eski yo'l
+    var k = embedKey();
+    if (!k) return;
+    if (e.playable) markEmbedOk();
+    else markEmbedBad(e.reason || '');
+  }
+
+  // Ommaviy kanal posti uchun SQL keshida anonim CDN manzili bor bo'lsa,
+  // telegram oqimini oddiy <video src> ga aylantiramiz. Bu holda MTProto
+  // sessiyasi, file_reference va Service Worker umuman ishlatilmaydi.
+  function applyBootPlayback() {
+    var SB = global.WCStreamBoot;
+    if (!SB || typeof SB.effectivePlayback !== 'function') return;
+    S.playback = SB.effectivePlayback(S.playback);
+  }
+
   var embedCheckFor = '';     // qaysi post uchun so'rov yuborilgan
   var embedCoolUntil = 0;     // server javob bermasa — 30 s qayta so'ramaymiz
 
@@ -434,7 +487,8 @@
         renderPMode();
         return;
       }
-      var wantFast = S.embedRetry || pmode() === 'fast';
+      var wasRetry = !!S.embedRetry;                // foydalanuvchi bosganmi?
+      var wantFast = wasRetry || pmode() === 'fast';
       if (d.playable) markEmbedOk();
       else markEmbedBad(d.reason || '');
       if (embedKey() !== k) { S.embedRetry = false; return; }  // boshqa qismga o'tdik
@@ -442,7 +496,7 @@
         S.embedRetry = false;
         if (wantFast && !S.embedFailed && !S.userPickedOwn) {
           setPmode('fast');
-          toast('\u26A1 Telegram pleyeri ochildi');
+          if (wasRetry) toast('\u26A1 Telegram pleyeri ochildi');
           mountPlayer();                            // "tez" tanlangan - embedga o'tamiz
           return;
         }
@@ -655,6 +709,31 @@
     try { if (global.UDP) global.UDP.destroyAll(); } catch (e) {}
     try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
     host.innerHTML = '';
+
+    // Server gateway (prototip): faqat `TG_GATEWAY_MODE=primary` bo'lsa.
+    // Xato bo'lsa — pastdagi odatdagi brauzer-MTProto yo'liga qaytamiz.
+    // `S.gwTriedFor` qayta urinish loop'ining oldini oladi.
+    var gwKey = (pb.channel || '') + '/' + (Number(pb.post) || 0);
+    if (global.WCGateway && typeof global.WCGateway.mount === 'function'
+        && global.WCGateway.primary() && S.gwTriedFor !== gwKey) {
+      S.gwTriedFor = gwKey;
+      var gwStarted = global.WCGateway.mount(
+        host, pb, generation,
+        function () {
+          if (generation === S.streamGeneration) {
+            mountTelegramFallback(host, pb, generation);
+          }
+        },
+        function (tv) {
+          if (generation !== S.streamGeneration) return;
+          wireVideo(tv);
+          prefetchAdjacent();
+          if (typeof pb.onVideo === 'function') { try { pb.onVideo(tv); } catch (ex) {} }
+        }
+      );
+      if (gwStarted) return;
+    }
+
     if (!global.TgStream || typeof global.TgStream.mount !== 'function') {
       host.innerHTML = '<div class="player-wrap no-video"><div class="nv-msg">Telegram moduli yuklanmadi. Sahifani yangilang.</div></div>';
       return;
@@ -663,6 +742,30 @@
     m.className = 'watch-tg';
     host.appendChild(m);
     var e2 = curEp();
+    var key = (pb.channel || '') + '/' + (Number(pb.post) || 0);
+
+    // 3 BOSQICHLI TEZ KADR: 1 s instant (~150 KB) -> 19 MB intro -> asl video.
+    // Sekin internetda 19 MB ham 2 s ichida yetib bormaydi, shuning uchun
+    // avval eng kichigi ko'rsatiladi. HAMMASI brauzer <- Telegram CDN'idan
+    // keladi — sayt origin'i video baytlarini KO'RMAYDI.
+    // `S.instantDoneFor` / `S.introDoneFor` loop'ning oldini oladi: handoff
+    // qayta mount qilganda o'tgan bosqich o'tkazib yuboriladi.
+    var instant = null;
+    var intro = null;
+    try {
+      var allPv = global.__WCPREVIEW || {};
+      var pv = allPv[key];
+      if (pv) {
+        var ip = pv.instant;
+        if (ip && ip.ch && Number(ip.p) && S.instantDoneFor !== key) {
+          instant = { ch: ip.ch, p: Number(ip.p), dur: Number(ip.dur) || 1 };
+        }
+        if (pv.ch && Number(pv.p) && S.introDoneFor !== key) {
+          intro = { ch: pv.ch, p: Number(pv.p), dur: Number(pv.dur) || 20 };
+        }
+      }
+    } catch (e) {}
+
     global.TgStream.mount(m, {
       channel: pb.channel || '',
       post: Number(pb.post) || 0,
@@ -671,6 +774,22 @@
       poster: pb.poster || '',
       cfg: global.UzPlayer ? undefined : udpConfig(),
       epLabel: e2 ? (e2.season + '-fasl ' + e2.number + '-qism') : '',
+      instant: instant,
+      onInstantEnd: function () {
+        S.instantDoneFor = key;
+        // Qayta mount: endi intro (yoki intro yo'q bo'lsa to'g'ridan-to'g'ri
+        // asl video) tanlanadi — instant ikkinchi marta ko'rsatilmaydi.
+        if (generation === S.streamGeneration) {
+          mountTelegramFallback(host, pb, generation);
+        }
+      },
+      intro: intro,
+      onIntroEnd: function () {
+        S.introDoneFor = key;
+        if (generation === S.streamGeneration) {
+          mountTelegramFallback(host, pb, generation);   // endi ASL video
+        }
+      },
       onReady: function () {
         var tv = m.querySelector('video');
         if (tv && global.UzPlayer && typeof global.UzPlayer.attach === 'function') {
@@ -945,7 +1064,8 @@
         var media = {
           type: type === 'hls' ? 'hls' : 'direct',
           src: pb.url || '',
-          poster: pb.poster || ''
+          poster: pb.poster || '',
+          crossOrigin: pb.crossOrigin
         };
         if (type === 'hls') {
           var sep = String(pb.url || '').indexOf('?') !== -1 ? '&' : '?';
@@ -1063,7 +1183,7 @@
    */
   function wireVideo(v) {
     if (!v) return;
-    var watched = 0, lastT = 0;
+    var watched = 0, lastT = 0, nextWarmed = false;
 
     v.addEventListener('play', function () {
       if (v.currentTime) lastT = v.currentTime;
@@ -1075,6 +1195,12 @@
       lastT = t;
       // Seek (sakrash) hisobga olinmaydi - faqat haqiqiy ko'rish.
       if (dt > 0 && dt < 5) watched += dt;
+      // Joriy qism 3 s binsa — keyingi qismning dastlabki 1 MB ini fon rejimida
+      // tayyorlaymiz: "Keyingi qism" bosilganda video keshdan darhol ochiladi.
+      if (watched >= 3 && !nextWarmed) {
+        nextWarmed = true;
+        warmNextEpisode();
+      }
       if (watched >= 30) countView();
       saveProgressSoon(v);
     }, true);
@@ -1091,6 +1217,17 @@
     });
     v.addEventListener('pause', function () { saveProgress(v); });
     v.addEventListener('ended', function () { saveProgress(v); });
+    // Anonim CDN manzili ishlamasa (eskirgan/bloklangan) — o'z pleyerimizga
+    // qaytamiz. Foydalanuvchi video DOIM ochiladi, kesh xatosi tufayli emas.
+    v.addEventListener('error', function () {
+      if (!S.playback || !S.playback.cdnSource || global.__WC_CDN_FAILED) return;
+      global.__WC_CDN_FAILED = true;
+      var orig = S.playback.original;
+      if (orig) {
+        S.playback = orig;
+        mountPlayer();
+      }
+    }, true);
   }
 
   function countView() {
@@ -2644,6 +2781,91 @@
      `initChat`/`TGChat` kodini ham olib tashladik. Chat alohida `chat.php`
      sahifasida (pastki nav markazidagi "Chat" tugmasi). */
 
+  // ==================================================== QISM ALMASH (YORDAMCHI)
+  /* Qism almashtirganda SARLAVHANING FAQAT qism raqamini yangilaymiz.
+     `renderHead()` chaqirilmaydi: u butun ma'lumot blokini (ko'rishlar,
+     reyting, tavsif, janrlar, tugmalar) qayta quradi — bular qismga
+     bog'liq emas va ko'z o'ngida "yangilanib" ketmasligi kerak. */
+  function syncEpisodeTitle() {
+    var t = el('watchTitle');
+    if (!t) return;
+    var e = curEp();
+    t.textContent = (e && S.episodes.length > 1)
+      ? D.title + ' — ' + e.number + '-qism'
+      : D.title;
+  }
+
+  /* Yondagi qismlar ro'yxatida FAQAT "tanlangan" belgisini siljitish.
+     `renderSide()` chaqirilmaydi: u butun ro'yxatni qayta chizib, skroll
+     holatini yo'qotadi va boshqa bloklarga ham ta'sir qiladi. */
+  function syncActiveEpisode(epId) {
+    var list = el('watchSideList');
+    if (!list) return;
+    var btns = list.querySelectorAll('[data-ep]');
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      var id = Number(b.getAttribute('data-ep'));
+      var on = id === Number(epId);
+      if (on === b.classList.contains('on')) continue;
+      b.classList.toggle('on', on);
+
+      // "Hozir ijro etilmoqda" yozuvini ham moslashtiramiz.
+      var meta = b.querySelector('.watch-ep-meta');
+      if (on) {
+        if (!meta) {
+          var text = b.querySelector('.watch-ep-text');
+          if (text) {
+            meta = document.createElement('span');
+            meta.className = 'watch-ep-meta';
+            text.appendChild(meta);
+          }
+        }
+        if (meta) meta.innerHTML = '<span class="watch-ep-seen">Hozir ijro etilmoqda</span>';
+      } else if (meta) {
+        var e = ep(id);
+        if (e && e.duration) meta.textContent = fmtTime(e.duration);
+        else if (meta.parentNode) meta.parentNode.removeChild(meta);
+      }
+    }
+  }
+
+  /* `api/episode.php` javobini qo'llash — click va brauzer orqaga/qayta
+     ikkalasi ham SHU funksiyani ishlatadi. Faqat player va qism belgisi
+     o'zgaradi; `renderHead()`/`renderSide()`/`openComments()` CHAQIRILMAYDI. */
+  function applyEpisodeData(d, epId) {
+    S.playback  = d.playback || S.playback;
+    S.resumeAt  = (d.progress && d.progress.position > 5) ? d.progress.position : 0;
+    S.selectedId = epId;
+
+    // Embed mavjudligi qismdan qismga farq qiladi (ommaviy/xususiy post).
+    // `tgEmbed()` har safar `W.tgEmbed` ni o'qiyapti — global obyektni
+    // yangilash kifoya, qayta render kerak emas.
+    W.tgEmbed = d.tgEmbed || null;
+    // Yangi qismning SQL bootstrap'i kelsa (api/episode.php), uni faollashtiramiz.
+    if (d.boot && typeof d.boot === 'object') global.__WCBOOT = d.boot;
+    global.__WC_CDN_FAILED = false;
+    seedEmbedFromBoot();
+    applyBootPlayback();
+    S.embedFailed = false;
+    S.embedFailedKey = '';
+    S.gwTriedFor = '';
+
+    // Yangi qismning 15s preview'i tayyor bo'lsa, xaritaga qo'shamiz:
+    // `mountPlayer()` uni avval o'ynatadi, so'ng asl videoga o'tadi.
+    if (d.preview) {
+      if (!global.__WCPREVIEW) global.__WCPREVIEW = {};
+      global.__WCPREVIEW[d.preview.ch + '/' + Number(d.preview.p)] = d.preview;
+    }
+
+    // Faqat qism raqami va yondagi "tanlangan" belgisi o'zgaradi.
+    syncEpisodeTitle();
+    syncActiveEpisode(epId);
+
+    // Keyingi qism ma'lumotini oldindan tayyorlash (faqat tarmoq, DOM yo'q).
+    onVideoReady(prefetchAdjacent);
+    mountPlayer();
+  }
+
   // ============================================================ QISM ALMASH
   function switchEpisode(epId) {
     epId = Number(epId) || 0;
@@ -2656,7 +2878,7 @@
     S.hashStart = 0;
 
     // KLIK JAVOBI DARHOL: eski oqim to'xtatiladi va poster + spinner shu
-    // yerning o'zida chiziladi — `content.php` javobini kutmasdan.
+    // yerning o'zida chiziladi — `episode.php` javobini kutmasdan.
     armVideoReady();
     try { if (global.TgStream) global.TgStream.stop(); } catch (e) {}
     try { if (global.UDP) global.UDP.destroyAll(); } catch (e) {}
@@ -2672,36 +2894,24 @@
       history.pushState({ ep: epId }, '', watchUrl(epId));
     } catch (e) {}
 
-    // MUHIM: Telegram hujjatini `content.php` SO'ROVI bilan PARALLEL tayyorlaymiz.
+    // MUHIM: Telegram hujjatini `episode.php` SO'ROVI bilan PARALLEL tayyorlaymiz.
     //
     // Oldingi ketma-ket oqim shunday edi:
     //   content.php (tarmoq)  ->  mount()  ->  findDoc (Telegram)  ->  probe (Telegram)
-    // Ya'ni ikki bosqich tarmoqda BIR-BIRINI kutardi. Endi `content.php`
-    // javotlanayotgan paytda `findDoc` + `probe` allaqachin yuguradi va
-    // `mount()` ularni KESHDAN ozi oladi (yoki jarayonda bo'lsa kutadi) -
-    // natijada ochilish sekinligi ikki barobar kamayadi.
-    //
-    // `S.episodes` hozirgidan YANGI ro'yxatni ko'rsatadi, shuning uchun
-    // eski kalitni `cancelPrefetch()` bilan avval tozalash shart emas:
-    // `tg-stream.js` bitta vaqtda bittasini saqlaydi va `mount()` o'z
-    // kalitini topsa, o'sha promise'ni kutadi.
+    // Ya'ni ikki bosqich tarmoqda BIR-BIRINI kutardi. Endi kichik
+    // `episode.php` javoblanayotgan paytda `findDoc` + `probe` allaqachin
+    // yuguradi va `mount()` ularni KESHDAN oladi (yoki jarayonda bo'lsa
+    // kutadi) — natijada qism ochilishi ikki barobar tezlashadi.
     prefetchEpisode(ep(epId));
 
-    api('/api/content.php?id=' + encodeURIComponent(D.id) + '&episode=' + epId)
+    // FAQAT yangi qismning pleyer ma'lumotini olamiz. Eski `api/content.php`
+    // butun kontentni (janr, tavsif, barcha qismlar, tavsiyalar...) qaytarib,
+    // sahifaning yarim qismini qayta chizarga majbur qilardi — anime
+    // qismlarida bu "hamma narsa yangilanib ketayapti" degan taassurot beradi.
+    // Endi qolgan bloklar tinch qoladi, faqat player almashadi.
+    api('/api/episode.php?id=' + encodeURIComponent(D.id) + '&episode=' + epId)
       .then(function (d) {
-        S.playback  = d.playback || S.playback;
-        S.resumeAt  = (d.progress && d.progress.position > 5) ? d.progress.position : 0;
-        if (d.episodes && d.episodes.length) S.episodes = d.episodes;
-        // Yangi qismlar ro'yxatida fasl filtrisi mos kelmasligi mumkin -
-        // "Barcha" holatiga qaytaramiz.
-        S.epSeason = 0;
-        S.selectedId = epId;
-        // Keyingi qism metama'lumoti va izohlar — video tayyor bo'lgach.
-        onVideoReady(prefetchAdjacent);
-        renderHead();
-        renderSide();
-        mountPlayer();
-        onVideoReady(openComments);
+        applyEpisodeData(d, epId);
         return null;
       })
       .then(function () {
@@ -2833,6 +3043,10 @@
     // bo'sh qism 0 dan qayta o'ynamasligi kerak.
     S.resumeAt = (D.progress && D.progress.position > 5) ? D.progress.position : 0;
 
+    // SQL keshidan kelgan ma'lumotlar: qo'shimcha API so'rovlarining oldini oladi.
+    seedEmbedFromBoot();
+    applyBootPlayback();
+
     renderHead();
     renderSide();
     mountPlayer();
@@ -2856,15 +3070,10 @@
         // `pushState` bilan o'zgartirganimiz uchun `switchEpisode` ham
         // `pushState` qilardi - bu yerda faqat `replace` qilamiz.
         S.switching = true;
-        api('/api/content.php?id=' + encodeURIComponent(D.id) + '&episode=' + id)
+        // Orqaga/qayta ham faqat qismni almashtiradi — sahifa qayta chizilmaydi.
+        api('/api/episode.php?id=' + encodeURIComponent(D.id) + '&episode=' + id)
           .then(function (d) {
-            S.playback = d.playback || S.playback;
-            if (d.episodes && d.episodes.length) S.episodes = d.episodes;
-            S.epSeason = 0;
-            S.selectedId = id;
-            onVideoReady(prefetchAdjacent);
-            renderHead(); renderSide(); mountPlayer();
-            onVideoReady(openComments);
+            applyEpisodeData(d, id);
             return null;
           })
           .catch(function () {})

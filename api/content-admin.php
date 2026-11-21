@@ -15,6 +15,8 @@
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/AdminLog.php';
+require_once __DIR__ . '/../includes/TgMeta.php';
+require_once __DIR__ . '/../includes/TgPreview.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST' && empty($_GET['list']) && empty($_GET['id'])) {
     fail('Parametr kerak', 400);
@@ -72,6 +74,64 @@ function idList($raw) {
         return $v > 0;
     })));
     return array_slice($ids, 0, 200);
+}
+
+/**
+ * Video qo'shilganda/tahrirlanganda uning Telegram metama'lumotini bazaga
+ * yozamiz. Har qanday xato jim yutiladi — admin amaliyoti hech qachon
+ * Telegram tarmog'iga bog'liq bo'lib qolmaydi (xato bo'lsa backfill to'ldiradi).
+ */
+function tgMetaStoreUrl($url)
+{
+    if (!is_string($url) || trim($url) === '') return;
+    try { TgMeta::fetchAndStore($url, 5); } catch (\Throwable $e) {}
+}
+
+/** Ko'p havola (bulk) uchun: BITTA sessiyada hammasini saqlaymiz. */
+function tgMetaStoreUrls($urls)
+{
+    $pairs = [];
+    foreach ((array) $urls as $u) {
+        $ref = TgMeta::parseUrl($u);
+        if (!$ref) continue;
+        $pairs[$ref['channel'] . '/' . $ref['post']] =
+            ['ch' => $ref['channel'], 'post' => $ref['post']];
+    }
+    if (!$pairs) return;
+    try { TgMeta::fetchManyAndStore(array_values($pairs), 8); } catch (\Throwable $e) {}
+}
+
+/**
+ * Yangi video qo'shilganda uning 20 soniyali kichik klipini OLDINDAN yaratish
+ * uchun navbatga yozamiz. Bu joy HECH QACHON Telegram'ni kutmaydi: faqat DB
+ * yozuvi + fon worker ishga tushirish. Xato bo'lsa ham admin javobi tayyor.
+ */
+function tgPreviewEnqueueUrl($url)
+{
+    if (!defined('TG_PREVIEW_ENABLED') || !TG_PREVIEW_ENABLED) return;
+    $ref = TgMeta::parseUrl((string) $url);
+    if (!$ref) return;
+    try {
+        TgPreview::enqueue($ref['channel'], (int) $ref['post'], false);
+        TgPreview::spawnWorker();
+    } catch (\Throwable $e) {}
+}
+
+/** Ko'p qism (bulk) uchun: barchasini navbatga yozib, BITTA worker ishga tushiramiz. */
+function tgPreviewEnqueueUrls($urls)
+{
+    if (!defined('TG_PREVIEW_ENABLED') || !TG_PREVIEW_ENABLED) return;
+    $queued = 0;
+    foreach ((array) $urls as $u) {
+        $ref = TgMeta::parseUrl((string) $u);
+        if (!$ref) continue;
+        try {
+            if (TgPreview::enqueue($ref['channel'], (int) $ref['post'], false)) $queued++;
+        } catch (\Throwable $e) {}
+    }
+    if ($queued > 0) {
+        try { TgPreview::spawnWorker(); } catch (\Throwable $e) {}
+    }
 }
 
 
@@ -464,6 +524,11 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
                 'video_url'      => $firstUrl,
                 'duration'       => max(0, inputInt('first_episode_duration')) ?: null,
             ]);
+            // Metama'lumotni darhol bazaga saqlaymiz (kanal/post/fayl ID/...).
+            if ($episodeId) {
+                tgMetaStoreUrl($firstUrl);
+                tgPreviewEnqueueUrl($firstUrl);
+            }
         }
         contentOk('Kontent yaratildi', ['id' => $id, 'episode_id' => $episodeId]);
     } else {
@@ -599,6 +664,11 @@ if (in_array($action, ['add_episode', 'update_episode'], true)) {
     } else {
         $db->update('episodes', $fields, 'id = ?', [$epId]);
     }
+
+    // Qo'shilgan/tahrirlangan videoning Telegram metama'lumotini saqlaymiz.
+    tgMetaStoreUrl($url);
+    // 20 soniyali preview navbati — javobni bloklamaydi.
+    tgPreviewEnqueueUrl($url);
 
     $pb = $cat->getPlayback($cat->getEpisode($epId));
 
@@ -753,6 +823,10 @@ if ($action === 'bulk_episodes') {
             'duration' => $dur, 'is_premium' => $prem,
         ]);
     }
+    // Barcha qismlarning metama'lumotini BITTA sessiyada bazaga yozamiz.
+    tgMetaStoreUrls(array_column($items, 'url'));
+    // Har biri uchun 20 soniyali preview navbati yaratiladi (bitta worker).
+    tgPreviewEnqueueUrls(array_column($items, 'url'));
     contentOk(count($items) . ' ta qism qo‘shildi', ['id' => $contentId, 'count' => count($items)]);
 }
 

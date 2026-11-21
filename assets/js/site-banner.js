@@ -57,6 +57,14 @@
     }
 
     function load() {
+        // Sozlamalar sahifa HTML'iga inline qilib beriladi (perf-head.php) —
+        // alohida `api/site-config.php` so'rovi (bitta RTT) endi YO'Q.
+        var inline = window.__WCSITECFG;
+        if (inline) {
+            if (inline.success) show(inline);
+            return; // inline bor — tarmoqqa murojaat yo'q
+        }
+        // Zaxira: perf-head.php ulanmagan sahifalar uchun eski yo'l.
         fetch(BASE + '/api/site-config.php', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (d) { if (d && d.success) show(d); })

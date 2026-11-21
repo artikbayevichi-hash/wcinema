@@ -102,6 +102,8 @@ if ($method === 'GET' && isset($_GET['stats'])) {
         'rows'        => count($rows),
         'ttfb'        => $pick($ttfb),
         'first_frame' => $pick($ff),
+        // `video_start` — first_frame bilan bir xim ma'lumot, yangi nom.
+        'video_start' => $pick($ff),
         'canplay'     => $pick($cp),
         'by_page'     => $pages,
         'net'         => $net,
@@ -146,6 +148,12 @@ if ($page === '') $page = 'other';
 
 $err = $str('err', 120);
 
+// `video_start` — `first_frame` ning tushunarli nomi (yangi alias).
+// Ikkalovi kelsa, first_frame ustunlik qiladi; faqat video_start kelsa,
+// uni first_frame_ms ustuniga yozamiz (migratsiya/shema o'zgartirishsiz).
+$firstFrame = $num('first_frame');
+if ($firstFrame <= 0) $firstFrame = $num('video_start');
+
 try {
     $db->insert('perf_events', [
         'page'           => $page,
@@ -155,7 +163,7 @@ try {
         'net'            => $str('net', 16),
         'save_data'      => $num('save_data') ? 1 : 0,
         'ttfb_ms'        => $num('ttfb'),
-        'first_frame_ms' => $num('first_frame'),
+        'first_frame_ms' => $firstFrame,
         'canplay_ms'     => $num('canplay'),
         'err'            => $err,
         'ua'             => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 160),

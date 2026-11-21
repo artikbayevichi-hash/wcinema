@@ -69,21 +69,47 @@ node .work/tools/stream-regression.test.mjs# "video ochmayapti" regressiyasi (19
 
 ### Qolgan cheklovlar
 
-- Birinchi ochilish hujjat metama'lumoti topilmasa (server keshi yo'q, bot kanalda a'zo emas) — eski yo'l ishlaydi va `api/tg-doc.php` shu hujjatni serverda keshga yozib qo'yadi.
+- Birinchi ochilish hujjat metama'lumoti topilmasa (`telegram_meta` bazasi va disk keshi bo'sh, bot kanalda a'zo emas) — eski GramJS yo'li ishlaydi va `api/tg-doc.php` shu hujjatni keyin baza + disk keshga yozib qo'yadi.
 - `file_reference` ~24 soat yashaydi; server keshi 6 soat, brauzer keshi 30 daqiqa — muddati o'tgan metama'lumot eski yo'l orqali yangilanadi.
 - MP4 bo'lmagan formatlar (MKV/WEBM) MP4 indeks optimizatsiyasidan foydalanmaydi va `mp4box.js`/FFmpeg konvertatsiyasi talab qiladi.
 
+## Doimiy metama'lumot: `telegram_meta` bazasi (2026-11-17)
+
+Admin panelga qo'shilgan va katalogdagi **barcha** videolarning Telegram metama'lumoti endi bazada doimiy saqlanadi: kanal, post, fayl ID, `access_hash`, `file_reference`, DC, hajm, MIME, fayl nomi, kenglik/balandlik, davomiylik, manba (`bot`/`gram`) va holat (`pending`/`ok`/`error`). Har bir video uchun ~300 bayt — **video baytlari bu yerdan o'tmaydi**, ular to'g'ridan-to'g'ri brauzer → Telegram DC.
+
+| Fayl | Vazifa |
+|---|---|
+| `includes/TgMeta.php` | Jadvalni o'z-o'zidan yaratadi (`ensure()`), `parseUrl()`, `get()`, `save()`, `savePending()`, `saveError()`, `docToOut()`, `fetchAndStore()`, `fetchManyAndStore()`. |
+| `migrations/telegram_meta.sql` | Production uchun aniq schema (qo'lda yaratish uchun). |
+| `api/tg-doc.php` | **Avval bazadan**, topilmasa disk keshidan, keyin Telegram'dan o'qiydi; yozish ikkala joyga ham qilinadi. Javobda `source` maydoni bor. |
+| `api/content-admin.php` | `create_content` (1-qism), `add_episode`, `update_episode`, `bulk_episodes` — hammasida metadata darhol bazaga yoziladi. Xato jim yutiladi (backfill keyin to'ldiradi). |
+| `cli/tg-meta-backfill.php` | Mavjud hamma `episodes` + `reels` havolalarini bir martalik to'ldirish (`--force` bilan qayta yangilash). |
+| `cli/tg-meta-warm.php` | Cron isitish endi disk bilan birga bazaga ham yozadi. |
+
+```bash
+# Barcha mavjud videolarni bazaga to'ldirish (bir marta):
+C:\xampp\php\php.exe cli\tg-meta-backfill.php
+
+# Yangilash/tekshirish:
+C:\xampp\mysql\bin\mysql.exe -uroot uzdub -e "SELECT status,COUNT(*) n FROM telegram_meta GROUP BY status;"
+curl "http://localhost/tele_uzdub/api/tg-doc.php?posts=wcinemauz%3A71"
+```
+
+**Muhim — ijro kanaliga faqat `source='gram'` yozuvi ishlatiladi.** Bazadagi `file_reference` **BOT** sessiyasidan olinadi va tomoshabbin akkauntida `FILE_REFERENCE_INVALID` bilan rad etiladi (pastga qarang). Shuning uchun `assets/js/tg-stream.js` da `USE_SERVER_DOC_META = true` bo'lsa-da, server/inline metama'lumot **faqat** `source='gram'` (tomoshabbin GramJS sessiyasidan kelgan) bo'lgandagina qabul qilinadi; `source='bot'` yozuvlari brauzerda rad etiladi. Birinchi marta video foydalanuvchining o'z sessiyasi bilan ochiladi, so'ngra uning `file_reference` / `access_hash` va h.q. `api/tg-meta-write.php` orqali **gram writeback** qilinadi — keyingi ochilishda tez yo'l (25 KB minimal klient) ishlaydi. `TgMeta::save()` yangi `gram` yozuvini 12 soat davomida bot tomonidan ustiga yozilishdan himoya qiladi. Keyingi qismning birinchi ~1 MB ini oldindan olish (`warmNext()` / `warmNextEpisode()`) barcha turlarga (film, multfilm, serial, anime) bir xil qo'llanadi.
+
+Natija: 55 ta video uchun backfill bajarildi (`ok=55, error=0, pending=0`); `api/tg-doc.php` javobi `cached:true, source:"bot"` va Telegram'ga murojaat qilmay ~270 ms da qaytadi; yangi video qo'shish yo'li (`fetchAndStore`) delete→re-create testida muvaffaqiyatli.
+
 ## Tuzatish 2: `file_reference` akkauntga bog'liq — server yo'li o'chirildi (2026-11-08)
 
-Yangi `refreshDocLoc()` mexanizmi qo'shildi (eskargan havolani serverdan yangilash, `?fresh=1`). Lekin **u hech qachon ishlaydi**, chunki:
+`file_reference` **ruxsatnomani olgan akkauntga** bog'liq. `api/tg-doc.php` hujjatni **BOT** sessiyasi bilan yechadi; bot olgan ruxsatnoma **tomoshabbin** akkauntida `upload.getFile` da `FILE_REFERENCE_INVALID` bilan rad etiladi.
 
-> Telegram'da `file_reference` **ruxsatnomani olgan akkauntga** bog'liq. `api/tg-doc.php` hujjatni **BOT** sessiyasi bilan yechadi; bot olgan ruxsatnoma **tomoshabbin** akkauntida `upload.getFile` da `FILE_REFERENCE_EXPIRED` bilan rad etiladi. Server keshini `fresh=1` bilan yangilash ham yordam bermaydi — baribir **bot** ruxsatnomasi.
-
-Shuning uchun `assets/js/tg-stream.js` da server metama'lumot yo'li **o'chirilgan**:
+Shuning uchun `assets/js/tg-stream.js` da server metama'lumot yo'li yoqilgan, lekin **faqat `source='gram'`** (tomoshabbin o'z sessiyasida olgan) yozuvlar qabul qilinadi:
 
 ```js
-var USE_SERVER_DOC_META = false;
+var USE_SERVER_DOC_META = true;
 ```
+
+`source='bot'` yozuvlari brauzerda rad etiladi. Tomoshabbin birinchi marta video o'z sessiyasi bilan ochadi, keyin uning havolasi `api/tg-meta-write.php` orqali **gram writeback** qilinadi — keyingi ochilishda tez yo'l ishlaydi. `TgMeta::save()` yangi `gram` yozuvini 12 soat bot tomonidan ustiga yozilishdan himoya qiladi.
 
 ### Bu qanday o'zgaradi
 
@@ -230,6 +256,99 @@ Sinovni bosqichma-bosqich (50 → 100 → 250 → 500 → 1,000) va ruxsat etilg
 ## Joriy kompyuterda tekshirilgan chegaralar
 
 Ish muhiti Windows XAMPP/Apache'da; bu kompyuterda Nginx va PHP-FPM production serveri ishga tushirilmagan. `.env`da `HLS_ENABLED` yoqilgan, ammo tekshiruvda `FFMPEG_BIN` amaldagi bajariluvchi faylga topilmadi, shuning uchun sovuq HLS yaratishni oxirigacha tasdiqlab bo'lmaydi. `Catalog.php` va `watch.php` PHP sintaksisi, Telegram JavaScript va Service Worker sintaksisi tekshiruvlaridan o'tdi. DB yoki tarmoqqa chiqmaydigan smoke test sovuq ommaviy `t.me` havolasi uchun `telegram` yo'lini tanlashini tasdiqladi; bu test haqiqiy video tezligini o'lchamaydi. Nginx va PHP-FPM fayllari production serverga moslanishi kerak bo'lgan namunalar, bu kompyuterda faol konfiguratsiya emas. Linux Nginx/FPM va ko'p foydalanuvchili yuk sinovi production Linux serverda bajarilishi kerak.
+
+## Tezlashtirish 1–3: gram writeback, poster, inline konfiguratsiya (2026-11-17)
+
+Besh bosqichli tezlashtirishning dastlabki uch qismi:
+
+1. **Gram writeback** — `api/tg-meta-write.php` tomoshabbinning GramJS sessiyasidan olingan hujjat ma'lumotini (`id`, `access_hash`, `file_reference`, DC, hajm, MIME, nom, w/h/dur) bazaga `source='gram'` sifatida yozadi. Bu **fire-and-forget**: ijro kanaliga hech qachon to'sqinlik qilmaydi. Endpoint `clientUserId()` orqali `wc_cs` tomoshabbinlariga ham yozishga ruxsat beradi.
+2. **Thumb poster** — Telegram thumb JPEG'lari bot MTProto sessiyasi bilan **bir marta** olinib `uploads/tg_thumbs/` ga keshlaydi va `api/tg-thumb.php` orqali beriladi. Metadata alohida `telegram_thumb` jadvalida (asosiy `telegram_meta` ga ALTER qilinmaydi). Video baytlari bu yo'ldan **o'tmaydi**. `watch.php` kesh bo'lsa `playback.poster` ni shu endpointga o'rnatadi.
+3. **Inline konfiguratsiya / docmeta** — sahifa HTML ichida `window.__WCSITECFG` (`api/site-config.php`) va `window.__WCDOCMETA` (joriy + qo'shni qismlarning `source='gram'` yozuvlari, `t*1000`, kalit `channel/post`) beriladi. Bu ikki qo'shimcha RTT ni yo'q qiladi.
+
+## Tezlashtirish 4: ommaviy Telegram embed yo'li (2026-11-17)
+
+Ommaviy `t.me/<kanal>/<post>` manbalari uchun `watch.php` `tgEmbed` qiymatini o'rnatadi va foydalanuvchi o'z pleyerini tanlamagan hamda `#t=` / davom etish nuqtasi kerak bo'lmaganda **tez embed** (`https://t.me/<kanal>/<post>?embed=1&mode=tme&discussion=0`) afzal ko'riladi. Video baytlari to'g'ridan-to'g'ri Telegram CDN'idan keladi — sayt origin'i ishtirok etmaydi.
+
+- `api/tg-embed.php?channel=..&post=..` postning embed qilishga yaroqliligini tekshiradi; katta fayllar (`too_big`) va xatolar bo'lsa jim o'z pleyerimizga qaytamiz.
+- Xususiy `t.me/c/...` havolalari uchun `tgEmbed = null` — ular uchun `Catalog::playbackTelegram()` kanal nomini bermaydi, shuning uchun MTProto yo'li ishlaydi.
+- Tanlov kalitlari: `wc_pmode`, `wc_embed_bad`, `wc_embed_ok`; pleyer rejimi `fast` / `own`.
+
+## Tezlashtirish 5: kichik faststart preview (2026-11-17)
+
+Katta fayl birinchi kadrgacha sekin ochilganda, avval 20 soniyalik engil **preview** ko'rsatiladi, so'ngra asl videoga o'tiladi. Ikkala video ham brauzer ← Telegram CDN'idan keladi.
+
+- Yaratish: `cli/tg-preview.php` (`--ch`, `--post`, `--all`, `--force`, `--limit`, `--queue`) va `includes/TgPreview.php`. Admin panelga yangi video qo'shilganda navbat avtomatik yaratiladi va fon worker'i (`--queue`) uni bajaradi.
+- Strategiya: avval 32 MB **bosh** olinadi (`downloadToCallable`, offset/exclusive-end). Ko'p filmlarda `moov` oxirida bo'lgani uchun keyin 12 MB **oxir** olinadi va `buildSparse()` bilan bosh+oxir qismlardan to'liq hajmli sparse fayl yasaladi — FFmpeg birinchi 20 s ni oladi. Faqat oxirgi chora sifatida to'liq yuklash.
+- FFmpeg: 480p→360p→240p, `-movflags +faststart`, audio (240p da ovozsiz). Chiqarish `storage/cache/preview/` da vaqtinchalik, so'ngra Bot API `sendVideo` bilan ommaviy preview kanalga yuklanadi.
+- Saqlash: `migrations/telegram_preview.sql` — alohida `telegram_preview` jadvali. `api/tg-preview.php` metadata beradi; `watch.php` uni `window.__WCPREVIEW` qilib inline qiladi; `tg-stream.js` `mountIntro()` preview'ni ko'rsatadi, `watch.js` `S.introDoneFor` loop'ning oldini oladi.
+- Preview **mustaqil** Telegram posti bo'lgani uchun asl videoning `file_reference` ga bog'liq emas va `source='gram'` tekshiruvidan qat'i nazar qo'shiladi. Preview xatosi jim yutiladi — asl video ochilaveradi.
+
+### Preview kanali sozlash
+
+`.env` da `TG_PREVIEW_CHANNEL` (bosh `@` siz) beriladi. Berilmasa `REELS_CHANNEL` ga qaytadi — **e'tiborli bo'ling**: bu holda preview'lar reel kanaliga yuboriladi. Ishlab chiqarishda alohida ommaviy kanal ajrating va botni unga admin qiling:
+
+```env
+TG_PREVIEW_CHANNEL=wcinema_previews
+TG_PREVIEW_SEC=20
+TG_PREVIEW_HEIGHT=480
+TG_PREVIEW_MAX_MB=5
+```
+
+`TG_PREVIEW_CHANNEL` bo'sh bo'lsa `TG_PREVIEW_ENABLED=false` bo'ladi va preview yaratish butunlay o'chadi (asl video hech qanday holatda bloklanmaydi).
+
+## Server-side MTProto gateway (ixtiyoriy prototip)
+
+Bu yo'l **standart holatda o'chiq**. U Telegram videolarini brauzerdagi MTProto o'rniga sayt serveri orqali HTTP Range sifatida beradi:
+
+```text
+brauzer <video src="api/tg-gateway.php?t=<chipta>">
+   → PHP endpoint chiptani tekshiradi
+   → loopback 127.0.0.1:8099 (cli/tg-gateway.php)
+   → Telegram DC (upload.getFile)
+   → 206 Partial Content → brauzer
+```
+
+### Yoqish
+
+`.env`:
+
+```env
+TG_GATEWAY_ENABLED=1
+TG_GATEWAY_MODE=primary
+TG_GATEWAY_HOST=127.0.0.1
+TG_GATEWAY_PORT=8099
+TG_GATEWAY_TTL=3600
+# TG_GATEWAY_SECRET=uzun-tasodifiy-qiymat
+```
+
+Alohida jarayon (bir marta ishga tushiriladi, `systemd`/`supervisor` bilan tirik tutiladi):
+
+```bash
+php cli/tg-gateway.php --port=8099
+```
+
+- `TG_GATEWAY_MODE=primary` bo'lsa `watch.php` `assets/js/tg-gateway.js` ni yuklaydi va **faqat private/Telegram postlar** uchun avval gateway'dan chipta so'raydi. Gateway javob bermasa, `watch.js` avtomatik brauzer-MTProto yo'liga qaytadi (`S.gwTriedFor` qayta urinish loop'ini to'sadi).
+- `TG_GATEWAY_MODE=off` (standart) bo'lsa gateway mijozi umuman yuklanmaydi.
+- Ommaviy `t.me/<kanal>/<post>` videolari gateway'ga **yo'naltirilmaydi** — ular avvalgidek to'g'ridan-to'g'ri Telegram CDN'idan keladi.
+
+### Xavfsizlik va cheklovlar
+
+- Chipta `HMAC-SHA256` bilan imzolanadi, `uid` ga bog'lanadi va `TG_GATEWAY_TTL` (standart 3600 s) dan keyin eskiradi. `file_reference` faqat chipta ichida va gateway xotirasida yuradi; **SQL'ga yozilmaydi**.
+- Gateway alohida sessiya papkasini (`storage/mtproto/gateway`) va `storage/mtproto/gateway.lock` ni ishlatadi — `live-worker`/`deliver-worker` sessiyalariga tegmaydi.
+- Faqat loopback'da tinglaydi. Portni tashqi tarmoqqa ochmang; `X-GW-Key` bo'lmasa `/ticket` 403 qaytaradi.
+- **Bu prototip so'rovlarni ketma-ket bajaradi.** Ko'p bir vaqtdagi tomoshabin uchun bir nechta jarayon yoki async server kerak; hozirgi ko'rinish yuk sinovidan o'tkazilmagan.
+- Gateway video baytlarini **sayt serveridan o'tkazadi**: trafik va CPU sarfi oshadi. Shu sababli u tezlik yo'li emas, zaxira/eksperimental yo'l. Asosiy yutuq baribir CDN, Service Worker chunk keshi, `moov`/faststart va Range oqimidan keladi.
+- `TG_GATEWAY_SECRET` berilmasa, kalit mavjud maxfiy qiymatlardan deterministik hosil qilinadi; baribir production'da alohida uzun secret berish tavsiya etiladi.
+- `api/tg-gateway.php?action=ticket` javobi **SQL keshga yozilmaydi**: chipta vaqtga bog'liq va foydalanuvchiga xos.
+
+### Tekshirish
+
+```bash
+php .work/tools/tg-gateway.test.php      # 38/38 (offline)
+node .work/tools/stream-tuning.test.mjs  # 53/53 (chunk/HLS/lazy/gateway sozlamalari)
+```
+
+Gateway'ni Telegram'siz tekshirish uchun: `php cli/tg-gateway.php --no-telegram --port=8099` — bu rejim faqat `/health` beradi.
 
 ## Rasmiy manbalar
 

@@ -28,6 +28,9 @@
 // ============================================================================
 
 require_once __DIR__ . '/../includes/bootstrap.php';
+require_once __DIR__ . '/../includes/ServerTiming.php';
+require_once __DIR__ . '/../includes/PrefixStore.php';
+ServerTiming::init('wc-r2', 'r2 info resolve');
 
 // ------------------------------------------------------------------ sozlama
 function r2_env($key, $default = '')
@@ -69,17 +72,10 @@ if ($pxSecret === '' && defined('ADMIN_PANEL_KEY')) {
     $pxSecret = (string) ADMIN_PANEL_KEY;
 }
 
-/** storage/prefix/manifest.json — `doc => {size, head, tail, at}`. */
+/** storage/prefix/manifest.json — muddati tugaganlar ko'rsatilmaydi. */
 function px_manifest()
 {
-    $f = dirname(__DIR__) . '/storage/prefix/manifest.json';
-    $raw = @file_get_contents($f);
-    $m = $raw !== false ? json_decode((string) $raw, true) : null;
-    if (!is_array($m)) {
-        return [];
-    }
-    $docs = (isset($m['docs']) && is_array($m['docs'])) ? $m['docs'] : $m;
-    return is_array($docs) ? $docs : [];
+    return PrefixStore::visible();
 }
 
 /** Joriy so'rovning o'z manzili (SW same-origin fetch qilishi uchun). */
@@ -97,6 +93,16 @@ function px_self_dir()
     $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
     $dir  = str_replace('\\', '/', (string) dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/api/x.php')));
     return $scheme . '://' . $host . rtrim($dir, '/');
+}
+
+/** Mahalliy prefiks yozish URL'i: faqat doc+size+part+exp uchun imzolanadi. */
+function px_put_url($doc, $size, $part, $exp, $secret, $self)
+{
+    $plain = "PUTPX\n" . $doc . "\n" . $size . "\n" . $part . "\n" . $exp;
+    $sig = hash_hmac('sha256', $plain, $secret);
+    return $self . '/prefix-save.php?doc=' . rawurlencode((string) $doc)
+        . '&size=' . (int) $size . '&part=' . rawurlencode($part)
+        . '&exp=' . (int) $exp . '&sig=' . $sig;
 }
 
 // O'qish uchun baza: custom domain bo'lsa — u (Workers limitini tejaydi),
@@ -232,7 +238,10 @@ if (isset($_GET['info'])) {
                 'tail'    => $pxTail,
                 'docs'    => $localDocs,
                 'local'   => true,
-                'put'     => false,
+                // Birinchi tomoshabin bosh/dum oynalarini mahalliy keshga
+                // yozishi mumkin (imzosi ?doc=... dan olinadi). Bu R2 emas,
+                // lekin SW uchun shartnoma bir xil.
+                'put'     => true,
                 'ttl'     => $pxTtl,
                 'min'     => 4096,
             ]);
@@ -254,8 +263,36 @@ $doc = inputInt('doc', 0);
 if ($doc <= 0) {
     fail('doc kerak', 400);
 }
+$pxSize = inputInt('size', 0);
 
 if (!$r2Write) {
+    // R2 yo'q bo'lsa ham Birinchi tomoshabin mahalliy prefiks yozishi kerak.
+    // Bu kontent keshi: faqat doc_id + hajm + qism (head/tail). Foydalanuvchi
+    // yoki sessiya ma'lumoti bu yerga kirmaydi.
+    if ($pxEnabled && $pxSecret !== '' && $pxSize >= 1024 * 1024
+        && $pxSize <= 4 * 1024 * 1024 * 1024) {
+        $ip    = (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+        $day   = gmdate('Ymd');
+        $ipKey = 'pxip-' . substr(sha1($ip . '|' . $day . '|' . $pxSecret), 0, 24) . '.json';
+        $allKey = 'pxall-' . $day . '.json';
+        if (!r2_bump($allKey, 20000) || !r2_bump($ipKey, 200)) {
+            header('Retry-After: 3600');
+            fail('Bugungi prefiks limiti tugadi', 429);
+        }
+        $exp  = time() + 900;
+        $self = px_self_dir();
+        header('Cache-Control: no-store');
+        ok([
+            'enabled' => true,
+            'local'   => true,
+            'doc'     => $doc,
+            'size'    => $pxSize,
+            'put'     => px_put_url($doc, $pxSize, 'head', $exp, $pxSecret, $self),
+            'putTail' => px_put_url($doc, $pxSize, 'tail', $exp, $pxSecret, $self),
+            'exp'     => $exp,
+            'max'     => 64 * 1024 * 1024,
+        ]);
+    }
     ok(['enabled' => false, 'reason' => 'R2 yozish sozlanmagan']);
 }
 

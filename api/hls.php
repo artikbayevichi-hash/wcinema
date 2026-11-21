@@ -274,11 +274,16 @@ function hlsThrottle() {
 // ===========================================================================
 $json = (string) input('json', '', 8) === '1';
 
-if (!HLS_ENABLED) {
+// HLS_MODE=off: video to'g'ridan-to'g'ri brauzer -> Telegram DC orqali oqadi.
+// Bunda HLS worker'ni ishga tushirish BEKORG'A — u bot sessiya qulfini band
+// qilib, tez yo'lni (api/tg-doc.php) sekinlashtirar, shuningdek muvaffaqiyatsiz
+// yuklashlar bilan storage/hls_cache ni to'ldirardi. Eski havolalar/keshda
+// qolgan m3u8 so'rovlari ham tezda 503 qaytaradi va mijoz Telegram'ga o'tadi.
+if (!HLS_ENABLED || (defined('HLS_MODE') && HLS_MODE === 'off')) {
     if ($json) {
         hlsJson(false, null, 'HLS o\'chirilgan', 503);
     }
-    hlsErr('HLS oqim o\'chirilgan (.env: HLS_ENABLED=1 + serverda ffmpeg)', 503);
+    hlsErr('HLS oqim o\'chirilgan (HLS_MODE=off — video Telegram DC orqali)', 503);
 }
 
 $id     = inputInt('id');

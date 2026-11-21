@@ -88,6 +88,114 @@ hlsMetaSet($metaF, [
     'error'      => null,
 ]);
 
+/**
+ * Telegram'dan faylni UZILGAN JOYIDAN DAVOM etib yuklaydi.
+ *
+ * Eski `downloadToFile()` katta fayllarda "The operation was cancelled" bilan
+ * yiqilib, 48 ta HLS keshi `status=error` bo'lib qolgan. Kutubxona o'zi
+ * tavsiya qilgan `downloadToCallable()` + offset bilan esa uzilishdan keyin
+ * yozilgan baytdan qayta boshlaymiz (prefix-build.php dagi xuddi shu usul).
+ *
+ * $cb(foiz, tezlik, sekund) — progress/heartbeat uchun, hls-progressive.php
+ * Shu paytda yuklanayotgan boshi ffmpeg'ga uzatadi.
+ */
+function hlsDownloadResumable($api, array $doc, $path, $total, $cb, $metaF)
+{
+    $fp = @fopen($path, 'c+b');           // kesilmaydi: qisman fayl qayta ishlatiladi
+    if (!$fp) {
+        throw new \RuntimeException("Faylni ochib bo'lmadi: {$path}");
+    }
+    clearstatcache(true, $path);
+    $written = (int) @filesize($path);
+    if ($written > $total) {
+        @ftruncate($fp, $total);
+        $written = $total;
+    }
+
+    $t0       = microtime(true);
+    $tries    = 0;
+    $lastTick = 0;
+
+    try {
+        while ($written < $total) {
+            $tries++;
+            $base = $written;             // qayta urinishda aynan shu baytdan
+            try {
+                $api->downloadToCallable(
+                    $doc,
+                    function ($payload, $off) use ($fp, $base, &$written, $cb, $t0, &$lastTick, $total) {
+                        $payload = (string) $payload;
+                        $off     = (int) $off;
+                        if ($off < $base) {
+                            $skip = $base - $off;
+                            if ($skip >= strlen($payload)) {
+                                return;
+                            }
+                            $payload = substr($payload, $skip);
+                            $off     = $base;
+                        }
+                        if ($payload === '') {
+                            return;
+                        }
+                        if (@fseek($fp, $off) !== 0) {
+                            throw new \RuntimeException('fseek xato');
+                        }
+                        if (@fwrite($fp, $payload) === false) {
+                            throw new \RuntimeException("Diskka yozib bo'lmadi: {$total} bayt");
+                        }
+                        $written = max($written, $off + strlen($payload));
+                        @fflush($fp);      // hlsProgPump darhol o'qiy olishi uchun
+
+                        $now = microtime(true);
+                        if ($cb && ($now - $lastTick >= 0.75 || $written >= $total)) {
+                            $lastTick = $now;
+                            $cb(100.0 * $written / $total, $written / max(0.001, $now - $t0), $now - $t0);
+                        }
+                    },
+                    null,                  // status callback — kerak emas
+                    false,                 // seekable=false -> bo'laklar tartibda
+                    $base,
+                    $total,                // eksklyuziv chegara
+                    512 * 1024             // Telegram bo'lak o'lchami
+                );
+            } catch (\Throwable $e) {
+                @fflush($fp);
+                clearstatcache(true, $path);
+                $real = (int) @filesize($path);
+                if ($real > $written) {
+                    $written = $real;      // faylga tushgan baytlar yo'qolmasin
+                }
+                if ($written >= $total) {
+                    break;
+                }
+                if ($tries >= 6) {
+                    throw $e;
+                }
+                $wait = min(20, 3 * $tries);
+                hlsMetaSet($metaF, [
+                    'worker_tick' => time(),
+                    'retry'       => $tries,
+                    'error'       => trim((string) $e->getMessage()),
+                ]);
+                sleep($wait);              // Telegram flood himoyasiga yo'l qo'ymaymiz
+            }
+            @fflush($fp);
+            clearstatcache(true, $path);
+            $real = (int) @filesize($path);
+            if ($real > $written) {
+                $written = $real;
+            }
+        }
+    } finally {
+        @fclose($fp);
+    }
+
+    if ($cb) {
+        $cb(100.0, $written / max(0.001, microtime(true) - $t0), microtime(true) - $t0);
+    }
+    return $written;
+}
+
 // --- ffmpeg bazaviy tekshiruv (yuklab olishdan OLDIN — xato bo'lsa tez chiqamiz)
 // DIQQAT: paket topilmasa shell "ffmpeg: command not found"-ni stderr'ga yozadi
 // va 2>&1 uni stdout'ga ulaydi — shuning uchun "ffmpeg version" qatorini
@@ -156,7 +264,7 @@ try {
                 hlsMetaSet($metaF, $patch);
             };
 
-            $api->downloadToFile($info['doc'], $source, $cb);
+            hlsDownloadResumable($api, $info['doc'], $source, $total, $cb, $metaF);
 
             clearstatcache(true, $source);
             if ((int) @filesize($source) >= $total) {

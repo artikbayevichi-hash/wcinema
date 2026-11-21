@@ -7,6 +7,7 @@
  *   ttfb        — tgfile so'rovi yuborilgandan birinchi bayt kelguncha
  *   canplay     — sahifa boshlangandan pleer "tayyor" degan paytgacha
  *   first_frame — sahifa boshlangandan birinchi kadr ko'ringuncha
+ *   video_start — xuddi shu first_frame, lekin tushunarli nom (yangi alias)
  *
  * Ma'lumot `api/perf.php` ga `sendBeacon` bilan ketadi (sahifani bloklamaydi,
  * javob kutilmaydi). Har bir sahifada FAQAT BIR MARTA yuboriladi.
@@ -85,7 +86,13 @@
     body.set('canplay', String(canplayAt || 0));
     // `performance.now()` navigatsiya boshidan hisoblanadi — shuning uchun
     // `started0` ning o'zi "sahifa ochilgandan birinchi kadrgacha" bo'ladi.
-    body.set('first_frame', String(started && started0 > 0 ? Math.round(started0) : 0));
+    // `first_frame` — eski nom (Dashbord/ma'lumotlar bazasi shuni saqlaydi).
+    // `video_start` — xuddi shu raqamning TUSHUNARLI nomi: "video boshlandi".
+    // Ikkalasini ham yuboramiz: eski hisobotlar buzilmaydi, yangi so'rovlarda
+    // `video_start` bilan qidirish mumkin bo'ladi.
+    var vs = started && started0 > 0 ? Math.round(started0) : 0;
+    body.set('first_frame', String(vs));
+    body.set('video_start', String(vs));
     body.set('net', ni.net);
     body.set('save_data', String(ni.save));
     if (errName) body.set('err', errName);

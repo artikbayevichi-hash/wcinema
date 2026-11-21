@@ -788,6 +788,12 @@ export async function openWithMediabunny(o) {
       state.seekLock = start;
       state.seekLockAt = nowMs();
 
+      // Qayta qurish boshlanishidan OLDIN keyframe bo'lagini oldindan olish.
+      // Xarita bo'lmasa hech narsa o'zgarmaydi — oddiy o'qish yo'li ishlaydi.
+      if (typeof o.prefetchSeek === 'function') {
+        try { o.prefetchSeek(start); } catch (e) { /* ixtiyoriy */ }
+      }
+
       run = pump(start);
 
       // YANGI manzil ochilishi va unga ma'lumot yozilishini kutamiz.
@@ -918,6 +924,9 @@ export async function openWithMediabunny(o) {
     // Foydalanuvchi bu filmlarni ilgari ko'rib tugatgan bo'lsa —
     // o'sha joydan davom ettiramiz (`startAt`).
     if (o.startAt && o.startAt > 1) {
+      if (typeof o.prefetchSeek === 'function') {
+        try { o.prefetchSeek(o.startAt); } catch (e) { /* ixtiyoriy */ }
+      }
       await seekTo(o.startAt, true);
       state.seekLock = o.startAt;
       state.seekLockAt = nowMs();

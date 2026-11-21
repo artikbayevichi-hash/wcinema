@@ -94,16 +94,40 @@ class TgPull {
         $settings->getAppInfo()->setApiId(TG_API_ID)->setApiHash(TG_API_HASH);
         // Windows tezligi uchun keraksiz yuklamalarni o'chiramiz
         $settings->getPeer()->setFullFetch(false)->setCacheAllPeersOnStartup(false);
-        $api = new \danog\MadelineProto\API($dir . '/bot_pull', $settings);
-        if ($api->getAuthorization() === 0) {
-            $auth = $api->botLogin(TELEGRAM_BOT_TOKEN);
-            if (empty($auth) || !is_array($auth)) {
-                throw new \RuntimeException('Bot tokenni qabul qilmadi. @BotFather dan tokenni tekshiring.');
+        // Barqarorlik: 20 ta parallel upload.getFile so'rovi sekin kanalda
+        // "msgs_state_req timeout" / "operation cancelled" ga olib keladi.
+        // Kamroq parallel bo'lak + parallel ishchilar (har biri O'Z sessiyasi
+        // bilan) umumiy tezlikni oshiradi va xatolarni kamaytiradi.
+        // IPv6 ba'zan ishlamaydi -> DC ulanishi 5+ port/IP bo'ylab qayta
+        // urinadi va 60 s timeout'ga urilib, bo'lak yuklanishi bekor bo'ladi.
+        $settings->getConnection()->setIpv6(false);
+        $settings->getConnection()->setTimeout(300);
+        $settings->getFiles()->setDownloadParallelChunks(6);
+        $settings->getFiles()->setUploadParallelChunks(6);
+        // Telegram DC ba'zan ilk ulanishda "NothingInTheSocketException"
+        // qaytaradi (ayniqsa bir necha ishchi bir vaqtda ochilganda).
+        // 4 martagacha qayta urinamiz — parallel ishchi shu tufayli o'lmaydi.
+        $lastErr = null;
+        for ($try = 1; $try <= 4; $try++) {
+            try {
+                $api = new \danog\MadelineProto\API($dir . '/bot_pull', $settings);
+                if ($api->getAuthorization() === 0) {
+                    $auth = $api->botLogin(TELEGRAM_BOT_TOKEN);
+                    if (empty($auth) || !is_array($auth)) {
+                        throw new \RuntimeException('Bot tokenni qabul qilmadi. @BotFather dan tokenni tekshiring.');
+                    }
+                } else {
+                    $api->start();
+                }
+                return $api;
+            } catch (\Throwable $e) {
+                $lastErr = $e;
+                unset($api);
+                if ($try >= 4) break;
+                sleep(3 * $try);   // 3s, 6s, 9s
             }
-        } else {
-            $api->start();
         }
-        return $api;
+        throw $lastErr;
     }
 
     // Bot sessiyasini BIR VAQTDA faqat bitta jarayon ishlatishi uchun global
@@ -120,7 +144,7 @@ class TgPull {
      *
      * @throws \RuntimeException — juda uzoq kutib qolinsa
      */
-    public static function sessionLockAcquire($timeoutSec = 1800) {
+    public static function sessionLockAcquire($timeoutSec = 1800, $lockName = 'worker') {
         if (self::$sessionLockFp !== null) {
             return self::$sessionLockFp; // shu jarayonda allaqachon olingan
         }
@@ -134,7 +158,8 @@ class TgPull {
         if (!is_dir($dir)) {
             @mkdir($dir, 0777, true);
         }
-        $fp = @fopen($dir . '/worker.lock', 'c+');
+        $safeName = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $lockName) ?: 'worker';
+        $fp = @fopen($dir . '/' . $safeName . '.lock', 'c+');
         if (!$fp) {
             throw new \RuntimeException('Bot sessiya qulfini ochib bo\'lmadi.');
         }

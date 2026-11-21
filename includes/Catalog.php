@@ -743,15 +743,33 @@ class Catalog {
                 }
             }
 
-            // Tayyor HLS bo'lsa (va production hostda) mavjud edge/CDN yo'lini ishlatamiz.
-            if ($hlsEnabled && !$isLocalPlayback
-                && ($hlsCacheReady || !$publicTgPost)) {
+            // HLS faqat HAQIQATDA oqitishga tayyor bo'lganda tanlanadi.
+            //
+            // Ilgari `!$publicTgPost` bo'lsa, kesh tayyor bo'lmasa ham
+            // `type=hls` qaytarilardi. api/hls.php esa 503/Retry-After berib,
+            // worker 2-4 daqiqa yuklab olguncha tomoshabinni KUTDIRARDI.
+            // Kesh tayyor bo'lmasa yoki HLS_MODE=off bo'lsa, video to'g'ridan-
+            // to'g'ri brauzer -> Telegram DC orqali oqadi (Telegram Web kabi).
+            // Bu yo'lda video baytlari UMUMAN sayt serveridan o'tmaydi, shuning
+            // uchun tomoshabinlar soni origin yukiga ta'sir qilmaydi.
+            $hlsRemoteReady = false;
+            if ($hlsCacheReady && defined('HLS_CACHE_DIR')) {
+                $hlsDir = rtrim(HLS_CACHE_DIR, '/\\') . DIRECTORY_SEPARATOR
+                    . sha1('hls:' . (string) $url);
+                $hlsRemoteReady = is_file($hlsDir . DIRECTORY_SEPARATOR . 'remote.json');
+            }
+            $hlsClientMode = defined('HLS_MODE') ? (string) HLS_MODE : 'off';
+            $hlsServable = $hlsCacheReady && ($hlsRemoteReady || $hlsClientMode !== 'off');
+            if ($hlsEnabled && $hlsClientMode !== 'off'
+                && !$isLocalPlayback && $hlsServable) {
                 return [
                     'type' => 'hls',
                     'url'  => 'api/hls.php?id=' . $cid . '&episode=' . $eid,
                     'mime' => 'application/vnd.apple.mpegurl',
                     'seek' => true,
-                    'warning' => 'Cloudflare edge CDN orqali uzatilmoqda (HLS).',
+                    'warning' => $hlsRemoteReady
+                        ? 'Cloudflare R2/CDN orqali uzatilmoqda (HLS).'
+                        : 'Tayyor HLS keshi orqali uzatilmoqda.',
                 ];
             }
 
