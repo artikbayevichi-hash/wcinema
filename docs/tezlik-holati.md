@@ -6,7 +6,8 @@ o'chirilgan" va "nimani va'da qilish mumkin emas"ni bir joyda saqlash.
 
 > Oxirgi tekshiruv: 2026-11-21. Testlar: `.work/tools/` (12 ta suite) +
 > deterministik A/B: `.work/tools/ab-local.mjs`.
-> Hech bir o'zgarish commit qilinmagan.
+> Oxirgi sessiya-qulfi tuzatishi hali commit qilinmagan (oldingi o'zgarishlar
+> `1aeb5d7` da yuborilgan).
 
 ---
 
@@ -31,6 +32,7 @@ o'chirilgan" va "nimani va'da qilish mumkin emas"ni bir joyda saqlash.
 | Mahalliy bosh/dum prefiksi (R2'siz) | ✅ bor | `api/prefix-save.php`, `api/prefix.php`, `api/r2-sign.php` | Keyingi tomoshabin 1–2 MB ni DC'dan so'ramaydi |
 | Deterministik A/B o'lchov | ✅ bor | `.work/tools/ab-local.mjs` | DC'siz ham mexanizm tasdiqlanadi |
 | O'zgaruvchan meta: eski o'chadi | ✅ bor | `includes/PrefixStore.php`, `StreamBootstrap::fp` | Video almashtirilsa eski kesh ishlamaydi |
+| Sessiya qulfi erta bo'shatiladi | ✅ bor | `includes/bootstrap.php` | Parallel prerender/API tiqilmaydi |
 
 ---
 
@@ -247,3 +249,72 @@ mexanizmning ishlashini tasdiqlaydigan takrorlanadigan dalil.
    yasaydi; uni ro'yxat kartalarida ishlatish (hover'da).
 3. **Server-side gateway'da CDN** — faqat TCP yo'lida; video serverdan
    o'tadi, shuning uchun faqat fallback sifatida.
+
+---
+
+## 7. Panellar orasidagi 2 daqiqlik qotish — sessiya qulfi
+
+### Sabab
+
+`config.php` deyarli har so'rovda `session_start()` chaqiradi. PHP sessiya
+fayli **eksklyuziv qulflanadi** va faqat skript tugaganda (yoki
+`session_write_close()` chaqirilganda) bo'shatiladi. `watch.php` sessiyani
+faqat `$auth->getCurrentUser()` uchun o'qiydi, lekin uni oxirigacha ushlab
+turardi. Shu vaqt ichida:
+
+- `perf-head.php` dagi Speculation Rules bir nechta `watch.php` ni fonda
+  prerender qiladi;
+- `tg-prefetch.js` qo'shimcha so'rovlar yuboradi;
+- `watch.php` bir vaqtda `tg-doc`, `video-index`, `r2-sign`, `progress`,
+  `views`, `tg-thumb` kabi API'larga murojaat qiladi.
+
+Agar ulardan bittasi `t.me` ga so'rov yuborsa (`TgResolve`: 8 s ulanish +
+15 s jami, ikki marta), qolganlari `session_start()` da navbatga turadi.
+`error.log` da bir vaqtda (4 ms ichida) 6 ta fatal qayd etilgan:
+
+```
+Maximum execution time of 120 seconds exceeded in config.php on line 781
+```
+
+`781` — bu `APP_DEBUG` o'qiladigan satr, ya'ni birinchi bajariladigan kod;
+as muammo **qulf kutish**, o'sha satrning o'zi emas.
+
+### Tuzatish
+
+`includes/bootstrap.php` da `$user`/`$auth` yuklanib, `LoginGate::enforce()`
+ishlagach, sessiya darhol yopiladi:
+
+```php
+$_wcKeepSession = in_array(basename($_SERVER['SCRIPT_FILENAME'] ?? ''), [
+    'client-session.php', 'mediaflow-url.php', 'login.php',
+    'logout.php', 'admin-login.php', 'bot.php',
+], true);
+if (!$_wcKeepSession && session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+```
+
+`$_SESSION` xotirada o'qish uchun qolaveradi. Faqat sessiyaga **yozadigan**
+6 endpoint istisno qilingan. `watch.php` da alohida yopish olib tashlangan,
+chunki bootstrap allaqachon yopadi.
+
+### Natija (shu muhit, bir xil `PHPSESSID` bilan 4 parallel `watch.php`)
+
+| Holat | Eng sekin so'rov | Jami |
+|---|---|---|
+| Tuzatishdan oldin (sovuq kesh) | 31 122 ms | 31 125 ms |
+| Tuzatishdan keyin (sovuq kesh) | 386 ms | 388 ms |
+| Tuzatishdan keyin (issiq kesh) | 345 ms | 347 ms |
+
+19:05 dan keyin yangi `Maximum execution time` xatolari yo'q. `login.php` va
+`admin-login.php` hali ham 200 qaytaradi.
+
+### Test
+
+`.work/tools/speed-mechanisms.test.mjs` ga 9-bo'lim qo'shildi: bootstrap
+sessiyani erta yopishi, 6 istisno va `watch.php` da takroriy yopish yo'qligi
+tekshiriladi. Shuningdek `codeOnly()` yordamchisi tuzatildi: avval bir satrli
+izohlar olinadi, aks holda `api/*..php` dagi `/*` haqiqiy kodni "izoh" deb
+yutib yuborardi.
+
+Barcha suite'lar yashil: **Node 128 PASS, PHP 102 PASS, 0 FAIL**.

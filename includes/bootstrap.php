@@ -107,6 +107,34 @@ if (!defined('WC_SKIP_MAINTENANCE')) {
 require_once __DIR__ . '/LoginGate.php';
 LoginGate::enforce();
 
+// ---------------------------------------------------------------------------
+// BARCHA so'rovlar bir-birini SESSIYA QULFI bilan bloklamasin.
+//
+// config.php har so'rovda session_start() chaqiradi. PHP sessiya fayli
+// eksklyuziv qulflanadi va faqat skript tugaganda (yoki session_write_close)
+// bo'shatiladi. `watch.php` bir vaqtda bir nechta API so'rovi yuboradi:
+// tg-doc, video-index, r2-sign, progress, views, tg-thumb ... Bundan tashqari
+// Speculation Rules bir nechta watch.php nusxasini fonda "prerender" qiladi.
+// Agar ulardan bittasi t.me ga murojaat qilsa (TgResolve: 15 s + 15 s),
+// qolganlari session_start() da navbatga turadi va 120 s ga yetib o'chadi.
+// Natija: panellar orasida 2 daqiqalik qotish.
+//
+// Bu nuqtada $user/$auth allaqachon yuklangan, $_SESSION esa xotirada
+// o'qish uchun qolaveradi. Faqat sessiyaga YOZADIGAN 6 endpoint istisno:
+// ---------------------------------------------------------------------------
+$_wcKeepSession = in_array(strtolower(basename((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''))), [
+    'client-session.php',   // logout()/ensureUserFromClient() -> session_destroy()
+    'mediaflow-url.php',    // $_SESSION['mediaflow_url_issues'] tezlik cheklovi
+    'login.php',            // $_SESSION['login_token']
+    'logout.php',           // Auth::logout() -> session_destroy()
+    'admin-login.php',      // Auth::adminKeyLogin() -> $_SESSION['wc_admin_ok']
+    'bot.php',              // Auth::ensureUserFromClient() -> $_SESSION['user_id']
+], true);
+if (!$_wcKeepSession && session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+unset($_wcKeepSession);
+
 /**
  * GET/POST parametrni toza olish (trim + uzunlik cheklovi).
  */
