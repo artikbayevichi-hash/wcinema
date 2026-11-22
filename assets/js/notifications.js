@@ -23,6 +23,14 @@
   var meKey = 'wc_tg_me_v1';
   var count = 0;
 
+  // O'ng tepadagi "yangi bildirishnoma" kartochkalari: qaysi idlarni allaqachon
+  // ko'rsatganimizni sessiya ichida eslab qolamiz (sahifa almashganda takror
+  // chiqmasligi uchun). Birinchi so'rov faqat "baza" olishga ishlatiladi.
+  var TOAST_SEEN_KEY = 'wc_ntf_seen_v1';
+  var seen = [];
+  var seenReady = false;
+  var toastHost = null;
+
   // ------------------------------------------------------------- yordamchilar
   function base(path) {
     if (!BASE) return path;
@@ -124,9 +132,101 @@
       document.title = (count > 0 ? '(' + (count > 99 ? '99+' : count) + ') ' : '') + clean;
     } catch (e) { /* sarlavha yo'q */ }
   }
+  // --------------------------------------------- o'ng tepa: yangi xabarlar
+  function safeUrl(u) {
+    var s = String(u || '').trim();
+    return (/^javascript:/i.test(s) || /^data:/i.test(s)) ? '' : s;
+  }
+  function toastHostEl() {
+    if (toastHost) return toastHost;
+    toastHost = document.getElementById('wcNtfToasts');
+    if (!toastHost) {
+      toastHost = document.createElement('div');
+      toastHost.id = 'wcNtfToasts';
+      toastHost.className = 'wc-ntf-toasts';
+      toastHost.setAttribute('aria-live', 'polite');
+      document.body.appendChild(toastHost);
+    }
+    return toastHost;
+  }
+  function seenKey() {
+    return TOAST_SEEN_KEY + '_' + (me() || 'session');
+  }
+  function loadSeen() {
+    try {
+      var a = JSON.parse(sessionStorage.getItem(seenKey()) || '[]');
+      return Array.isArray(a)
+        ? a.map(function (x) { return Number(x) || 0; }).filter(function (x) { return x > 0; }).slice(-100)
+        : [];
+    } catch (e) { return []; }
+  }
+  function remember(items) {
+    items.forEach(function (it) {
+      var id = Number(it && it.id) || 0;
+      if (id > 0 && seen.indexOf(id) < 0) seen.push(id);
+    });
+    if (seen.length > 100) seen = seen.slice(-100);
+    try { sessionStorage.setItem(seenKey(), JSON.stringify(seen)); } catch (e) {}
+  }
+  function showToast(it) {
+    var host = toastHostEl();
+    if (!host || host.childElementCount >= 3) return;
+
+    var url = safeUrl(it.url);
+    var card = document.createElement(url ? 'a' : 'div');
+    card.className = 'wc-ntf-toast';
+    if (url) card.href = url;
+    card.setAttribute('data-id', String(Number(it.id) || 0));
+
+    var ico = ICONS[it.type] || ICONS.system;
+    card.innerHTML = '<span class="wc-ntf-toast-ico type-' + esc(it.type) + '">' + ico + '</span>'
+      + '<span class="wc-ntf-toast-main">'
+      + '<b>' + esc(it.type === 'system' ? 'E’lon' : 'Bildirishnoma') + '</b>'
+      + '<span>' + esc(it.text || 'Yangi xabar') + '</span></span>'
+      + '<button type="button" class="wc-ntf-toast-x" aria-label="Yopish">×</button>';
+
+    var close = function (e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      card.classList.add('out');
+      setTimeout(function () {
+        if (card.parentNode) card.parentNode.removeChild(card);
+      }, 220);
+    };
+    card.querySelector('button').addEventListener('click', close);
+    if (url) {
+      card.addEventListener('click', function () {
+        apiPost('action=read&id=' + encodeURIComponent(it.id)).catch(function () {});
+        close();
+      });
+    }
+    host.appendChild(card);
+    setTimeout(close, 7000);
+  }
+  function handleRecent(recent) {
+    var firstLoad = !seenReady;
+    if (firstLoad) {
+      seen = loadSeen();
+      seenReady = true;
+      // Sessiya yangi — eski xabarlarni shunchaki "ko'rilgan" deb qayd etamiz,
+      // aks holda sahifa ochilishi bilan hammasi birvarda chiqib ketadi.
+      if (!seen.length) {
+        remember(recent);
+        return;
+      }
+    }
+    var fresh = recent.filter(function (it) {
+      return it && Number(it.id) > 0 && seen.indexOf(Number(it.id)) < 0;
+    });
+    // Yangi ko'ringanlar ham, eski "recent" ichidagilar ham endi ko'rilgan.
+    remember(recent);
+    if (!fresh.length || !PANEL.hidden) return;  // oyna ochiq bo'lsa ustiga chiqarmaymiz
+    fresh.slice(0, 3).reverse().forEach(showToast);
+  }
   function refreshCount() {
     apiGet('api/notifications.php?action=count').then(function (d) {
-      if (d && typeof d.unread !== 'undefined') setBadge(d.unread);
+      if (!d || typeof d.unread === 'undefined') return;
+      setBadge(d.unread);
+      handleRecent(d.recent || []);
     }).catch(function () {});
   }
 

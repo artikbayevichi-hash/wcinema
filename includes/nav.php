@@ -1185,4 +1185,8 @@ window.addEventListener('DOMContentLoaded', function () {
 <script src="assets/js/dm-badge.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/dm-badge.js') ?: 1; ?>"></script>
 <script src="assets/js/donate.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/donate.js') ?: 1; ?>"></script>
 <script src="assets/js/feedback.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/feedback.js') ?: 1; ?>"></script>
+<?php /* perf-head.php bor sahifalarda e'lon skripti allaqachon header'da. */ ?>
+<?php if (empty($GLOBALS['WC_PERF_HEAD'])): ?>
+<script defer src="assets/js/site-banner.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/site-banner.js') ?: 1; ?>"></script>
+<?php endif; ?>
 <?php /* Eski `tv.js` spatial navigatsiyasi `tv-mode.js` ichiga ko'chirildi. */ ?>

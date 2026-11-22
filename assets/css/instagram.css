@@ -15,6 +15,11 @@
     --wc-donate-bottom: 22px;
     --wc-donate-h:      48px;
     --wc-float-gap:     10px;
+
+    /* Admin e'lon banneri (site-banner.js) balandligi. Banner chiqqach JS
+       uni o'lchab shu o'zgaruvchiga yozadi — yuqori panellar shuncha pastga
+       siljiydi, kontent esa banner ostida qolmaydi. */
+    --wc-ann-h: 0px;
 }
 
 /* ==========================================================================
@@ -22,7 +27,7 @@
    ========================================================================== */
 .ig-side {
     position: fixed;
-    top: 0; left: 0; bottom: 0;
+    top: var(--wc-ann-h); left: 0; bottom: 0;
     width: var(--ig-side-w);
     z-index: 55;
     display: flex;
@@ -269,14 +274,17 @@ img.ig-logo {
    Yon panel: hover/fokusda ochiladi (YouTube "mini guide" uslubi)
    ========================================================================== */
 .ig-side { transition: width .2s ease, box-shadow .2s ease; }
-body.ig-shell { transition: padding-left .2s ease; }
+body.ig-shell {
+    transition: padding-left .2s ease, padding-top .2s ease;
+    padding-top: var(--wc-ann-h);
+}
 
 /* ==========================================================================
    TELEFON: yuqori panel (brand + bildirishnomalar)
    ========================================================================== */
 .ig-mobar {
     position: fixed;
-    top: 0; left: 0; right: 0;
+    top: var(--wc-ann-h); left: 0; right: 0;
     z-index: 70;
     height: calc(var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
     padding-top: env(safe-area-inset-top, 0px);
@@ -435,10 +443,10 @@ body.ig-shell { transition: padding-left .2s ease; }
     .ig-side:focus-within .ig-sub:not([hidden]) { display: flex; }
 
     /* Sahifalar: sticky elementlar yon panel ichiga tushmasin */
-    body.ig-shell .filters { top: 0; }
-    body.ig-shell .pf-top { top: 0; }
-    body.ig-shell .pf-tabs { top: 57px; }
-    body.ig-shell .up-top { top: 0; }
+    body.ig-shell .filters { top: var(--wc-ann-h); }
+    body.ig-shell .pf-top { top: var(--wc-ann-h); }
+    body.ig-shell .pf-tabs { top: calc(var(--wc-ann-h) + 57px); }
+    body.ig-shell .up-top { top: var(--wc-ann-h); }
 
     /* Reels to'liq ekran: yon paneldan keyin boshlanadi */
     body.reels-body.ig-shell { padding-left: 76px; }
@@ -453,22 +461,22 @@ body.ig-shell { transition: padding-left .2s ease; }
     /* Tarkib: yuqori + pastki paneldan o'tadigan joy */
     body.ig-shell {
         padding-left: 0;
-        padding-top: calc(var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
+        padding-top: calc(var(--wc-ann-h) + var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
         padding-bottom: calc(var(--ig-tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px);
     }
 
     /* Sahifalar: sticky elementlar mobar ostida ko'rinsin */
     body.ig-shell .filters {
-        top: calc(var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
+        top: calc(var(--wc-ann-h) + var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
     }
     body.ig-shell .pf-top {
-        top: calc(var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
+        top: calc(var(--wc-ann-h) + var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
     }
     body.ig-shell .pf-tabs {
-        top: calc(var(--ig-mobar-h) + env(safe-area-inset-top, 0px) + 57px);
+        top: calc(var(--wc-ann-h) + var(--ig-mobar-h) + env(safe-area-inset-top, 0px) + 57px);
     }
     body.ig-shell .up-top {
-        top: calc(var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
+        top: calc(var(--wc-ann-h) + var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
     }
 
     /* Reels sahifasi to'liq ekran: yuqori panel bizniki bilan to'qnashmasin */
@@ -958,7 +966,63 @@ html.tv .ig-ico { width: 30px; height: 30px; }
     .ig-ntf-row { padding: 12px 14px; }
 }
 
+/* --- Yangi bildirishnomalar: o'ng tepadagi qisqa kartochkalar ----------- */
+.wc-ntf-toasts {
+    position: fixed;
+    top: calc(16px + var(--wc-ann-h));
+    right: 16px;
+    z-index: 520;                    /* Donat(450) va flyout(330) ustida */
+    width: min(360px, calc(100vw - 32px));
+    display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+}
+.wc-ntf-toast {
+    pointer-events: auto;
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 11px 10px 11px 11px;
+    border-radius: 14px;
+    border: 1px solid #393248;
+    background: rgba(24, 21, 32, .97);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, .5);
+    color: var(--text);
+    text-decoration: none;
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    animation: wcToastIn .28s cubic-bezier(.2, 1.25, .4, 1) both;
+}
+.wc-ntf-toast:hover { border-color: #6b5aa0; background: #211d2c; }
+.wc-ntf-toast.out { animation: wcToastOut .22s ease-in forwards; }
+.wc-ntf-toast-ico {
+    flex: 0 0 32px; width: 32px; height: 32px;
+    display: grid; place-items: center;
+    border-radius: 50%; background: #322b45; color: #c3b6ff;
+}
+.wc-ntf-toast-ico svg { width: 17px; height: 17px; }
+.wc-ntf-toast-ico.type-like    { background: #48232f; color: #ff8fa8; }
+.wc-ntf-toast-ico.type-follow  { background: #203b46; color: #7fdef5; }
+.wc-ntf-toast-ico.type-system  { background: #3a3520; color: #ffd479; }
+.wc-ntf-toast-ico.type-reply,
+.wc-ntf-toast-ico.type-comment { background: #243a31; color: #8be0ad; }
+.wc-ntf-toast-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wc-ntf-toast-main b { font-size: 12px; color: #fff; }
+.wc-ntf-toast-main > span {
+    color: #c8c2d6; overflow: hidden;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+.wc-ntf-toast-x {
+    flex: 0 0 auto; background: none; border: 0;
+    color: #7f788f; font-size: 19px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.wc-ntf-toast-x:hover { color: #fff; }
+@keyframes wcToastIn {
+    from { opacity: 0; transform: translateX(24px) scale(.96); }
+    to   { opacity: 1; transform: none; }
+}
+@keyframes wcToastOut {
+    to { opacity: 0; transform: translateX(24px); }
+}
+
 @media (max-width: 560px) {
+    .wc-ntf-toasts { top: calc(10px + var(--wc-ann-h)); right: 10px; width: min(340px, calc(100vw - 20px)); }
     .ig-search-bar { padding: 10px 12px; gap: 7px; }
     .ig-search-body { padding: 14px 12px calc(28px + env(safe-area-inset-bottom, 0px)); }
     .ig-search-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

@@ -19,6 +19,10 @@
 // Ishlatish: <head> ichida, boshqa resurslardan OLDIN —
 //   require __DIR__ . '/includes/perf-head.php';
 //
+// Bu belgi `includes/nav.php` ga "site-banner.js allaqachon ulangan" deb
+// aytadi — aks holda skript ikki marta yuklanib qoladi.
+$GLOBALS['WC_PERF_HEAD'] = true;
+//
 // Ixtiyoriy: `$PERF_POSTER` (sahifa posteri) berilsa, u `preload` qilinadi —
 // thumbnail video yuklanishidan oldin ko'rinadi (qora ekran bo'lmaydi).
 // ============================================================================

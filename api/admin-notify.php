@@ -7,6 +7,7 @@
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/Notifications.php';
+require_once __DIR__ . '/../includes/SiteSettings.php';
 require_once __DIR__ . '/../includes/AdminLog.php';
 
 requireAdmin();
@@ -42,6 +43,23 @@ $toTg     = !empty($_POST['to_telegram']);
 
 if ($title === '' || $message === '') {
     fail('Sarlavha va matn kerak', 400);
+}
+
+// "Tepada banner" katagi belgilansa, e'lon barcha sahifalarning tepasida
+// butun kenglikda turadi (site-banner.js). Bu shaxsiy xabarlarga ta'sir
+// qilmaydi — faqat umumiy e'lon sozlamasiga yoziladi.
+$asBanner = !empty($_POST['as_banner']) && $audience !== 'one';
+$bannerOk = false;
+if ($asBanner) {
+    $bannerText = trim($title . ' — ' . $message);
+    $bannerText = function_exists('mb_substr')
+        ? mb_substr($bannerText, 0, 300) : substr($bannerText, 0, 300);
+    $bannerLink = trim($url);
+    if ($bannerLink !== '' && !preg_match('#^https?://#i', $bannerLink) && $bannerLink[0] !== '/') {
+        $bannerLink = '/' . ltrim($bannerLink, '/');
+    }
+    $saved = SiteSettings::set(['notice' => $bannerText, 'notice_link' => $bannerLink]);
+    $bannerOk = !empty($saved['ok']);
 }
 
 if ($audience === 'premium') {
@@ -109,6 +127,7 @@ AdminLog::add('notify.send', [
     'total'    => count($rows),
     'inapp'    => $inApp,
     'tg'       => $toTg,
+    'banner'   => $bannerOk,
 ]);
 
 ok([
@@ -116,4 +135,5 @@ ok([
     'inapp'   => $inApp,
     'tg_ok'   => $tgOk,
     'tg_err'  => $tgErr,
+    'banner'  => $bannerOk,
 ]);

@@ -1,59 +1,95 @@
 /* ============================================================================
-   site-banner.js — admin panel "Sozlamalar" dagi e'lonni ko'rsatadi
+   site-banner.js — admin e'lonini SAHIFA TEPASIDA, butun kenglikda ko'rsatadi
    ----------------------------------------------------------------------------
-   • Matn `storage/settings.json` → `notice` (api/site-config.php orqali)
-   • Havola ixtiyoriy (`notice_link`)
-   • "Yopish" bosilsa shu sessiyada boshqa ko'rinmaydi
-   • E'lon bo'lmasa — hech narsa qilmaydi (0 qo'shimcha DOM)
+   • Matn `storage/settings.json` → `notice` (admin panel → Sozlamalar yoki
+     "Bildirishnoma → Hamma" dagi "Tepada banner" katagi).
+   • Banner `top:0; left:0; right:0` — sahifaning butun tepasini egallaydi.
+   • Balandligi `--wc-ann-h` ga yoziladi: mobar, yon panel va sticky sarlavhalar
+     shuncha pastga siljiydi, kontent banner ostida qolmaydi.
+   • "Yopish" bosilsa shu sessiyada boshqa ko'rinmaydi.
+   • E'lon bo'lmasa — hech narsa qilmaydi (0 qo'shimcha DOM, 0 so'rov).
    ========================================================================== */
 (function () {
     'use strict';
 
     var BASE = (window.APP && window.APP.base) || '';
     var KEY = 'wc_notice_closed';
+    var box = null;
+    var observer = null;
+
+    function setHeight(px) {
+        try {
+            document.documentElement.style.setProperty('--wc-ann-h', (Math.round(px) || 0) + 'px');
+        } catch (e) {}
+    }
+    function measure() {
+        if (box) setHeight(box.offsetHeight);
+    }
+
+    function close(key) {
+        try { sessionStorage.setItem(KEY, key); } catch (e) {}
+        setHeight(0);
+        if (observer && observer.disconnect) observer.disconnect();
+        if (box && box.parentNode) box.parentNode.removeChild(box);
+        box = null;
+    }
 
     function show(d) {
         if (!d.notice) return;
+        var key = String(d.notice);
         try {
-            if (sessionStorage.getItem(KEY) === d.notice) return;
+            if (sessionStorage.getItem(KEY) === key) return;
         } catch (e) {}
         if (document.getElementById('wcNotice')) return;
 
-        var box = document.createElement('div');
+        box = document.createElement('div');
         box.id = 'wcNotice';
-        box.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:99998;'
-            + 'max-width:340px;background:#17141f;color:#eae6f2;border:1px solid #2c2739;'
-            + 'border-radius:14px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.45);'
-            + 'font:13.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
-            + 'display:flex;gap:10px;align-items:flex-start';
+        box.className = 'wc-top-banner';
+        box.setAttribute('role', 'status');
+        box.setAttribute('aria-label', 'E’lon');
+        // Stillar inline: banner barcha sahifalarda ishlashi kerak (ba'zi
+        // sahifalarda instagram.css ulanmagan, masalan tg-login.php).
+        box.style.cssText = 'position:fixed;top:0;left:0;right:0;width:100%;box-sizing:border-box;'
+            + 'z-index:80;display:flex;align-items:center;gap:10px;flex-wrap:wrap;'
+            + 'padding:9px max(16px, env(safe-area-inset-right, 0px)) '
+            + '9px max(16px, env(safe-area-inset-left, 0px));'
+            + 'background:linear-gradient(90deg,#5b3fd6 0%,#8b46e8 55%,#b347c9 100%);'
+            + 'color:#fff;box-shadow:0 6px 22px rgba(0,0,0,.4);'
+            + 'font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
 
-        var body = '<div style="flex:1">'
-            + '<div style="font-weight:700;margin-bottom:3px">📣 E’lon</div>'
-            + '<div style="color:#c9c3d8">' + escapeHtml(d.notice) + '</div>';
+        var body = '<span aria-hidden="true" style="font-size:17px;line-height:1">📣</span>'
+            + '<strong style="font-weight:800;white-space:nowrap">E’lon</strong>'
+            + '<span style="flex:1 1 240px;min-width:0;color:#f4efff">'
+            + escapeHtml(d.notice) + '</span>';
 
         if (d.notice_link) {
             body += '<a href="' + escapeAttr(d.notice_link) + '" '
-                + 'style="display:inline-block;margin-top:8px;color:#b7aef0;font-weight:700;text-decoration:none">Batafsil →</a>';
+                + 'style="color:#fff;font-weight:800;text-decoration:underline;white-space:nowrap">Batafsil →</a>';
         }
-        body += '</div>'
-            + '<button type="button" aria-label="Yopish" '
-            + 'style="background:none;border:none;color:#6f6880;font-size:18px;cursor:pointer;line-height:1">×</button>';
+        body += '<button type="button" aria-label="Yopish" '
+            + 'style="background:rgba(255,255,255,.16);border:0;border-radius:8px;color:#fff;'
+            + 'font-size:17px;line-height:1;width:26px;height:26px;cursor:pointer;flex:0 0 auto">×</button>';
 
         box.innerHTML = body;
-        box.querySelector('button').onclick = function () {
-            try { sessionStorage.setItem(KEY, d.notice); } catch (e) {}
-            box.remove();
-        };
+        box.querySelector('button').addEventListener('click', function () { close(key); });
         document.body.appendChild(box);
+
+        measure();
+        if (window.ResizeObserver) {
+            observer = new ResizeObserver(measure);
+            observer.observe(box);
+        } else {
+            window.addEventListener('resize', measure);
+        }
     }
 
     function escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, function (c) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
     function escapeAttr(s) {
-        return escapeHtml(s).replace(/^javascript:/i, '');
+        return escapeHtml(s).replace(/^\s*javascript:/i, '');
     }
 
     function load() {
@@ -65,10 +101,11 @@
             return; // inline bor — tarmoqqa murojaat yo'q
         }
         // Zaxira: perf-head.php ulanmagan sahifalar uchun eski yo'l.
-        fetch(BASE + '/api/site-config.php', { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
-            .then(function (d) { if (d && d.success) show(d); })
-            .catch(function () {});
+        fetch((BASE ? BASE.replace(/\/$/, '') : '') + '/api/site-config.php', {
+            credentials: 'same-origin'
+        }).then(function (r) { return r.json(); })
+          .then(function (d) { if (d && d.success) show(d); })
+          .catch(function () {});
     }
 
     if (document.readyState === 'loading') {

@@ -691,6 +691,7 @@
                 + '<div class="field"><label>Havola (ixtiyoriy)</label><input id="nUrl" maxlength="500" placeholder="watch.php?c=1"></div>'
                 + '<div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" id="nTg"> Telegram DM (chat ulangan: ' + c.tg + ')</label></div>'
                 + '</div>'
+                + '<div class="field"><label class="check"><input type="checkbox" id="nBanner"> Tepada banner sifatida ham chiqarish (barcha sahifalar, to‘liq kenglik)</label></div>'
                 + '<button class="btn" id="nSend">Yuborish</button>'
                 + '<div id="nRes" class="muted" style="margin-top:10px"></div>'
                 + '</div>');
@@ -714,12 +715,14 @@
                     title: title,
                     message: msg,
                     url: $('#nUrl').value,
-                    to_telegram: $('#nTg').checked ? 1 : ''
+                    to_telegram: $('#nTg').checked ? 1 : '',
+                    as_banner: $('#nBanner').checked ? 1 : ''
                 }).then(function (r) {
                     btn.disabled = false;
                     if (r && r.success) {
                         $('#nRes').textContent = 'Yuborildi: ' + r.inapp + '/' + r.total
-                            + (r.tg_ok || r.tg_err ? ' · Telegram: ' + r.tg_ok + ' yetdi, ' + r.tg_err + ' xato' : '');
+                            + (r.tg_ok || r.tg_err ? ' · Telegram: ' + r.tg_ok + ' yetdi, ' + r.tg_err + ' xato' : '')
+                            + (r.banner ? ' · Tepa banneri chiqarildi' : '');
                         toast('Yuborildi');
                     } else {
                         $('#nRes').textContent = '';
@@ -760,7 +763,7 @@
             var s = (d && d.settings) || {};
             render('<div class="panel"><form id="sform">'
                 + '<div class="field"><label>Sayt nomi</label><input name="site_name" maxlength="60" value="' + esc(s.site_name) + '" placeholder="W CINEMA"></div>'
-                + '<div class="field"><label>E’lon (sayt tepasida)</label><input name="notice" maxlength="300" value="' + esc(s.notice) + '" placeholder="Yangi yil aksiyasi: 30% chegirma"></div>'
+                + '<div class="field"><label>E’lon (barcha sahifalar tepasida, to‘liq kenglikda)</label><input name="notice" maxlength="300" value="' + esc(s.notice) + '" placeholder="Yangi yil aksiyasi: 30% chegirma"></div>'
                 + '<div class="row2">'
                 + '<div class="field"><label>E’lon havolasi</label><input name="notice_link" maxlength="500" value="' + esc(s.notice_link) + '" placeholder="watch.php?c=1"></div>'
                 + '<div class="field"><label>Banner rasm URL</label><input name="banner_url" maxlength="500" value="' + esc(s.banner_url) + '" placeholder="https://…"></div>'

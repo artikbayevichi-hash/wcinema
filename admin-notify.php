@@ -11,6 +11,7 @@
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/Notifications.php';
+require_once __DIR__ . '/includes/SiteSettings.php';
 
 if (!$auth->isAdmin()) {
     $here = (string) ($_SERVER['SCRIPT_NAME'] ?? '/admin-notify.php');
@@ -36,6 +37,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     if ($title === '' || $message === '') {
         header('Location: admin-notify.php?err=empty');
         exit;
+    }
+
+    // "Tepada banner" — e'lon barcha sahifalarning tepasida to'liq kenglikda
+    // chiqadi. Faqat "Hamma"/"Premium" uchun mantiqiy.
+    if (!empty($_POST['as_banner']) && $audience !== 'one') {
+        $bannerText = trim($title . ' — ' . $message);
+        $bannerText = function_exists('mb_substr')
+            ? mb_substr($bannerText, 0, 300) : substr($bannerText, 0, 300);
+        $bannerLink = trim($url);
+        if ($bannerLink !== '' && !preg_match('#^https?://#i', $bannerLink) && $bannerLink[0] !== '/') {
+            $bannerLink = '/' . ltrim($bannerLink, '/');
+        }
+        SiteSettings::set(['notice' => $bannerText, 'notice_link' => $bannerLink]);
     }
 
     // Qabul qiluvchilarni tanlash
@@ -186,6 +200,13 @@ $tgErr = (int) ($_GET['tgerr'] ?? 0);
                         Bot orqali shaxsiy chatga ham yuborish (<?php echo $nTg; ?> ta ulangan)
                     </label>
                 </div>
+            </div>
+
+            <div class="field">
+                <label style="display:flex;align-items:center;gap:8px;color:#eae6f2;font-size:13.5px">
+                    <input type="checkbox" name="as_banner" value="1" style="width:auto">
+                    Tepada banner sifatida ham chiqarish (barcha sahifalar, to‘liq kenglik)
+                </label>
             </div>
 
             <button class="btn" type="submit">Yuborish</button>

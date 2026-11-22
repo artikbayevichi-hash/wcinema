@@ -29,7 +29,27 @@ if ($method === 'GET' || $method === 'HEAD') {
     $action = input('action', 'list', 20);
 
     if ($action === 'count') {
-        ok(['unread' => $userId ? $ntf->unreadCount($userId) : 0]);
+        $unread = $userId ? $ntf->unreadCount($userId) : 0;
+        // O'ng tepadagi yangi bildirishnoma kartochkalari uchun eng so'nggi
+        // o'qilmaganlar ham qaytariladi. Bu count bilan BIR so'rovda keladi —
+        // qo'shimcha RTT yo'q. Faqat id/type/matn/havola/vaqt.
+        $recent = [];
+        if ($unread > 0) {
+            $latest = $ntf->listFor($userId, 30, 0);
+            foreach (($latest['items'] ?? []) as $it) {
+                if (!empty($it['is_read'])) {
+                    continue;
+                }
+                $recent[] = [
+                    'id'    => (int) $it['id'],
+                    'type'  => (string) $it['type'],
+                    'text'  => (string) ($it['text'] ?? ''),
+                    'url'   => (string) ($it['url'] ?? ''),
+                    'at'    => (string) ($it['at'] ?? ''),
+                ];
+            }
+        }
+        ok(['unread' => $unread, 'recent' => $recent]);
     }
 
     $data = $userId
