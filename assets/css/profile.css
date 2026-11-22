@@ -3,13 +3,13 @@
    ============================================================================ */
 
 :root {
-    --pf-bg:         #0a0a0f;
-    --pf-card:       #12121a;
-    --pf-border:     #262633;
-    --pf-text:       #f5f5f7;
-    --pf-sub:        #9b9ba7;
-    --pf-blue:       #0095f6;
-    --pf-danger:     #ff3b30;
+    --pf-bg:         #0b0b0b;
+    --pf-card:       #131313;
+    --pf-border:     #272727;
+    --pf-text:       #ffffff;
+    --pf-sub:        #ffffff;
+    --pf-blue:       #ffffff;
+    --pf-danger:     #ffffff;
     --pf-grid-gap:   3px;
 }
 
@@ -32,7 +32,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: rgba(10, 10, 15, 0.85);
+    background: rgba(11, 11, 11, 0.85);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--pf-border);
@@ -101,7 +101,7 @@
     border-radius: 50%;
     overflow: hidden;
     border: 2px solid rgba(255, 255, 255, 0.14);
-    background: linear-gradient(135deg, #2b2b3a, #1a1a26);
+    background: linear-gradient(135deg, #2d2d2d, #1b1b1b);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -188,14 +188,14 @@
 .pf-btn:hover { background: rgba(255, 255, 255, 0.1); }
 .pf-btn:active { transform: scale(.97); }
 .pf-btn.prim {
-    background: linear-gradient(180deg, #37b7f5, var(--pf-blue));
+    background: linear-gradient(180deg, #ffffff, var(--pf-blue));
     border-color: transparent;
-    color: #fff;
-    box-shadow: 0 4px 14px rgba(42, 171, 238, .32);
+    color: #000000;
+    box-shadow: 0 4px 14px rgba(255, 255, 255, .32);
 }
 .pf-btn.prim:hover {
-    background: linear-gradient(180deg, #4cc1f8, #1c9fe0);
-    box-shadow: 0 6px 18px rgba(42, 171, 238, .42);
+    background: linear-gradient(180deg, #ffffff, #ffffff);
+    box-shadow: 0 6px 18px rgba(255, 255, 255, .42);
 }
 /* "Kuzatilmoqda" - xabardan voz kechilgani, shaffofroq ko'rinadi. */
 .pf-btn.ghost {
@@ -239,7 +239,7 @@
     border-radius: 50%;
     padding: 3px;
     display: block;
-    background: conic-gradient(#feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75);
+    background: conic-gradient(#ffffff, #ffffff, #ffffff, #ffffff, #ffffff, #ffffff);
     margin-bottom: 6px;
 }
 .pf-hl-ring img {
@@ -254,7 +254,7 @@
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: #1c1c28;
+    background: #1d1d1d;
     border: 3px solid var(--pf-bg);
     display: flex;
     align-items: center;
@@ -278,7 +278,7 @@
     z-index: 30;
     display: flex;
     justify-content: center;
-    background: rgba(10, 10, 15, 0.9);
+    background: rgba(11, 11, 11, 0.9);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--pf-border);
@@ -313,7 +313,7 @@
     position: relative;
     aspect-ratio: 1 / 1;
     overflow: hidden;
-    background: #181822;
+    background: #191919;
 }
 .pf-cell-media img {
     width: 100%;
@@ -359,7 +359,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ffd60a;
+    color: #ffffff;
 }
 .pf-badge.bad { color: var(--pf-danger); }
 
@@ -405,7 +405,7 @@
     max-width: 560px;
     max-height: 88vh;
     overflow-y: auto;
-    background: #16161f;
+    background: #171717;
     border-radius: 18px 18px 0 0;
     padding: 20px 18px calc(24px + env(safe-area-inset-bottom));
     transform: translateY(30px);
@@ -429,7 +429,7 @@
     padding: 11px 13px;
     border-radius: 10px;
     border: 1px solid var(--pf-border);
-    background: #101018;
+    background: #111111;
     color: var(--pf-text);
     font-size: 14px;
     font-family: inherit;
@@ -457,7 +457,7 @@
     flex: 0 0 64px;
     border-radius: 50%;
     overflow: hidden;
-    background: #101018;
+    background: #111111;
     border: 1px solid var(--pf-border);
     display: flex;
     align-items: center;
@@ -489,8 +489,8 @@
     bottom: 24px;
     transform: translateX(-50%);
     z-index: 80;
-    background: #1d2733;
-    color: #d7f2ff;
+    background: #252525;
+    color: #ffffff;
     border: 1px solid var(--pf-blue);
     border-radius: 12px;
     padding: 11px 18px;
@@ -499,7 +499,7 @@
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
     max-width: 88vw;
 }
-.pf-toast.err { background: #2a1618; color: #ffd0d0; border-color: var(--pf-danger); }
+.pf-toast.err { background: #1c1c1c; color: #ffffff; border-color: var(--pf-danger); }
 .pf-toast[hidden] { display: none; }
 
 /* ==========================================================================
@@ -588,9 +588,9 @@
 /* Bloklash tugmasi — xavfliroq ko'rinish */
 .pf-btn.pf-block-btn {
     color: var(--pf-danger);
-    border-color: rgba(255, 77, 109, 0.35);
+    border-color: rgba(255, 255, 255, 0.35);
 }
-.pf-btn.pf-block-btn:hover { background: rgba(255, 77, 109, 0.12); }
+.pf-btn.pf-block-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
 /* Maxfiylik belgisi */
 .pf-private {
@@ -599,12 +599,12 @@
     gap: 4px;
     margin-top: 6px;
     padding: 3px 9px;
-    background: rgba(255, 77, 109, 0.14);
-    border: 1px solid rgba(255, 77, 109, 0.28);
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 999px;
     font-size: 11px;
     font-weight: 600;
-    color: #ff8fa3;
+    color: #ffffff;
 }
 .pf-private[hidden] { display: none; }
 
@@ -612,7 +612,7 @@
 .pf-locked {
     margin: 14px;
     padding: 30px 20px;
-    background: var(--pf-card, #12121a);
+    background: var(--pf-card, #131313);
     border: 1px solid var(--pf-border);
     border-radius: 16px;
     text-align: center;
@@ -732,11 +732,11 @@ body.pf-list-open { overflow: hidden; }
 .pf-li-btn:hover { background: rgba(255, 255, 255, .12); }
 .pf-li-btn:active { transform: scale(.96); }
 .pf-li-btn.prim {
-    background: linear-gradient(180deg, #37b7f5, var(--pf-blue));
-    border-color: transparent; color: #fff;
-    box-shadow: 0 4px 14px rgba(42, 171, 238, .32);
+    background: linear-gradient(180deg, #ffffff, var(--pf-blue));
+    border-color: transparent; color: #000000;
+    box-shadow: 0 4px 14px rgba(255, 255, 255, .32);
 }
-.pf-li-btn.prim:hover { background: linear-gradient(180deg, #4cc1f8, #1c9fe0); }
+.pf-li-btn.prim:hover { background: linear-gradient(180deg, #ffffff, #ffffff); }
 .pf-li-btn.ghost { background: rgba(255, 255, 255, .05); }
 .pf-li-btn[disabled] { opacity: .55; cursor: default; }
 

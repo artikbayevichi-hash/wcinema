@@ -137,7 +137,7 @@ $counts  = [
     <?php endif; ?>
 
     <?php if ((int) $r['status'] === 2): ?>
-        <div class="adm-clip" style="color:#ff9a9a">
+        <div class="adm-clip" style="color:#ffffff">
             Rad etish sababi: <?php echo htmlspecialchars($r['reject_reason'] ?: '—'); ?>
         </div>
     <?php endif; ?>

@@ -1332,7 +1332,7 @@
                     <div class="author-score">${fmtViews(u.score)}</div>
                 </div>`).join('');
         } catch (e) {
-            list.innerHTML = '<p style="color:#ff9a9a;font-size:13px">' + esc(e.message) + '</p>';
+            list.innerHTML = '<p style="color:#ffffff;font-size:13px">' + esc(e.message) + '</p>';
         }
     }
 

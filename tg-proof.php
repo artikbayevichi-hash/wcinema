@@ -26,36 +26,36 @@ $tgMsgId = (int) ($_GET['id'] ?? 2);
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-       background:#0f1115;color:#e8eaed;min-height:100vh;padding:20px}
+       background:#111111;color:#ffffff;min-height:100vh;padding:20px}
   .wrap{max-width:760px;margin:0 auto}
   h1{font-size:22px;margin-bottom:6px}
-  .sub{color:#9aa0a6;font-size:14px;margin-bottom:20px;line-height:1.6}
-  .card{background:#1a1d23;border:1px solid #2a2e37;border-radius:14px;padding:20px;margin-bottom:16px}
-  .card h2{font-size:16px;margin-bottom:12px;color:#8ab4f8}
-  button{background:#2a6df4;color:#fff;border:0;border-radius:10px;padding:12px 18px;
+  .sub{color:#ffffff;font-size:14px;margin-bottom:20px;line-height:1.6}
+  .card{background:#1d1d1d;border:1px solid #2e2e2e;border-radius:14px;padding:20px;margin-bottom:16px}
+  .card h2{font-size:16px;margin-bottom:12px;color:#ffffff}
+  button{background:#ffffff;color:#000000;border:0;border-radius:10px;padding:12px 18px;
          font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
-  button:hover{background:#1f5fd8}
-  button:disabled{background:#3a3f4b;cursor:not-allowed}
-  button.ghost{background:#2a2e37}
-  input{background:#0f1115;border:1px solid #2a2e37;border-radius:10px;padding:12px;
-        color:#e8eaed;font-size:15px;width:100%;font-family:inherit}
+  button:hover{background:#ffffff}
+  button:disabled{background:#3f3f3f;cursor:not-allowed}
+  button.ghost{background:#2e2e2e}
+  input{background:#111111;border:1px solid #2e2e2e;border-radius:10px;padding:12px;
+        color:#ffffff;font-size:15px;width:100%;font-family:inherit}
   #log{font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.7;
-       background:#0b0d10;border:1px solid #2a2e37;border-radius:10px;padding:12px;
+       background:#0d0d0d;border:1px solid #2e2e2e;border-radius:10px;padding:12px;
        max-height:230px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   #qrBox{text-align:center;padding:16px;background:#fff;border-radius:12px;display:inline-block}
   #qrBox canvas,#qrBox img{display:block;image-rendering:pixelated}
-  .st{font-size:13px;color:#9aa0a6;margin-top:8px}
-  .ok{color:#3ddc84}.err{color:#f28b82}.warn{color:#fdd663}
+  .st{font-size:13px;color:#ffffff;margin-top:8px}
+  .ok{color:#ffffff}.err{color:#ffffff}.warn{color:#ffffff}
   /* SW izlari (so'rov qatorlari) - xabmaydi, faqat o'qish uchun ixcham */
-  .tr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#6b7280}
+  .tr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#ffffff}
   video{width:100%;border-radius:10px;background:#000;display:block}
-  .pill{display:inline-block;background:#20242c;border:1px solid #2a2e37;border-radius:20px;
+  .pill{display:inline-block;background:#242424;border:1px solid #2e2e2e;border-radius:20px;
         padding:4px 12px;font-size:12px;margin:4px 4px 0 0}
-  .pill.g{background:#12351f;border-color:#1d5c33;color:#6ee7a0}
-  .prow{padding:6px 10px;border-radius:8px;font-size:13px;border:1px solid #2a2e37;margin-bottom:5px}
-  .prow:hover{background:#20242c}
-  a{color:#8ab4f8}
+  .pill.g{background:#282828;border-color:#444444;color:#ffffff}
+  .prow{padding:6px 10px;border-radius:8px;font-size:13px;border:1px solid #2e2e2e;margin-bottom:5px}
+  .prow:hover{background:#242424}
+  a{color:#ffffff}
 </style>
 </head>
 <body>
@@ -834,14 +834,14 @@ $tgMsgId = (int) ($_GET['id'] ?? 2);
         // Bo'sh qora <video> qoldirmaymiz — u CTA ning ustida chalkash
         // ko'rinardi ("nima uchun hech narsa yo'q?").
         if (v.parentNode) v.parentNode.removeChild(v);
-        st.innerHTML = '<div style="padding:14px;border:1px solid #f28b82;'
-          + 'border-radius:10px;background:#3d1f1f">'
+        st.innerHTML = '<div style="padding:14px;border:1px solid #ffffff;'
+          + 'border-radius:10px;background:#282828">'
           + '<b>' + why + '</b><br><span style="opacity:.85">'
           + 'Transport to\'g\'ri ishladi — fayl Telegram\'dan to\'liq o\'qildi. '
           + 'Muammo faqat formatda.</span>'
           + '<a href="' + urlTg + '" target="_blank" rel="noopener"'
           + ' style="display:inline-block;margin-top:12px;padding:11px 20px;'
-          + 'background:#2aabee;color:#fff;border-radius:8px;'
+          + 'background:#ffffff;color:#000000;border-radius:8px;'
           + 'font-weight:600;text-decoration:none">'
           + 'Telegram ilovasida ochish &rarr;</a></div>';
         log('Bu fayl brauzerda oynatilmaydi — Telegram\'ga yo\'naltirildi', 'warn');

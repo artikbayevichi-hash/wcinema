@@ -369,8 +369,9 @@ class Catalog {
             $title = $categoryName !== '' ? $categoryName : 'W CINEMA';
         }
         $hash = md5($title . '|' . $categorySlug);
-        $hue1 = hexdec(substr($hash, 0, 2)) % 360;
-        $hue2 = hexdec(substr($hash, 2, 2)) % 360;
+        // Oq-qora paletra: placeholder gradient ham faqat kulrang bo'ladi.
+        $gray1 = 12 + hexdec(substr($hash, 0, 2)) % 18;
+        $gray2 = 4 + hexdec(substr($hash, 2, 2)) % 10;
 
         $emoji = self::catEmoji($categorySlug, $categoryName);
 
@@ -392,8 +393,8 @@ class Catalog {
 
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img">'
             . '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-            . '<stop offset="0" stop-color="hsl(' . $hue1 . ',60%,34%)"/>'
-            . '<stop offset="1" stop-color="hsl(' . $hue2 . ',70%,17%)"/>'
+            . '<stop offset="0" stop-color="hsl(0,0%,' . $gray1 . '%)"/>'
+            . '<stop offset="1" stop-color="hsl(0,0%,' . $gray2 . '%)"/>'
             . '</linearGradient></defs>'
             . '<rect width="640" height="360" fill="url(#g)"/>'
             . '<text x="320" y="172" font-size="96" text-anchor="middle" font-family="sans-serif">' . $emoji . '</text>'

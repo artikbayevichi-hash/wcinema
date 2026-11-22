@@ -7,14 +7,14 @@
 
 .uzp {
     --uzp-bg: #000000;
-    --uzp-card: #191b1f;
+    --uzp-card: #1b1b1b;
     --uzp-line: rgba(255, 255, 255, .08);
-    --uzp-text: #f7f8fa;
-    --uzp-muted: #cfd4da;
+    --uzp-text: #ffffff;
+    --uzp-muted: #ffffff;
     --uzp-accent: #ffffff;
     --uzp-accent-2: #ffffff;
     --uzp-radius: 14px;
-    --uzp-bar-bg: rgba(18, 19, 21, .58);
+    --uzp-bar-bg: rgba(19, 19, 19, .58);
     position: absolute;
     inset: 0;
     width: 100%;
@@ -34,7 +34,7 @@
 .uzp *::before,
 .uzp *::after { box-sizing: border-box; }
 
-.uzp:focus-visible { box-shadow: 0 0 0 3px rgba(245, 158, 11, .55); }
+.uzp:focus-visible { box-shadow: 0 0 0 3px rgba(255, 255, 255, .55); }
 
 /* ------------------------------------------------------------------ video */
 .uzp-video,
@@ -85,7 +85,7 @@
     font-size: 10.5px;
     font-weight: 800;
     letter-spacing: .14em;
-    color: #121315;
+    color: #131313;
     background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
     border-radius: 999px;
     padding: 5px 9px;
@@ -101,7 +101,7 @@
     align-items: center;
     justify-content: center;
     gap: 12px;
-    background: rgba(10, 11, 13, .35);
+    background: rgba(11, 11, 11, .35);
     backdrop-filter: blur(2px);
     pointer-events: none;
     transition: opacity .2s ease, visibility .2s ease;
@@ -142,14 +142,14 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: #121315;
+    color: #131313;
     background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
-    box-shadow: 0 12px 34px rgba(0, 0, 0, .45), 0 0 0 8px rgba(245, 158, 11, .12);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, .45), 0 0 0 8px rgba(255, 255, 255, .12);
     transition: transform .16s ease, box-shadow .16s ease;
 }
 
 .uzp-bigplay svg { width: 30px; height: 30px; margin-left: 4px; }
-.uzp-bigplay:hover { transform: scale(1.06); box-shadow: 0 14px 38px rgba(0, 0, 0, .5), 0 0 0 12px rgba(245, 158, 11, .16); }
+.uzp-bigplay:hover { transform: scale(1.06); box-shadow: 0 14px 38px rgba(0, 0, 0, .5), 0 0 0 12px rgba(255, 255, 255, .16); }
 .uzp-bigplay:active { transform: scale(.96); }
 .uzp.is-paused .uzp-bigplay,
 .uzp.is-blocked .uzp-bigplay { display: flex; }
@@ -167,14 +167,14 @@
     gap: 10px;
     padding: 26px;
     text-align: center;
-    background: rgba(10, 11, 13, .88);
+    background: rgba(11, 11, 11, .88);
     backdrop-filter: blur(6px);
 }
 
 .uzp-error[hidden] { display: none; }
 .uzp-error-ico { color: var(--uzp-accent); }
 .uzp-error-ico svg { width: 38px; height: 38px; }
-.uzp-error-t { font-size: 14.5px; font-weight: 600; max-width: 440px; line-height: 1.45; color: #f2f3f5; }
+.uzp-error-t { font-size: 14.5px; font-weight: 600; max-width: 440px; line-height: 1.45; color: #ffffff; }
 
 .uzp-retry {
     margin-top: 4px;
@@ -184,7 +184,7 @@
     font: inherit;
     font-size: 13px;
     font-weight: 800;
-    color: #121315;
+    color: #131313;
     background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
     cursor: pointer;
     transition: transform .15s ease, filter .15s ease;
@@ -205,7 +205,7 @@
     pointer-events: none;
     opacity: 0;
     color: #fff;
-    background: radial-gradient(circle at center, rgba(245, 158, 11, .36), rgba(245, 158, 11, 0) 68%);
+    background: radial-gradient(circle at center, rgba(255, 255, 255, .36), rgba(255, 255, 255, 0) 68%);
 }
 
 .uzp-ripple.left { left: 0; }
@@ -245,7 +245,7 @@
     gap: 6px;
     padding: 6px 14px 5px;
     border-radius: 22px;
-    background: radial-gradient(120% 140% at 50% 0%, rgba(255,255,255,.05) 0%, transparent 60%), rgba(18, 19, 21, .58);
+    background: radial-gradient(120% 140% at 50% 0%, rgba(255,255,255,.05) 0%, transparent 60%), rgba(19, 19, 19, .58);
     border: 1px solid rgba(255, 255, 255, .08);
     box-shadow: 0 40px 70px -50px rgba(0, 0, 0, .9);
     backdrop-filter: blur(16px) saturate(1.4);
@@ -300,7 +300,7 @@
     outline: none;
 }
 
-.uzp-seek:focus-visible .uzp-seek-track { box-shadow: 0 0 0 2px rgba(245, 158, 11, .6); }
+.uzp-seek:focus-visible .uzp-seek-track { box-shadow: 0 0 0 2px rgba(255, 255, 255, .6); }
 
 .uzp-seek-track {
     position: relative;
@@ -358,7 +358,7 @@
     transform: translateX(-50%);
     padding: 5px 9px;
     border-radius: 8px;
-    background: #0b0c0e;
+    background: #0c0c0c;
     border: 1px solid rgba(255, 255, 255, .12);
     color: #fff;
     font-size: 11.5px;
@@ -403,7 +403,7 @@
     align-items: center;
     justify-content: center;
     background: transparent;
-    color: #f3f4f6;
+    color: #ffffff;
     cursor: pointer;
     transition: background .15s ease, color .15s ease, transform .12s ease;
     font: inherit;
@@ -485,8 +485,8 @@
     overflow: auto;
     padding: 6px;
     border-radius: 12px;
-    background: #17191d;
-    border: 1px solid #2b2f35;
+    background: #191919;
+    border: 1px solid #2e2e2e;
     box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
     z-index: 20;
 }
@@ -499,7 +499,7 @@
     font-weight: 800;
     letter-spacing: .13em;
     text-transform: uppercase;
-    color: #7f8791;
+    color: #ffffff;
 }
 
 .uzp-menu-item {
@@ -512,7 +512,7 @@
     justify-content: space-between;
     gap: 12px;
     background: transparent;
-    color: #e8eaee;
+    color: #ffffff;
     font: inherit;
     font-size: 12.5px;
     font-weight: 600;
@@ -537,8 +537,8 @@
     gap: 10px;
     padding: 12px 12px 12px 14px;
     border-radius: 14px;
-    background: #17191d;
-    border: 1px solid #30343a;
+    background: #191919;
+    border: 1px solid #333333;
     box-shadow: 0 16px 40px rgba(0, 0, 0, .5);
     animation: uzp-toast-in .24s ease;
 }
@@ -552,7 +552,7 @@
     flex: 1 1 auto;
     min-width: 0;
     font-size: 12.5px;
-    color: #aeb5bf;
+    color: #ffffff;
     line-height: 1.35;
 }
 .uzp-next-tx b {
@@ -577,14 +577,14 @@
 .uzp-next-go {
     padding: 8px 12px;
     background: linear-gradient(135deg, var(--uzp-accent), var(--uzp-accent-2));
-    color: #121315;
+    color: #131313;
     font-size: 12px;
 }
 .uzp-next-x {
     width: 30px;
     height: 30px;
     background: rgba(255, 255, 255, .08);
-    color: #cfd4da;
+    color: #ffffff;
     font-size: 16px;
     line-height: 1;
 }
@@ -720,7 +720,7 @@
 /* menyular: to'q shisha, panel ustida ochiladi */
 .uzp-menu {
     bottom: calc(100% + 18px);
-    background: rgba(22, 21, 20, .9);
+    background: rgba(21, 21, 21, .9);
     border: 1px solid rgba(255, 255, 255, .14);
     backdrop-filter: blur(18px) saturate(1.5);
     -webkit-backdrop-filter: blur(18px) saturate(1.5);

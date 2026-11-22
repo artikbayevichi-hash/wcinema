@@ -222,7 +222,7 @@ try {
             var bh = (users[i] / maxU) * ih;
             var x = padL + i * step + step * 0.22;
             var bw = step * 0.56;
-            ctx.fillStyle = 'rgba(106,92,255,.75)';
+            ctx.fillStyle = 'rgba(255, 255, 255, .75)';
             ctx.beginPath();
             ctx.roundRect ? ctx.roundRect(x, padT + ih - bh, bw, bh, 3)
                           : ctx.rect(x, padT + ih - bh, bw, bh);
@@ -230,7 +230,7 @@ try {
         }
 
         // line: views
-        ctx.strokeStyle = 'rgba(70,211,154,.95)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, .95)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         for (var j = 0; j < n; j++) {
@@ -241,7 +241,7 @@ try {
         ctx.stroke();
 
         // dots
-        ctx.fillStyle = 'rgba(70,211,154,1)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 1)';
         for (var k = 0; k < n; k++) {
             var dx = padL + k * step + step / 2;
             var dy = padT + ih - (views[k] / maxV) * ih;
@@ -249,7 +249,7 @@ try {
         }
 
         // labels (har 3-kun)
-        ctx.fillStyle = 'rgba(155,147,173,.9)';
+        ctx.fillStyle = 'rgba(255, 255, 255, .9)';
         ctx.font = '10px ui-monospace, Consolas, monospace';
         ctx.textAlign = 'center';
         for (var t = 0; t < n; t += 3) {

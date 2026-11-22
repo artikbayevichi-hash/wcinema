@@ -211,10 +211,10 @@
         var step = iw / n;
 
         var css = getComputedStyle(document.documentElement);
-        var line = css.getPropertyValue('--line') || '#2c2739';
-        var acc = css.getPropertyValue('--acc') || '#6a5cff';
-        var ok = css.getPropertyValue('--ok') || '#46d39a';
-        var dim = css.getPropertyValue('--dim') || '#9b93ad';
+        var line = css.getPropertyValue('--line') || '#2b2b2b';
+        var acc = css.getPropertyValue('--acc') || '#ffffff';
+        var ok = css.getPropertyValue('--ok') || '#ffffff';
+        var dim = css.getPropertyValue('--dim') || '#ffffff';
 
         ctx.clearRect(0, 0, w, h);
         ctx.strokeStyle = line;

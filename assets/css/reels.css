@@ -188,7 +188,7 @@
     height: 100dvh;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 10px;
-    color: #8b95a8; text-align: center; padding: 24px;
+    color: #ffffff; text-align: center; padding: 24px;
 }
 .reels-empty .reels-empty-icon { font-size: 52px; }
 .reels-empty a {
@@ -198,7 +198,7 @@
 .reels-loading {
     height: 100dvh;
     display: flex; align-items: center; justify-content: center; gap: 10px;
-    color: #8b95a8; font-size: 14px;
+    color: #ffffff; font-size: 14px;
 }
 
 /* Reel ichidagi ogohlantirish (embed/none holatlar) */
@@ -207,7 +207,7 @@
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 8px;
     background: rgba(0,0,0,.85);
-    color: #c3cad8; font-size: 13.5px; text-align: center; padding: 20px;
+    color: #ffffff; font-size: 13.5px; text-align: center; padding: 20px;
 }
 .reels-warn-ico svg { width: 44px; height: 44px; display: block; margin: 0 auto; }
 
@@ -278,8 +278,8 @@
     flex: 0 0 auto;
     padding: 5px 14px; border-radius: 999px;
     border: 1px solid transparent;
-    background: linear-gradient(180deg, #ffffff, #e6ebf2);
-    color: #10131a; font-family: inherit;
+    background: linear-gradient(180deg, #ffffff, #ffffff);
+    color: #131313; font-family: inherit;
     font-size: 12.5px; font-weight: 800; cursor: pointer;
     letter-spacing: .1px;
     text-shadow: none;
@@ -389,9 +389,9 @@
 /* Rad etish sababi (muallif ko'radi) */
 .reels-reject {
     display: inline-block; align-self: flex-start;
-    font-size: 11.5px; color: #ff9a9a;
-    background: rgba(255,92,92,.18);
-    border: 1px solid rgba(255,92,92,.45);
+    font-size: 11.5px; color: #ffffff;
+    background: rgba(255, 255, 255, .18);
+    border: 1px solid rgba(255, 255, 255, .45);
     border-radius: 8px; padding: 5px 9px;
     text-shadow: none;
     max-width: 100%;
@@ -400,8 +400,8 @@
 /* CTA: "🎬 To'liq qismni tomosha qilish (12:30 dan)" */
 .reels-cta {
     display: inline-block; align-self: flex-start;
-    background: rgba(42,171,238,.92);
-    color: #fff; font-size: 12.5px; font-weight: 700;
+    background: rgba(255, 255, 255, .92);
+    color: #000000; font-size: 12.5px; font-weight: 700;
     padding: 8px 14px; border-radius: 10px;
     text-decoration: none;
     text-shadow: none;
@@ -434,8 +434,8 @@
     100% { transform: scale(1); }
 }
 /* Ranglar: like qizil, repost yashil, saqlash oq */
-.reels-btn.reels-like.on { color: #ff2d55; }
-.reels-btn.reels-repost.on { color: #4ade80; }
+.reels-btn.reels-like.on { color: #ffffff; }
+.reels-btn.reels-repost.on { color: #ffffff; }
 .reels-btn.reels-repost.on .reels-btn-icon svg { fill: none; }
 .reels-btn.reels-more { margin-top: 2px; }
 .reels-btn.busy { pointer-events: none; opacity: .6; }
@@ -474,8 +474,8 @@
     position: absolute; left: 50%; bottom: 0;
     transform: translateX(-50%);
     width: min(440px, 100%);
-    background: var(--bg-2, #16181d);
-    border: 1px solid var(--line, #262a33);
+    background: var(--bg-2, #181818);
+    border: 1px solid var(--line, #2a2a2a);
     border-radius: 18px 18px 0 0;
     padding: 8px;
     animation: reels-sheet-up .2s ease;
@@ -487,13 +487,13 @@
 .reels-menu-row {
     display: flex; align-items: center; gap: 12px; width: 100%;
     padding: 13px 14px; border: 0; border-radius: 12px;
-    background: none; color: var(--text, #eef2f7);
+    background: none; color: var(--text, #ffffff);
     font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;
 }
 .reels-menu-row:hover { background: rgba(255,255,255,.07); }
 .reels-menu-ico { display: flex; flex: 0 0 auto; }
 .reels-menu-ico svg { width: 20px; height: 20px; display: block; }
-.reels-menu-row.danger { color: #ff6b6b; }
+.reels-menu-row.danger { color: #ffffff; }
 
 /* ---------------------------------------------------------------- Toast */
 .reels-toast {
@@ -562,7 +562,7 @@
     right: 16px;
     bottom: calc(18px + env(safe-area-inset-bottom, 0px));
     width: 50px; height: 50px; border-radius: 50%;
-    background: var(--accent); color: #fff;
+    background: var(--accent); color: #000000;
     display: flex; align-items: center; justify-content: center;
     font-size: 26px; text-decoration: none;
     box-shadow: 0 6px 18px rgba(0,0,0,.45);
@@ -576,9 +576,9 @@
     z-index: 20;
     padding: 5px 12px; border-radius: 999px;
     font-size: 11.5px; font-weight: 700;
-    background: rgba(255,176,32,.92); color: #3a2600;
+    background: rgba(255, 255, 255, .92); color: #282828;
 }
-.reels-status.rejected { background: rgba(255,92,92,.92); color: #fff; }
+.reels-status.rejected { background: rgba(255, 255, 255, .92); color: #000000; }
 
 /* --------------------------------------------------------------- Reyting */
 .reels-modal { position: fixed; inset: 0; z-index: 60; }
@@ -614,9 +614,9 @@
     border-radius: 50%; font-size: 12px; font-weight: 800;
     background: var(--card-2); color: var(--muted);
 }
-.author-row:nth-child(1) .author-rank { background: var(--gold); color: #3a2600; }
-.author-row:nth-child(2) .author-rank { background: #c9d1d9; color: #222; }
-.author-row:nth-child(3) .author-rank { background: #cd7f32; color: #fff; }
+.author-row:nth-child(1) .author-rank { background: var(--gold); color: #282828; }
+.author-row:nth-child(2) .author-rank { background: #ffffff; color: #222; }
+.author-row:nth-child(3) .author-rank { background: #ffffff; color: #000000; }
 .author-av {
     width: 32px; height: 32px; border-radius: 50%;
     object-fit: cover; background: var(--card-2);
@@ -701,13 +701,13 @@
     color: var(--muted); font-weight: 700; font-size: 11.5px; line-height: 1;
 }
 .reels-c-mact:hover { color: var(--text); }
-.reels-c-mact-del:hover { color: #ff5c5c; }
+.reels-c-mact-del:hover { color: #ffffff; }
 .reels-c-mact.busy { opacity: .5; pointer-events: none; }
 .reels-c-del {
     flex: 0 0 auto; background: none; border: 0; cursor: pointer;
     color: var(--muted); font-size: 14px; padding: 2px 4px; line-height: 1;
 }
-.reels-c-del:hover { color: #ff5c5c; }
+.reels-c-del:hover { color: #ffffff; }
 .reels-c-del { display: inline-flex; align-items: center; justify-content: center; }
 .reels-c-del svg { width: 14px; height: 14px; }
 .reels-c-empty, .reels-c-loading {
@@ -753,9 +753,9 @@
 .reels-comments-send[data-mode="mic"]:hover,
 .reels-comments-send[data-mode="attach"]:hover { color: var(--text); background: var(--card); }
 .reels-comments-send[data-mode="send"] {
-    background: var(--accent); color: #fff;
+    background: var(--accent); color: #000000;
 }
-.reels-comments-send[data-mode="send"]:hover { background: #37b7f5; }
+.reels-comments-send[data-mode="send"]:hover { background: #ffffff; }
 
 /* Kompozitorning chapdagi doira tugmalar (Aa + biriktirish). */
 .reels-c-tool {
@@ -791,7 +791,7 @@
     font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .reels-c-picker-tab:hover { color: var(--text); background: var(--card); }
-.reels-c-picker-tab.on { color: #fff; background: var(--accent); }
+.reels-c-picker-tab.on { color: #000000; background: var(--accent); }
 .reels-c-picker-x {
     margin-left: auto; flex: 0 0 auto;
     width: 28px; height: 28px; border: 0; border-radius: 50%;
@@ -873,7 +873,7 @@
 }
 .reels-c-sticker-sets::-webkit-scrollbar { width: 6px; }
 .reels-c-sticker-sets::-webkit-scrollbar-thumb {
-    background: rgba(127, 143, 168, .4); border-radius: 3px;
+    background: rgba(255, 255, 255, .4); border-radius: 3px;
 }
 .reels-c-sticker-set {
     flex: 0 0 auto; background: var(--card); color: var(--muted);
@@ -882,7 +882,7 @@
     white-space: nowrap; max-width: 100%;
     overflow: hidden; text-overflow: ellipsis;
 }
-.reels-c-sticker-set.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.reels-c-sticker-set.on { color: #000000; background: var(--accent); border-color: var(--accent); }
 .reels-c-sticker-none {
     flex: 1 0 100%; text-align: center; padding: 10px 0;
     font-size: 12px; color: var(--muted);
@@ -1038,8 +1038,8 @@
     background: none; border: 0; cursor: pointer; color: var(--muted); border-radius: 50%;
 }
 .reels-c-like-btn svg { width: 17px; height: 17px; }
-.reels-c-like-btn:hover { color: #ff5c8a; background: var(--card-2); }
-.reels-c-like-btn.on { color: #ff2d6f; }
+.reels-c-like-btn:hover { color: #ffffff; background: var(--card-2); }
+.reels-c-like-btn.on { color: #ffffff; }
 .reels-c-like-btn.on svg { fill: currentColor; }
 .reels-c-like-btn.pop { animation: reels-like-pop .34s ease; }
 @keyframes reels-like-pop {
@@ -1149,10 +1149,10 @@
     flex: 1; min-width: 0; background: none; border: 0; outline: none;
     color: var(--text); padding: 11px 0; font-size: 14px;
 }
-.reels-uname-err { color: #ff6b6b; font-size: 12px; margin-top: 8px; }
+.reels-uname-err { color: #ffffff; font-size: 12px; margin-top: 8px; }
 .reels-uname-save {
     width: 100%; margin-top: 14px; height: 42px; border: 0; border-radius: 999px;
-    background: var(--accent); color: #fff; font-weight: 800; font-size: 14px; cursor: pointer;
+    background: var(--accent); color: #000000; font-weight: 800; font-size: 14px; cursor: pointer;
 }
 
 @media (max-width: 640px) {
@@ -1181,7 +1181,7 @@
     position: sticky; top: 0; z-index: 20;
     display: flex; align-items: center; justify-content: space-between;
     padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
-    background: rgba(13,15,20,.94);
+    background: rgba(15, 15, 15, .94);
     border-bottom: 1px solid var(--line);
 }
 .up-title { font-size: 17px; font-weight: 800; }
@@ -1242,7 +1242,7 @@
 .up-btn {
     display: block; width: 100%;
     margin-top: 16px; padding: 14px;
-    background: var(--accent); color: #fff;
+    background: var(--accent); color: #000000;
     border-radius: 999px;
     font-size: 15px; font-weight: 700;
     text-align: center; text-decoration: none;
@@ -1270,7 +1270,7 @@
     border: 1px solid var(--line); background: var(--card);
 }
 .up-msg.ok  { border-color: var(--ok);      color: var(--ok); }
-.up-msg.err { border-color: var(--accent-2); color: #ff9a9a; }
+.up-msg.err { border-color: var(--accent-2); color: #ffffff; }
 
 .up-note {
     margin-top: 12px;
@@ -1300,7 +1300,7 @@
 }
 .adm-tabs::-webkit-scrollbar { display: none; }
 .adm-tab { flex: 0 0 auto; }
-.adm-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.adm-tab.active { background: var(--accent); border-color: var(--accent); color: #000000; }
 .adm-n {
     display: inline-block; margin-left: 5px;
     padding: 1px 6px; border-radius: 999px;
@@ -1341,8 +1341,8 @@
     padding: 2px 8px; border-radius: 999px;
     font-size: 10.5px; font-weight: 700;
 }
-.adm-kind.upload { background: rgba(142,68,173,.25); color: #ce93d8; }
-.adm-kind.clip   { background: rgba(42,171,238,.2);  color: #7fd4f5; }
+.adm-kind.upload { background: rgba(255, 255, 255, .25); color: #ffffff; }
+.adm-kind.clip   { background: rgba(255, 255, 255, .2);  color: #ffffff; }
 
 .adm-clip {
     margin: 8px 0;
@@ -1375,15 +1375,15 @@
     border: 1px solid var(--line);
     background: var(--card);
 }
-.adm-btn.ok   { background: var(--ok);      color: #06240f; border-color: var(--ok); }
-.adm-btn.no   { background: transparent;     color: #ff9a9a; border-color: var(--accent-2); }
-.adm-btn.del  { background: transparent;     color: #ff9a9a; }
+.adm-btn.ok   { background: var(--ok);      color: #191919; border-color: var(--ok); }
+.adm-btn.no   { background: transparent;     color: #ffffff; border-color: var(--accent-2); }
+.adm-btn.del  { background: transparent;     color: #ffffff; }
 .adm-btn:disabled { opacity: .5; cursor: not-allowed; }
 .adm-btn:hover { filter: brightness(1.1); }
 
 .adm-msg { margin: 12px 14px 0; font-size: 13px; }
 .adm-msg.ok  { color: var(--ok); }
-.adm-msg.err { color: #ff9a9a; }
+.adm-msg.err { color: #ffffff; }
 
 /* ==========================================================================
    Trimmer - "Reels yaratish" (videodan bo'lak tanlash)
@@ -1442,9 +1442,9 @@
     font-size: 12.5px;
     background: var(--card);
     border: 1px solid var(--accent-2);
-    color: #ff9a9a;
+    color: #ffffff;
 }
-.trim-msg.err { border-color: var(--accent-2); color: #ff9a9a; }
+.trim-msg.err { border-color: var(--accent-2); color: #ffffff; }
 
 .trim-actions {
     display: flex; gap: 8px;
@@ -1490,7 +1490,7 @@
     transition: box-shadow .18s ease, transform .18s ease;
 }
 .reels-c-row:hover .reels-c-av {
-    box-shadow: 0 0 0 2px rgba(42, 171, 238, .55);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .55);
 }
 
 /* Javoblar chizig'i yumshoqroq va "thread" hissini beradi */
@@ -1500,7 +1500,7 @@
 
 /* Yoqtirish — bosilganda kichik "sakrash" */
 .reels-c-like-btn { transition: transform .16s cubic-bezier(.2, 1.5, .4, 1), color .15s ease; }
-.reels-c-like-btn.on { color: #ff5c5c; }
+.reels-c-like-btn.on { color: #ffffff; }
 .reels-c-like-btn:active { transform: scale(1.22); }
 .reels-c-like-n { font-variant-numeric: tabular-nums; }
 
@@ -1510,10 +1510,10 @@
 /* Kompozitor maydoni fokusda nozik yorug' halqa oladi */
 .reels-comments-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(42, 171, 238, .16);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, .16);
 }
 .reels-comments-send[data-mode="send"] {
-    box-shadow: 0 4px 14px rgba(42, 171, 238, .35);
+    box-shadow: 0 4px 14px rgba(255, 255, 255, .35);
 }
 
 /* Telefonda: ro'yxat zichroq, sarlavha kichikroq, xavfsiz hudud hisobga olinadi */

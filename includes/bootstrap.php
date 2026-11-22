@@ -84,11 +84,11 @@ if (!defined('WC_SKIP_MAINTENANCE')) {
                 . '<meta name="viewport" content="width=device-width,initial-scale=1">'
                 . '<title>Texnik ish</title></head>'
                 . '<body style="margin:0;min-height:100vh;display:flex;align-items:center;'
-                . 'justify-content:center;background:#0f0d15;color:#eae6f2;'
+                . 'justify-content:center;background:#0f0f0f;color:#ffffff;'
                 . 'font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;text-align:center;padding:24px">'
                 . '<div><div style="font-size:44px;margin-bottom:10px">🛠</div>'
                 . '<h1 style="font-size:22px;margin:0 0 8px">Texnik ish davom etmoqda</h1>'
-                . '<p style="color:#9b93ad;margin:0">Tez orada qaytamiz. Sabr qilganingiz uchun rahmat.</p>'
+                . '<p style="color:#ffffff;margin:0">Tez orada qaytamiz. Sabr qilganingiz uchun rahmat.</p>'
                 . '</div></body></html>';
             exit;
         }

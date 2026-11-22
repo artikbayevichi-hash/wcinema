@@ -671,9 +671,9 @@ class Uploader
     {
         $label = ($format === 'reel') ? 'Reels' : 'Video';
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">'
-             . '<rect width="640" height="360" fill="#1a1f2b"/>'
+             . '<rect width="640" height="360" fill="#1f1f1f"/>'
              . '<text x="320" y="190" font-family="sans-serif" font-size="40"'
-             . ' fill="#8b95a8" text-anchor="middle">' . $label . '</text></svg>';
+             . ' fill="#ffffff" text-anchor="middle">' . $label . '</text></svg>';
         return 'data:image/svg+xml;base64,' . base64_encode($svg);
     }
 

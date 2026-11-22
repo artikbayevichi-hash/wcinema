@@ -31,7 +31,7 @@ header('Content-Type: text/html; charset=utf-8');
     <title>Chiqildi</title>
     <noscript><meta http-equiv="refresh" content="0;url=1stlogin.php"></noscript>
 </head>
-<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0d15;color:#eae6f2;font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif">
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0f0f;color:#ffffff;font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif">
 <div>Chiqildi. Kirish sahifasiga o‘tilmoqda…</div>
 <script>
     (function () {

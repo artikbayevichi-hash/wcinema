@@ -53,21 +53,21 @@
             + 'z-index:80;display:flex;align-items:center;gap:10px;flex-wrap:wrap;'
             + 'padding:9px max(16px, env(safe-area-inset-right, 0px)) '
             + '9px max(16px, env(safe-area-inset-left, 0px));'
-            + 'background:linear-gradient(90deg,#5b3fd6 0%,#8b46e8 55%,#b347c9 100%);'
-            + 'color:#fff;box-shadow:0 6px 22px rgba(0,0,0,.4);'
+            + 'background:linear-gradient(90deg,#ffffff 0%,#ffffff 55%,#ffffff 100%);'
+            + 'color:#000000;box-shadow:0 6px 22px rgba(0,0,0,.4);'
             + 'font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
 
         var body = '<span aria-hidden="true" style="font-size:17px;line-height:1">📣</span>'
             + '<strong style="font-weight:800;white-space:nowrap">E’lon</strong>'
-            + '<span style="flex:1 1 240px;min-width:0;color:#f4efff">'
+            + '<span style="flex:1 1 240px;min-width:0;color:#ffffff">'
             + escapeHtml(d.notice) + '</span>';
 
         if (d.notice_link) {
             body += '<a href="' + escapeAttr(d.notice_link) + '" '
-                + 'style="color:#fff;font-weight:800;text-decoration:underline;white-space:nowrap">Batafsil →</a>';
+                + 'style="color:#000000;font-weight:800;text-decoration:underline;white-space:nowrap">Batafsil →</a>';
         }
         body += '<button type="button" aria-label="Yopish" '
-            + 'style="background:rgba(255,255,255,.16);border:0;border-radius:8px;color:#fff;'
+            + 'style="background:rgba(0,0,0,.12);border:0;border-radius:8px;color:#000000;'
             + 'font-size:17px;line-height:1;width:26px;height:26px;cursor:pointer;flex:0 0 auto">×</button>';
 
         box.innerHTML = body;

@@ -1540,7 +1540,7 @@
       ctx.fill();
       ctx.translate(cx - logo / 2, cy - logo / 2);
       ctx.scale(logo / 160, logo / 160);
-      ctx.fillStyle = '#3390ec';
+      ctx.fillStyle = '#ffffff';
       ctx.fill(new Path2D(TG_LOGO_PATH), 'evenodd');
       ctx.restore();
     } catch (e) { /* Path2D bo'lmasa — logosiz davom etamiz */ }

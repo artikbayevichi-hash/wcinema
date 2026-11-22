@@ -195,7 +195,7 @@ $tgErr = (int) ($_GET['tgerr'] ?? 0);
                 </div>
                 <div class="field">
                     <label>Telegram</label>
-                    <label style="display:flex;align-items:center;gap:8px;color:#eae6f2;font-size:13.5px">
+                    <label style="display:flex;align-items:center;gap:8px;color:#ffffff;font-size:13.5px">
                         <input type="checkbox" name="to_telegram" value="1" style="width:auto">
                         Bot orqali shaxsiy chatga ham yuborish (<?php echo $nTg; ?> ta ulangan)
                     </label>
@@ -203,7 +203,7 @@ $tgErr = (int) ($_GET['tgerr'] ?? 0);
             </div>
 
             <div class="field">
-                <label style="display:flex;align-items:center;gap:8px;color:#eae6f2;font-size:13.5px">
+                <label style="display:flex;align-items:center;gap:8px;color:#ffffff;font-size:13.5px">
                     <input type="checkbox" name="as_banner" value="1" style="width:auto">
                     Tepada banner sifatida ham chiqarish (barcha sahifalar, to‘liq kenglik)
                 </label>

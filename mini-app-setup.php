@@ -58,8 +58,8 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
 
         .step-number {
             display: inline-block;
-            background: #2AABEE;
-            color: #fff;
+            background: #ffffff;
+            color: #000000;
             width: 30px;
             height: 30px;
             line-height: 30px;
@@ -89,11 +89,11 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
             font-size: 14px;
             margin: 12px 0;
             word-break: break-all;
-            color: #7ee787;
+            color: #ffffff;
             border: 1px solid rgba(255,255,255,0.1);
         }
 
-        .code a { color: #7ee787; }
+        .code a { color: #ffffff; }
 
         ul {
             padding-left: 22px;
@@ -105,8 +105,8 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
         li { margin-bottom: 6px; }
 
         .warning {
-            background: rgba(255,193,7,0.12);
-            border-left: 4px solid #FFC107;
+            background: rgba(255, 255, 255, 0.12);
+            border-left: 4px solid #ffffff;
             padding: 12px 14px;
             border-radius: 8px;
             margin-top: 12px;
@@ -115,8 +115,8 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
         }
 
         .success {
-            background: rgba(76,175,80,0.12);
-            border-left: 4px solid #4CAF50;
+            background: rgba(255, 255, 255, 0.12);
+            border-left: 4px solid #ffffff;
             padding: 16px;
             border-radius: 8px;
             margin-top: 20px;
@@ -124,8 +124,8 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
         }
 
         .danger {
-            background: rgba(244,67,54,0.12);
-            border-left: 4px solid #f44336;
+            background: rgba(255, 255, 255, 0.12);
+            border-left: 4px solid #ffffff;
             padding: 12px 14px;
             border-radius: 8px;
             margin-top: 12px;
@@ -140,15 +140,15 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
             border-left: 4px solid;
         }
 
-        .status.ok   { background: rgba(76,175,80,0.12);  border-color: #4CAF50; }
-        .status.warn { background: rgba(255,193,7,0.12);  border-color: #FFC107; }
-        .status.bad  { background: rgba(244,67,54,0.12);  border-color: #f44336; }
+        .status.ok   { background: rgba(255, 255, 255, 0.12);  border-color: #ffffff; }
+        .status.warn { background: rgba(255, 255, 255, 0.12);  border-color: #ffffff; }
+        .status.bad  { background: rgba(255, 255, 255, 0.12);  border-color: #ffffff; }
 
         .button {
             display: block;
             text-align: center;
-            background: #2AABEE;
-            color: #fff;
+            background: #ffffff;
+            color: #000000;
             text-decoration: none;
             padding: 14px;
             border-radius: 12px;

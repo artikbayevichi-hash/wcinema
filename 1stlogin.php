@@ -68,7 +68,7 @@ $siteName  = SITE_NAME;
     </script>
     <style>
         /* ---- W CINEMA splash (faqat shu sahifa) ---- */
-        body.tgl-page { --fst-accent: #2aabee; }
+        body.tgl-page { --fst-accent: #ffffff; }
 
         .fst-wrap {
             position: relative;
@@ -95,16 +95,16 @@ $siteName  = SITE_NAME;
             display: flex; align-items: center; justify-content: center;
             border-radius: 26px;
             background: rgba(var(--tgl-primary-rgb), .16);
-            box-shadow: 0 18px 50px rgba(42, 171, 238, .22);
+            box-shadow: 0 18px 50px rgba(255, 255, 255, .22);
             animation: fstRise .5s ease both;
         }
         .fst-logo img { display: block; width: 68px; height: 68px; object-fit: contain; }
         .fst-title {
             margin: 0;
             font-size: 34px; font-weight: 800; letter-spacing: .5px;
-            background: linear-gradient(90deg, #2aabee, #8774E1);
+            background: linear-gradient(90deg, #ffffff, #ffffff);
             -webkit-background-clip: text; background-clip: text;
-            -webkit-text-fill-color: transparent; color: #2aabee;
+            -webkit-text-fill-color: transparent; color: #ffffff;
             animation: fstRise .5s ease both .05s;
         }
         .fst-sub {
@@ -149,13 +149,13 @@ $siteName  = SITE_NAME;
             padding: 16px 24px;
             border: 0; border-radius: 16px;
             font-size: 17px; font-weight: 800; font-family: inherit;
-            color: #fff; text-decoration: none; cursor: pointer;
-            background: linear-gradient(135deg, #2aabee, #1f8fd0);
-            box-shadow: 0 14px 34px rgba(42, 171, 238, .38);
+            color: #000000; text-decoration: none; cursor: pointer;
+            background: linear-gradient(135deg, #ffffff, #ffffff);
+            box-shadow: 0 14px 34px rgba(255, 255, 255, .38);
             transition: transform .14s ease, box-shadow .2s ease;
             animation: fstRise .5s ease both .25s;
         }
-        .fst-enter:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(42, 171, 238, .5); }
+        .fst-enter:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(255, 255, 255, .5); }
         .fst-enter:active { transform: scale(.98); }
         .fst-enter svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
         .fst-note {

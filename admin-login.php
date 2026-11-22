@@ -83,41 +83,41 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             margin: 0; min-height: 100vh;
             display: flex; align-items: center; justify-content: center;
             padding: 20px;
-            background: #0f0d15; color: #eae6f2;
+            background: #0f0f0f; color: #ffffff;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         .adm-key {
             width: min(380px, 100%);
-            background: #17141f;
-            border: 1px solid #2c2739;
+            background: #161616;
+            border: 1px solid #2b2b2b;
             border-radius: 18px;
             padding: 28px 24px;
             text-align: center;
         }
         .adm-key img { width: 64px; height: 64px; object-fit: contain; }
         .adm-key h1 { font-size: 20px; margin: 12px 0 4px; }
-        .adm-key p { color: #9b93ad; font-size: 13.5px; margin: 0 0 18px; line-height: 1.45; }
+        .adm-key p { color: #ffffff; font-size: 13.5px; margin: 0 0 18px; line-height: 1.45; }
         .adm-key input {
             width: 100%; padding: 12px 13px; font-size: 15px;
-            border: 1px solid #2c2739; border-radius: 11px;
-            background: #0f0d15; color: #eae6f2; outline: none;
+            border: 1px solid #2b2b2b; border-radius: 11px;
+            background: #0f0f0f; color: #ffffff; outline: none;
         }
-        .adm-key input:focus { border-color: #6a5cff; }
+        .adm-key input:focus { border-color: #ffffff; }
         .adm-key button {
             width: 100%; margin-top: 12px; padding: 12px;
             font-size: 15px; font-weight: 700; cursor: pointer;
             border: none; border-radius: 11px;
-            background: linear-gradient(135deg, #6a5cff, #9b4dff); color: #fff;
+            background: linear-gradient(135deg, #ffffff, #ffffff); color: #000000;
         }
         .adm-key button:hover { filter: brightness(1.08); }
         .adm-err {
             margin-top: 12px; padding: 10px;
-            background: rgba(255, 90, 90, .14);
-            border: 1px solid rgba(255, 90, 90, .35);
-            border-radius: 10px; color: #ff9e9e; font-size: 13px;
+            background: rgba(255, 255, 255, .14);
+            border: 1px solid rgba(255, 255, 255, .35);
+            border-radius: 10px; color: #ffffff; font-size: 13px;
         }
-        .adm-note { margin-top: 16px; font-size: 11.5px; color: #6f6880; line-height: 1.5; }
-        .adm-note code { color: #b7aef0; }
+        .adm-note { margin-top: 16px; font-size: 11.5px; color: #ffffff; line-height: 1.5; }
+        .adm-note code { color: #ffffff; }
     </style>
 </head>
 <body>
@@ -135,7 +135,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         <?php endif; ?>
         <div class="adm-note">
             Kalit <code>.env</code> dagi <code>ADMIN_PANEL_KEY</code> bilan bir xil bo‘lishi kerak.
-            <a href="index.php" style="color:#b7aef0">Bosh sahifa</a>
+            <a href="index.php" style="color:#ffffff">Bosh sahifa</a>
         </div>
     </form>
 </body>

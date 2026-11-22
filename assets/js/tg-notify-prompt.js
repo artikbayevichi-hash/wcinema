@@ -26,21 +26,21 @@
         var b = document.createElement('div');
         b.id = 'wcNotifyPrompt';
         b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;'
-            + 'max-width:420px;margin:0 auto;background:#17141f;color:#eae6f2;'
-            + 'border:1px solid #2c2739;border-radius:14px;padding:12px 14px;'
+            + 'max-width:420px;margin:0 auto;background:#161616;color:#ffffff;'
+            + 'border:1px solid #2b2b2b;border-radius:14px;padding:12px 14px;'
             + 'font:13.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
             + 'box-shadow:0 10px 30px rgba(0,0,0,.45);display:flex;gap:10px;align-items:center';
 
         b.innerHTML =
             '<div style="flex:1">'
             + '<div style="font-weight:700;margin-bottom:2px">🔔 Bildirishnomalar</div>'
-            + '<div style="color:#9b93ad;font-size:12.5px">Yangi film va yangiliklar haqida xabar olish uchun botni ishga tushiring.</div>'
+            + '<div style="color:#ffffff;font-size:12.5px">Yangi film va yangiliklar haqida xabar olish uchun botni ishga tushiring.</div>'
             + '</div>'
             + '<a href="' + link + '" target="_blank" rel="noopener" '
-            + 'style="white-space:nowrap;background:linear-gradient(135deg,#6a5cff,#9b4dff);color:#fff;'
+            + 'style="white-space:nowrap;background:linear-gradient(135deg,#ffffff,#ffffff);color:#000000;'
             + 'text-decoration:none;font-weight:700;padding:9px 12px;border-radius:10px;font-size:12.5px">Ulash</a>'
             + '<button type="button" aria-label="Yopish" '
-            + 'style="background:none;border:none;color:#6f6880;font-size:18px;cursor:pointer;line-height:1">×</button>';
+            + 'style="background:none;border:none;color:#ffffff;font-size:18px;cursor:pointer;line-height:1">×</button>';
 
         b.querySelector('button').onclick = function () {
             try { localStorage.setItem(DISMISS_KEY, String(Date.now() + 7 * 86400 * 1000)); } catch (e) {}

@@ -36,7 +36,7 @@
 .watch-404 p  { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
 .watch-404-btn {
     display: inline-block; padding: 11px 20px; border-radius: 999px;
-    background: var(--accent); color: #fff; font-weight: 700;
+    background: var(--accent); color: #000000; font-weight: 700;
     font-size: 14px; text-decoration: none;
 }
 
@@ -95,7 +95,7 @@
     pointer-events: none;
 }
 /* Telegram oynasi yarim shaffof — poster uning orqasidan ko'rinib tursin. */
-.watch-player .tgs { background: rgba(11, 13, 16, .82); }
+.watch-player .tgs { background: rgba(13, 13, 13, .82); }
 
 /* Qism almashtirilganda: poster + spinner DARHOL (klikning o'zida).
    `showPlayerLoading()` `.is-loading` qo'shadi, `fireVideoReady()` olib
@@ -147,7 +147,7 @@
     border: 1px solid rgba(255, 255, 255, .14);
     border-radius: 999px;
     background: rgba(255, 255, 255, .06);
-    color: var(--text, #e8ecf2);
+    color: var(--text, #ffffff);
     font: inherit;
     font-size: 13px;
     line-height: 1;
@@ -155,15 +155,15 @@
     transition: background .15s ease, border-color .15s ease;
 }
 .watch-pmode-btn span {
-    color: var(--muted, #93a0b4);
+    color: var(--muted, #ffffff);
     font-size: 10.5px;
     letter-spacing: .02em;
     text-transform: uppercase;
 }
 .watch-pmode-btn:hover { background: rgba(255, 255, 255, .12); }
 .watch-pmode-btn.on {
-    background: rgba(80, 160, 255, .18);
-    border-color: rgba(80, 160, 255, .55);
+    background: rgba(255, 255, 255, .18);
+    border-color: rgba(255, 255, 255, .55);
 }
 .watch-pmode-btn.on span { color: inherit; opacity: .7; }
 .watch-pmode-btn.off { opacity: .55; }
@@ -171,7 +171,7 @@
     display: inline-flex;
     align-items: center;
     padding: 0 4px;
-    color: var(--muted, #93a0b4);
+    color: var(--muted, #ffffff);
     font-size: 12px;
     font-style: normal;
 }
@@ -179,7 +179,7 @@
    aks holda foydalanuvchi "tugma ishlamayapti" deb o'ylaydi. */
 .watch-pmode-note.warn {
     flex: 1 1 100%;
-    color: #ffc46b;
+    color: #ffffff;
     font-weight: 600;
 }
 .watch-player .nv-msg {
@@ -201,7 +201,7 @@
      backdrop-filter : blur(16px) saturate(1.5)
      background       : rgba(255, 255, 255, .10)   ← shaffoflik blurning
                                                        ko'rinishi uchun shart
-   Bizdagi eski qatlam `rgba(18, 23, 35, .92)` juda to'q edi — uning
+   Bizdagi eski qatlam `rgba(23, 23, 23, .92)` juda to'q edi — uning
    ostida blur deyarli ko'rinmasdi. Faqat shu ikki qiymat almashtirildi.
 
    O'LCHAM, JOYLASHUV, PLAY TUGMASI, MENYU, IZOH — hammasi avvalgidek.
@@ -215,7 +215,7 @@
     -webkit-backdrop-filter: blur(16px) saturate(1.5);
 }
 
-/* --- Izoh chizig'ining YUKLANMAGAN qismi (#30343d) edi ------------------
+/* --- Izoh chizig'ining YUKLANMAGAN qismi (#343434) edi ------------------
    To'q kul rang chiziq qora ko'rinar edi — "video hali kelmagan" joyi
    ko'rinmasdi. Anibla.uz da aynan shu yer `white/20` ishlatiladi, shu
    bizga ham mos keladi:
@@ -325,7 +325,7 @@
     .watch-player .udp-seek-progress { background: var(--accent); }
     .watch-player .udp-seek-thumb {
         width: 12px; height: 12px;
-        box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.35);
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
     }
 
     /* --- 2-QATOR (pastda): TUGMALAR — bitta gorizontal flex qator:
@@ -553,7 +553,7 @@
 }
 .watch-act:hover  { background: var(--line); }
 .watch-act:active { transform: scale(.97); }
-.watch-act.on     { background: var(--accent); border-color: var(--accent); color: #fff; }
+.watch-act.on     { background: var(--accent); border-color: var(--accent); color: #000000; }
 .watch-act.busy   { opacity: .6; pointer-events: none; }
 .watch-act svg    { width: 17px; height: 17px; flex: 0 0 auto; }
 .watch-act.on svg { fill: currentColor; }
@@ -735,11 +735,10 @@ body.share-lock { overflow: hidden; }
     font-size: 20px; line-height: 1; font-weight: 800;
     background: var(--card-2); border: 1px solid var(--line);
 }
-/* Telegram ko'k, WhatsApp yashil - tanib olish uchun (Instagram ham
-   ilovalarning o'z ranglarini ishlatadi). */
-.share-plat-item[data-p="tg"] .share-plat-ico { background: #229ed9; border-color: #229ed9; }
-.share-plat-item[data-p="wa"] .share-plat-ico { background: #25d366; border-color: #25d366; }
-.share-plat-item[data-p="fb"] .share-plat-ico { background: #1877f2; border-color: #1877f2; }
+/* Oq-qora paletra: ijtimoiy tarmoq tugmalari oq doira + qora belgi. */
+.share-plat-item[data-p="tg"] .share-plat-ico { background: #ffffff; border-color: #ffffff; color: #000000; }
+.share-plat-item[data-p="wa"] .share-plat-ico { background: #ffffff; border-color: #ffffff; color: #000000; }
+.share-plat-item[data-p="fb"] .share-plat-ico { background: #ffffff; border-color: #ffffff; color: #000000; }
 .share-plat-item[data-p="tw"] .share-plat-ico { background: #111; border-color: #333; }
 .share-plat-lab {
     font-size: 11px; color: var(--muted); line-height: 1.25;
@@ -785,8 +784,8 @@ body.share-lock { overflow: hidden; }
 }
 .watch-desc-genres a {
     font-size: 12px; font-weight: 600; text-decoration: none;
-    color: var(--accent); background: rgba(42, 171, 238, .12);
-    border: 1px solid rgba(42, 171, 238, .3);
+    color: var(--accent); background: rgba(255, 255, 255, .12);
+    border: 1px solid rgba(255, 255, 255, .3);
     padding: 3px 10px; border-radius: 999px;
 }
 .watch-desc-more {
@@ -973,7 +972,7 @@ body.share-lock { overflow: hidden; }
     font-family: inherit;
     transition: background .13s ease, color .13s ease;
 }
-.watch-ep-find-go:hover { background: var(--accent); color: #fff; }
+.watch-ep-find-go:hover { background: var(--accent); color: #000000; }
 
 /* --- Fasl tanlash chiplari (mobil grid uchun) -------------------------
    Faqat MOBIL'da ko'rinadi (watch.js `renderSeasons()` to'ldiradi);
@@ -1349,11 +1348,11 @@ body.share-lock { overflow: hidden; }
 
     /* Faol qism — OCHIQ KO'K (accent) belgi */
     .watch-ep.on {
-        background: rgba(42, 171, 238, .14);
+        background: rgba(255, 255, 255, .14);
         border-color: var(--accent);
-        box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(42, 171, 238, .35);
+        box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(255, 255, 255, .35);
     }
-    .watch-ep.on .watch-ep-num { background: var(--accent); color: #04202e; }
+    .watch-ep.on .watch-ep-num { background: var(--accent); color: #191919; }
 }
 
 /* ==================================================================
@@ -1443,8 +1442,8 @@ body.share-lock { overflow: hidden; }
 }
 .watch-player .tgs-prog {
     text-indent: -9999px;                 /* "12%" yozuvi ko'rinmasin */
-    background: linear-gradient(90deg, #2aabee, #4fc3f7);
-    box-shadow: 0 0 8px rgba(79, 195, 247, 0.55);
+    background: linear-gradient(90deg, #ffffff, #ffffff);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
     position: relative;
 }
 /* Anionik yugurish — "yuklanmoqda" harakati */
@@ -1456,9 +1455,9 @@ body.share-lock { overflow: hidden; }
     left: 0;
     width: 38%;
     background: linear-gradient(90deg,
-        rgba(111, 200, 242, 0) 0%,
-        rgba(111, 200, 242, 0.85) 50%,
-        rgba(111, 200, 242, 0) 100%);
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.85) 50%,
+        rgba(255, 255, 255, 0) 100%);
     animation: watch-tgs-sweep 1.25s ease-in-out infinite;
 }
 @keyframes watch-tgs-sweep {
@@ -1549,7 +1548,7 @@ body.share-lock { overflow: hidden; }
     margin: 0;
     border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, .12);
-    background: rgba(8, 11, 17, .72);
+    background: rgba(11, 11, 11, .72);
     -webkit-backdrop-filter: blur(16px) saturate(1.5);
     backdrop-filter: blur(16px) saturate(1.5);
     box-shadow: 0 10px 30px rgba(0, 0, 0, .45);

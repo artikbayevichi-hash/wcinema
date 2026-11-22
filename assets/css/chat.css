@@ -48,7 +48,7 @@
 .chat-room-off { opacity: .45; }
 .chat-room-skel {
     height: 86px; border-radius: 14px;
-    background: linear-gradient(100deg, var(--card) 30%, var(--card-2, #1a1d24) 50%, var(--card) 70%);
+    background: linear-gradient(100deg, var(--card) 30%, var(--card-2, #1d1d1d) 50%, var(--card) 70%);
     background-size: 200% 100%;
     animation: chat-shimmer 1.2s infinite linear;
 }
@@ -88,10 +88,10 @@
 .chat-badge {
     flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px;
     box-sizing: border-box; border-radius: 999px;
-    background: linear-gradient(180deg, #ff7a7a, var(--accent-2));
-    color: #fff; font-size: 11px; font-weight: 800; line-height: 20px;
+    background: linear-gradient(180deg, #ffffff, var(--accent-2));
+    color: #000000; font-size: 11px; font-weight: 800; line-height: 20px;
     text-align: center; align-self: center;
-    box-shadow: 0 1px 6px rgba(255, 92, 92, .45);
+    box-shadow: 0 1px 6px rgba(255, 255, 255, .45);
 }
 
 /* Shaxsiy (server) xabarlardagi media */
@@ -106,7 +106,7 @@
 .chat-share { max-width: min(300px, 100%); }
 .chat-share-thumb {
     position: relative; display: block; width: 100%; padding: 0;
-    border: 0; background: #0c0f14; border-radius: 14px; overflow: hidden;
+    border: 0; background: #0f0f0f; border-radius: 14px; overflow: hidden;
     cursor: pointer; line-height: 0;
 }
 .chat-share-thumb img {
@@ -115,7 +115,7 @@
 }
 .chat-share-ph {
     display: flex; align-items: center; justify-content: center;
-    width: 100%; height: 170px; font-size: 40px; background: #12161d;
+    width: 100%; height: 170px; font-size: 40px; background: #161616;
 }
 .chat-share-play {
     position: absolute; left: 50%; top: 50%;
@@ -241,7 +241,7 @@
 .chat-row.mine .chat-bub {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: #000000;
 }
 .chat-txt { white-space: pre-wrap; }
 .chat-txt-empty { opacity: .5; }
@@ -374,7 +374,7 @@
     padding: 10px 14px; margin: 0 12px 8px;
     border: 1px solid var(--accent-2);
     border-radius: 12px;
-    background: rgba(255, 92, 92, .08);
+    background: rgba(255, 255, 255, .08);
     color: var(--accent-2);
     font-size: 13px; line-height: 1.4;
 }
@@ -388,10 +388,10 @@
 .chat-send[data-mode="attach"]:hover { color: var(--text); background: var(--card); }
 .chat-send[data-mode="send"] {
     background: var(--accent);
-    color: #fff;
-    box-shadow: 0 4px 14px rgba(42, 171, 238, .32);
+    color: #000000;
+    box-shadow: 0 4px 14px rgba(255, 255, 255, .32);
 }
-.chat-send[data-mode="send"]:hover { background: #37b7f5; }
+.chat-send[data-mode="send"]:hover { background: #ffffff; }
 .chat-send .tv-send-mic svg { width: 23px; height: 23px; }
 .chat-send .tv-send-clip svg { width: 22px; height: 22px; }
 .chat-send .tv-send-ico svg { width: 21px; height: 21px; }
@@ -420,7 +420,7 @@
     -webkit-tap-highlight-color: transparent;
 }
 .chat-picker-tab:hover { background: var(--card); color: var(--text); }
-.chat-picker-tab.on { background: var(--accent); color: #fff; }
+.chat-picker-tab.on { background: var(--accent); color: #000000; }
 .chat-picker-x {
     margin-left: auto;
     border: 0; background: transparent; color: var(--muted);
@@ -504,7 +504,7 @@
 }
 .chat-sticker-sets::-webkit-scrollbar { width: 6px; }
 .chat-sticker-sets::-webkit-scrollbar-thumb {
-    background: rgba(127, 143, 168, .4); border-radius: 3px;
+    background: rgba(255, 255, 255, .4); border-radius: 3px;
 }
 .chat-sticker-set {
     flex: 0 0 auto; background: var(--card); color: var(--muted);
@@ -513,7 +513,7 @@
     white-space: nowrap; max-width: 100%;
     overflow: hidden; text-overflow: ellipsis;
 }
-.chat-sticker-set.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.chat-sticker-set.on { color: #000000; background: var(--accent); border-color: var(--accent); }
 .chat-sticker-none {
     flex: 1 0 100%; text-align: center; padding: 10px 0;
     font-size: 12px; color: var(--muted);
@@ -558,7 +558,7 @@
 .chat-toast {
     position: fixed; left: 50%; bottom: calc(var(--ig-tabbar-h) + 20px);
     transform: translateX(-50%);
-    background: rgba(20, 22, 28, .96); color: #fff;
+    background: rgba(22, 22, 22, .96); color: #fff;
     border: 1px solid var(--line); border-radius: 12px;
     padding: 10px 16px; font-size: 13.5px; z-index: 200; max-width: 88vw;
 }
@@ -589,7 +589,7 @@
     transition: box-shadow .16s ease;
 }
 .chat-row.mine .chat-bub {
-    box-shadow: 0 2px 10px rgba(42, 171, 238, .26);
+    box-shadow: 0 2px 10px rgba(255, 255, 255, .26);
 }
 
 /* Kontaktlar ro'yxati — bosishda jonli javob */
@@ -609,7 +609,7 @@
 /* Kompozitor — fokusda nozik yorug' halqa */
 .chat-composer input:focus,
 .chat-composer textarea:focus {
-    box-shadow: 0 0 0 3px rgba(42, 171, 238, .16);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, .16);
 }
 
 /* Telefonda zichroq; iOS'da maydonga bosganda sahifa zoom qilmasin */

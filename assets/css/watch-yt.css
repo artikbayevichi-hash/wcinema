@@ -188,8 +188,8 @@
 .watch-cav {
     flex: 0 0 auto; width: 40px; height: 40px; margin-bottom: 4px;
     border-radius: 50%; display: grid; place-items: center;
-    background: linear-gradient(135deg, var(--accent), #6c5ce7);
-    color: #fff; font-size: 17px; font-weight: 700; line-height: 1;
+    background: linear-gradient(135deg, var(--accent), #ffffff);
+    color: #000000; font-size: 17px; font-weight: 700; line-height: 1;
     user-select: none;
 }
 .watch-cav.anon {
@@ -207,7 +207,7 @@
 }
 .watch-page .watch-comments-wrap .reels-comments-form:focus-within {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(42, 171, 238, .18);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, .18);
     background: var(--bg-2);
 }
 .watch-page .watch-comments-wrap .reels-comments-input {
@@ -238,7 +238,7 @@
 .watch-page .watch-comments-wrap .reels-comments-send:hover { background: var(--yt-pill-h); }
 .watch-page .watch-comments-wrap .reels-comments-send:active { transform: scale(.92); }
 .watch-page .watch-comments-wrap .reels-comments-send[data-mode="send"] {
-    background: var(--accent); color: #fff;
+    background: var(--accent); color: #000000;
 }
 .watch-page .watch-comments-wrap .reels-comments-send svg { width: 20px; height: 20px; }
 
@@ -437,7 +437,7 @@ html.tv-mode .watch-page .watch-desc:focus-visible {
     transition: background .15s ease, color .15s ease;
 }
 .watch-page .watch-comments-wrap .reels-c-picker-tab:hover { background: var(--yt-pill); color: var(--text); }
-.watch-page .watch-comments-wrap .reels-c-picker-tab.on { background: var(--accent); color: #fff; }
+.watch-page .watch-comments-wrap .reels-c-picker-tab.on { background: var(--accent); color: #000000; }
 .watch-page .watch-comments-wrap .reels-c-picker-x {
     flex: 0 0 auto; margin-left: auto; width: 34px; height: 34px; padding: 0;
     border: 0; border-radius: 50%; cursor: pointer;
@@ -473,7 +473,7 @@ html.tv-mode .watch-page .watch-desc:focus-visible {
 .watch-page .watch-comments-wrap .reels-c-sticker-search input { padding-right: 74px; }
 .watch-page .watch-comments-wrap .reels-c-sticker-search input:focus,
 .watch-page .watch-comments-wrap .reels-c-gif-search input:focus {
-    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(42, 171, 238, .16);
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 255, 255, .16);
 }
 .watch-page .watch-comments-wrap .reels-c-sticker-count {
     position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
@@ -497,7 +497,7 @@ html.tv-mode .watch-page .watch-desc:focus-visible {
 .watch-page .watch-comments-wrap .reels-c-sticker-set.on,
 .watch-page .watch-comments-wrap .reels-c-sticker-set.active,
 .watch-page .watch-comments-wrap .reels-c-sticker-set[aria-selected="true"] {
-    background: var(--accent); border-color: var(--accent); color: #fff;
+    background: var(--accent); border-color: var(--accent); color: #000000;
 }
 .watch-page .watch-comments-wrap .reels-c-sticker-none { padding: 6px 4px; color: var(--muted); font-size: 13px; }
 
@@ -600,7 +600,7 @@ html.tv-mode .watch-page .watch-comments-wrap .reels-c-picker-tab:focus-visible 
     transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
 }
 .watch-page .watch-side-eps .watch-ep-find:focus-within {
-    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(42, 171, 238, .16); background: var(--bg-2);
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 255, 255, .16); background: var(--bg-2);
 }
 .watch-page .watch-side-eps .watch-ep-find-ic { opacity: .6; font-size: 14px; }
 .watch-page .watch-side-eps .watch-ep-find-in {
@@ -612,7 +612,7 @@ html.tv-mode .watch-page .watch-comments-wrap .reels-c-picker-tab:focus-visible 
     background: var(--yt-pill-h); color: var(--text); font-size: 15px;
     transition: background .15s ease, color .15s ease;
 }
-.watch-page .watch-side-eps .watch-ep-find-go:hover { background: var(--accent); color: #fff; }
+.watch-page .watch-side-eps .watch-ep-find-go:hover { background: var(--accent); color: #000000; }
 
 .watch-page .watch-side-eps .watch-side-list {
     flex: 1 1 auto; min-height: 0; max-height: 440px; padding: 8px;

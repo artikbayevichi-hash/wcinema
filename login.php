@@ -90,7 +90,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -140,7 +140,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .telegram-btn {
-            background: linear-gradient(135deg, #0088cc 0%, #00a0dc 100%);
+            background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
             color: white;
             border: none;
             padding: 15px 30px;
@@ -159,7 +159,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
 
         .telegram-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0, 136, 204, 0.3);
+            box-shadow: 0 10px 20px rgba(255, 255, 255, 0.3);
         }
 
         .telegram-btn:disabled {
@@ -193,7 +193,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .bot-login-btn {
-            background: linear-gradient(135deg, #0088cc 0%, #00a0dc 100%);
+            background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
             margin-bottom: 12px;
         }
 
@@ -218,7 +218,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .error {
-            background: rgba(255, 0, 0, 0.2);
+            background: rgba(76, 76, 76, 0.2);
             color: white;
             padding: 10px;
             border-radius: 8px;

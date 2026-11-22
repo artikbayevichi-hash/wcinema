@@ -46,12 +46,12 @@ $jsV = @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1;
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Video tezlik diagnostikasi</title>
 <style>
-  body{font:13px/1.5 ui-monospace,Consolas,monospace;background:#0f1115;color:#e8e8e8;margin:0;padding:16px}
+  body{font:13px/1.5 ui-monospace,Consolas,monospace;background:#111111;color:#e8e8e8;margin:0;padding:16px}
   h1{font-size:16px;margin:0 0 6px}
-  #st{color:#8fd6a0}
-  .box{width:340px;height:190px;background:#1a1d24;border:1px solid #2a2f3a;margin:10px 0;display:inline-block;vertical-align:top}
+  #st{color:#ffffff}
+  .box{width:340px;height:190px;background:#1d1d1d;border:1px solid #2f2f2f;margin:10px 0;display:inline-block;vertical-align:top}
   .box + .box{margin-left:10px}
-  pre{white-space:pre-wrap;background:#000;border:1px solid #2a2f3a;padding:12px;display:none;margin-top:12px}
+  pre{white-space:pre-wrap;background:#000;border:1px solid #2f2f2f;padding:12px;display:none;margin-top:12px}
 </style>
 </head>
 <body>

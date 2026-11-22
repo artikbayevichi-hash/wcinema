@@ -59,7 +59,7 @@
     flex: 0 0 auto;
     width: 10px; height: 10px;
     border-radius: 50%;
-    background: #ff4d4d;
+    background: #ffffff;
     animation: tvRecPulse 1.15s ease-in-out infinite;
 }
 @keyframes tvRecPulse {
@@ -103,14 +103,14 @@
     flex: 0 0 auto;
     width: 42px; height: 42px;
     border: 0; border-radius: 50%;
-    background: var(--accent); color: #fff;
+    background: var(--accent); color: #000000;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 4px 14px rgba(42, 171, 238, .32);
+    box-shadow: 0 4px 14px rgba(255, 255, 255, .32);
     transition: transform .12s ease, background .16s ease;
     -webkit-tap-highlight-color: transparent;
 }
-.tv-rec-ok:hover { background: #37b7f5; }
+.tv-rec-ok:hover { background: #ffffff; }
 .tv-rec-ok:active { transform: scale(.9); }
 .tv-rec-ok svg { width: 22px; height: 22px; }
 .tv-rec-ok.busy { pointer-events: none; opacity: .6; }
@@ -145,7 +145,7 @@
     width: 34px; height: 34px;
     border: 0; border-radius: 50%;
     background: var(--accent);
-    color: #fff;
+    color: #000000;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     position: relative;
