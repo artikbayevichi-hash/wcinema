@@ -34,19 +34,26 @@ body.tgl-page {
   overflow-x: hidden;
 }
 
-/* Day (Web K day palitrasi) — <html class="tgl-day"> */
+/* Day (oq fon + qora elementlar) — <html class="tgl-day">
+   Eslatma: oq-qora paletrada asosiy rang QORA bo'lishi kerak. Aks holda
+   oq tugma/oq matn oq fonda butunlay yo'q bo'lib ketadi. */
 html.tgl-day body.tgl-page {
-  --tgl-primary:      #ffffff;
-  --tgl-primary-rgb:  255, 255, 255;
+  --tgl-primary:      #000000;
+  --tgl-primary-rgb:  0, 0, 0;
   --tgl-surface:      #ffffff;
   --tgl-bg:           #ffffff;
   --tgl-text:         #000000;
-  --tgl-text2:        #ffffff;
-  --tgl-border:       #ffffff;
-  --tgl-danger:       #ffffff;
-  --tgl-light:        rgba(var(--tgl-primary-rgb), .12);
-  --tgl-light-filled: rgba(var(--tgl-primary-rgb), .12);
+  --tgl-text2:        #666666;
+  --tgl-border:       #d0d0d0;
+  --tgl-danger:       #000000;
+  --tgl-light:        rgba(var(--tgl-primary-rgb), .08);
+  --tgl-light-filled: rgba(var(--tgl-primary-rgb), .10);
 }
+/* Oq fonda qora tugma ichidagi matn oq bo'lishi shart. */
+html.tgl-day .tgl-btn-primary { color: #ffffff; }
+html.tgl-day .tgl-noscript { background: rgba(0, 0, 0, .08); color: #000000; }
+/* Logo oq tasvir — oq fonda yo'q bo'lib ketmasligi uchun teskari rang. */
+html.tgl-day .tgl-logo-svg { filter: invert(1); }
 
 #tgLogin [hidden],
 .tgl-root [hidden] { display: none !important; }
@@ -77,9 +84,9 @@ html.tgl-day .tgl-bg {
 .tgl-blob.b3 { width: 420px; height: 420px; background: #ffffff; top: 42%; left: 58%; animation: tglFloat3 30s ease-in-out infinite; }
 
 html.tgl-day .tgl-blob { opacity: .5; filter: blur(90px); }
-html.tgl-day .tgl-blob.b1 { background: #ffffff; }
-html.tgl-day .tgl-blob.b2 { background: #ffffff; }
-html.tgl-day .tgl-blob.b3 { background: #ffffff; }
+html.tgl-day .tgl-blob.b1 { background: #f2f2f2; }
+html.tgl-day .tgl-blob.b2 { background: #f2f2f2; }
+html.tgl-day .tgl-blob.b3 { background: #f2f2f2; }
 
 @keyframes tglFloat1 {
   0%, 100% { transform: translate(0, 0) scale(1); }

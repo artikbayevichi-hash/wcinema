@@ -69,6 +69,23 @@ $siteName  = SITE_NAME;
     <style>
         /* ---- W CINEMA splash (faqat shu sahifa) ---- */
         body.tgl-page { --fst-accent: #ffffff; }
+        /* Kunduzgi rejim: oq fonda oq sarlavha/tugma ko'rinmay qolmasligi
+           uchun barcha urg'ular qora, ikkilamchi matn kulrang. */
+        html.tgl-day body.tgl-page { --fst-accent: #000000; }
+        html.tgl-day .fst-logo {
+            background: rgba(0, 0, 0, .08);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, .16);
+        }
+        html.tgl-day .fst-logo img { filter: invert(1); }
+        html.tgl-day .fst-title {
+            background: linear-gradient(90deg, #000000, #000000);
+            color: #000000;
+        }
+        html.tgl-day .fst-enter {
+            border: 1px solid #000000;
+            box-shadow: 0 14px 34px rgba(0, 0, 0, .18);
+        }
+        html.tgl-day .fst-enter:hover { box-shadow: 0 18px 40px rgba(0, 0, 0, .24); }
 
         .fst-wrap {
             position: relative;

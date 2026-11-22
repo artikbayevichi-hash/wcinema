@@ -93,11 +93,13 @@ img.ig-logo {
     overflow-y: auto;
     overflow-x: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: var(--line) transparent;
+    /* Scroll ishlaydi, lekin chiziq/belgi ko'rinmaydi. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scrollbar-color: transparent transparent;
 }
-.ig-nav::-webkit-scrollbar { width: 6px; height: 6px; }
-.ig-nav::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.ig-nav::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.ig-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 0; }
 .ig-nav::-webkit-scrollbar-track { background: transparent; }
 .ig-group { display: flex; flex-direction: column; gap: 2px; }
 .ig-sep { height: 1px; background: var(--line); margin: 8px 6px; flex: 0 0 auto; }

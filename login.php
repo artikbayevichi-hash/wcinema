@@ -90,7 +90,8 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
+            background: #000000;
+            color: #ffffff;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -99,15 +100,15 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .login-container {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
             backdrop-filter: blur(10px);
             border-radius: 20px;
             padding: 40px;
             max-width: 400px;
             width: 100%;
             text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
         }
 
         .logo {
@@ -127,7 +128,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         h1 {
-            color: white;
+            color: #ffffff;
             font-size: 28px;
             margin-bottom: 10px;
             font-weight: 700;
@@ -140,8 +141,8 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .telegram-btn {
-            background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
-            color: white;
+            background: #ffffff;
+            color: #000000;
             border: none;
             padding: 15px 30px;
             border-radius: 12px;
@@ -169,9 +170,9 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .bot-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.06);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.35);
             padding: 15px 30px;
             border-radius: 12px;
             font-size: 16px;
@@ -193,18 +194,19 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .bot-login-btn {
-            background: linear-gradient(135deg, #ffffff 0%, #ffffff 100%);
+            background: #ffffff;
+            color: #000000;
             margin-bottom: 12px;
         }
 
         .login-status {
-            background: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.25);
             border-radius: 12px;
             padding: 14px;
             margin-bottom: 15px;
             font-size: 14px;
-            color: #fff;
+            color: #ffffff;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -218,8 +220,8 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         }
 
         .error {
-            background: rgba(76, 76, 76, 0.2);
-            color: white;
+            background: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
             padding: 10px;
             border-radius: 8px;
             margin-bottom: 20px;
