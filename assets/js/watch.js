@@ -2318,6 +2318,25 @@
       + '</span></button>';
   }
 
+  /* Tavsiya kartochkasidagi kichik belgi.
+   *
+   * Anime/serialda 1-qismning davomiyligini emas, QISMLAR SONINI ko'rsatamiz:
+   * saytda bor qism / jami rejalashtirilgan qism -> "11/16". Format izoh
+   * qidiruvidagi (nav.php) anime kartochkalari bilan bir xil.
+   * Kino/multfilmda eski holat saqlanadi — video davomiyligi (mas. 24:00). */
+  function recDurBadge(c) {
+    if (c.is_series && c.category_slug === 'anime') {
+      var rel = parseInt(c.episodes, 10) || 0;
+      var tot = parseInt(c.total_episodes, 10) || 0;
+      if (rel > 0 || tot > 0) {
+        var txt = tot > rel ? (rel + '/' + tot) : String(rel || tot);
+        return '<span class="watch-ep-dur">' + esc(txt) + '</span>';
+      }
+    }
+    return Number(c.duration) > 0
+      ? '<span class="watch-ep-dur">' + fmtTime(c.duration) + '</span>' : '';
+  }
+
   /* Yon paneldagi ixchak "tavsiya qatori" - `watch.php?c=ID`
      havolasidagi <a>. Karta uslublari `.watch-rec*` (watch.css). */
   function recRow(c) {
@@ -2333,7 +2352,7 @@
       + '<span class="watch-rec-thumb">'
       +   thumbInner(c)
       +   (isNew ? '<span class="watch-rec-new">Yangi</span>' : '')
-      +   (Number(c.duration) > 0 ? '<span class="watch-ep-dur">' + fmtTime(c.duration) + '</span>' : '')
+      +   recDurBadge(c)
       + '</span>'
       + '<span class="watch-rec-text">'
       +   '<span class="watch-rec-ttl">' + esc(c.title) + '</span>'
