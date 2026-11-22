@@ -7,6 +7,14 @@
     --ig-side-w:   244px;
     --ig-mobar-h:  50px;
     --ig-tabbar-h: 56px;
+
+    /* Donat tugmasi va uning ustidagi "Davom etish" kartochkasi bir-birini
+       yopib qo'ymasligi uchun yagona geometriya. Ikkalasi ham shu o'zgaruvchilarga
+       tayanadi: tugma o'zgarsa, kartochka avtomatik yuqoriga siljiydi. */
+    --wc-donate-right:  22px;
+    --wc-donate-bottom: 22px;
+    --wc-donate-h:      48px;
+    --wc-float-gap:     10px;
 }
 
 /* ==========================================================================
@@ -719,8 +727,11 @@ html.tv .ig-ico { width: 30px; height: 30px; }
    ========================================================================== */
 .cont-float {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
+    right: max(var(--wc-donate-right), env(safe-area-inset-right, 0px));
+    /* Donat tugmasi (z=450) ustiga chiqib qolmasligi uchun uning balandligi +
+       bo'shliq qadar yuqoriga ko'tariladi. */
+    bottom: calc(var(--wc-donate-bottom) + var(--wc-donate-h) + var(--wc-float-gap)
+                 + env(safe-area-inset-bottom, 0px));
     z-index: 60;
     max-width: 320px;
 }
@@ -763,7 +774,9 @@ html.tv .ig-ico { width: 30px; height: 30px; }
 }
 .cont-float-x:hover { background: var(--card); }
 @media (max-width: 999px) {
-    .cont-float { right: 12px; bottom: calc(var(--ig-tabbar-h) + 12px); max-width: 78vw; }
+    /* Pastki tabbar ko'rinadi: Donat tugmasi ham uning ustiga tushmasligi kerak. */
+    :root { --wc-donate-bottom: calc(var(--ig-tabbar-h) + 12px); }
+    .cont-float { max-width: 78vw; }
     .cont-float-title { max-width: 50vw; }
 }
 
@@ -976,10 +989,10 @@ html.tv .ig-ico { width: 30px; height: 30px; }
 
 /* ---------------- Donat: doimiy, ko'zga tashlanadigan global tugma ---------------- */
 .donate-fab {
-    position: fixed; right: max(22px, env(safe-area-inset-right, 0px));
-    bottom: calc(22px + env(safe-area-inset-bottom, 0px)); z-index: 450;
+    position: fixed; right: max(var(--wc-donate-right), env(safe-area-inset-right, 0px));
+    bottom: calc(var(--wc-donate-bottom) + env(safe-area-inset-bottom, 0px)); z-index: 450;
     display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-    min-height: 48px; padding: 0 19px 0 15px;
+    min-height: var(--wc-donate-h); padding: 0 19px 0 15px;
     border: 1px solid rgba(255,255,255,.2); border-radius: 999px;
     background: linear-gradient(135deg, #ff6687, #e83b68);
     box-shadow: 0 10px 30px rgba(232,59,104,.32), 0 3px 10px rgba(0,0,0,.34);
@@ -1026,7 +1039,12 @@ html.tv .ig-ico { width: 30px; height: 30px; }
 .donate-x:focus-visible, .donate-dismiss:focus-visible, .donate-nav-trigger:focus-visible, .donate-mobar-trigger:focus-visible { outline: 2px solid #ff7890; outline-offset: 2px; }
 body.donate-open { overflow: hidden; }
 @media (max-width: 560px) {
-    .donate-fab { right: 14px; bottom: calc(var(--ig-tabbar-h) + 14px + env(safe-area-inset-bottom, 0px)); min-height: 46px; padding: 0 17px 0 14px; }
+    :root {
+        --wc-donate-right:  14px;
+        --wc-donate-bottom: calc(var(--ig-tabbar-h) + 14px);
+        --wc-donate-h:      46px;
+    }
+    .donate-fab { padding: 0 17px 0 14px; }
     .donate-dialog { align-items: end; padding: 10px; }
     .donate-panel { width: 100%; padding: 28px 20px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 18px 18px; }
     .donate-panel h2 { font-size: 21px; }
