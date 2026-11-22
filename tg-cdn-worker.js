@@ -194,7 +194,9 @@ const TAIL_CACHE = new Map();               // kalit -> { start, bytes }
 // IKKINCHI marta tortilardi (prefetch + so'rov) — sekin va isrof. Endi
 // so'rov prefetch tugashini kutadi va baytlarni keshdan oladi.
 const TAIL_PROMISE = new Map();             // kalit -> Promise
-const TAIL_MAX_ENTRIES = 2;                 // RAMni cheklovchi
+// 2 ta kishiga chidamli edi: uchinchi video ochilganda birinchesining
+// moov oynasi tashlanardi. 6 ta = ~6 MB RAM, lekin ketma-ket ochish barqaror.
+const TAIL_MAX_ENTRIES = 6;                 // RAMni cheklovchi
 
 // Indeks (moov) ANIQ oynasi: `{ start, len }` yoki `{ inHead: true }`.
 const IDX_WIN = new Map();
@@ -974,15 +976,25 @@ async function cacheGet(key) {
 }
 
 // Diskda joy bormi? (kvota 55% dan oshsa yozmaymiz)
+// Ilgari HAR 512 KB blok uchun `navigator.storage.estimate()` chaqirilardi —
+// bu asl bayt oqimiga qo'shimcha async ish edi. 5 s kesh yetarli: kvota
+// birdan o'zgarmaydi, katta fayl yozganda keyingi tekshiruv yangilaydi.
+let BUDGET_AT = 0;
+let BUDGET_OK = true;
 async function cacheBudgetOk() {
+  const now = Date.now();
+  if (now - BUDGET_AT < 5000) return BUDGET_OK;
   try {
-    if (!navigator.storage || !navigator.storage.estimate) return true;
-    const est = await navigator.storage.estimate();
-    if (!est || !est.quota) return true;
-    return (est.usage || 0) < est.quota * 0.55;
+    if (!navigator.storage || !navigator.storage.estimate) BUDGET_OK = true;
+    else {
+      const est = await navigator.storage.estimate();
+      BUDGET_OK = (!est || !est.quota) ? true : (est.usage || 0) < est.quota * 0.55;
+    }
   } catch (e) {
-    return true;
+    BUDGET_OK = true;
   }
+  BUDGET_AT = Date.now();
+  return BUDGET_OK;
 }
 
 function cachePut(key, u8) {

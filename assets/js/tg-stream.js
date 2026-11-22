@@ -143,7 +143,6 @@
     connecting: null,      // Telegram sessiyasini ochish (Promise, keshlanadi)
     connectingMode: null,  // `connecting` qaysi rejimda (qr | phone)
     authEpoch: 0,          // rejim almashsa eski oqimni bekor qilish uchun
-    reloading: false,      // sahifa bir marta qayta yuklandimi
     play: null,            // tg-play.js oqimi (MKV/HEVC uchun), null = tabiiy
     playAbort: null,       // joriy oqimni to'xtatish uchun AbortController
     playLib: null,         // tg-play.js moduli (bir marta import qilinadi)
@@ -1049,20 +1048,15 @@
       return true;
     }
 
-    // 1) Avval server KESHIDAN (tez, ~10 ms). Havolasi boshqacha bo'lsa —
-    //    demak eskirgan bo'lib, yangisi tayyor.
-    // 2) Xuddi shu bo'lsa — muammo eskirish emas. Kesh 5+ daqiqa eskirgan
-    //    bo'lsa bir marta `fresh=1` bilan urinib ko'ramiz; aks holda darhol
-    //    GramJS yo'liga o'tamiz (u TO'G'RINI yangilaydi).
-    var p = docMetaFromServer(opts, false).then(function (m) {
-      if (!m || !m.fr) return false;
-      if (m.fr !== cur) return apply(m);
-      var age = (Date.now() - (Number(m.t) || Date.now())) / 1000;
-      if (age < 300) return false;
-      return docMetaFromServer(opts, true).then(function (m2) {
-        if (m2 && m2.fr && m2.fr !== cur) return apply(m2);
-        return false;
-      });
+    // Bu funksiya FAQAT Telegram "FILE_REFERENCE_*" deb javob berganda
+    // chaqiriladi — demak eskirish ALLAQECHON ISBOTLANGAN. Ilgari kesh
+    // 5 daqiqadan yangi bo'lsa `fresh=1` umuman yuborilmasdi: server eski
+    // havolani qayta-qayta berardi, video esa butunlay ochilmay qolardi.
+    // Shuning uchun eng ishonchli yo'lni TOH sayraymiz — keshni emas,
+    // Telegram orqali yangilangan havolani olamiz.
+    var p = docMetaFromServer(opts, true).then(function (m) {
+      if (!m || !m.fr || m.fr === cur) return false;
+      return apply(m);
     }).catch(function () { return false; });
 
     S.frRefresh[key] = p.then(function (ok) {
@@ -1134,6 +1128,10 @@
   function closeFastClient() {
     if (S.fast) { try { S.fast.close(); } catch (e) {} }
     S.fast = null;
+    // MUHIM: keshdagi promise ham tozalanadi. Aks holda `fastClient()` va
+    // `kaFast()` yopilgan klientni qayta-qayta qaytaradi: birinchi fallback'dan
+    // keyin BARCHA videolar o'chadi ("ikki videodan keyin ochmaydi" sababi).
+    fastClientPromise = null;
   }
 
   // ============================================== DC ULANISHINI USHLAB TURISH
@@ -2024,13 +2022,11 @@
         return false;
       }
 
-      // 4) Oxirgi chora: eskirgan ro'yxatni tozalab, butunlay qayta o'rnatish.
-      //    Boshqa urinishda yana bir marta (reload yo'q) xarakat qilamiz.
-      try {
-        var rs = await navigator.serviceWorker.getRegistrations();
-        for (var i = 0; i < rs.length; i++) await rs[i].unregister();
-        S.reg = null;
-      } catch (e) { /* bo'sh */ }
+      // 4) Oxirgi chora: ro'yxatni YANGILASH. HECH QACHON unregister
+      //    qilmaymiz: ilgari bu yerda origin'dagi BARCHA SW lar o'chirilardi.
+      //    Ikkinchi video 8 soniya ichida ochilsa (mayReload rad etsa) butun
+      //    sayt streamingsiz qolib, keyingi videolar umuman ochilmasdi.
+      try { if (reg) await reg.update(); } catch (e) { /* bo'sh */ }
       return false;
     } catch (e) {
       return false;
@@ -3169,7 +3165,10 @@
   navigator.serviceWorker &&
   navigator.serviceWorker.addEventListener('message', function (ev) {
     var d = ev.data || {};
-    if (d.type === 'needProvider' && S.chan !== null) connect();
+    // `stop()` portni yopadi (S.chan = null), lekin SW qayta ishga tushganda
+    // aynan shu xabarni yuboradi. Ilgari S.chan tekshiruvi tufayli javob
+    // berilmasdi va SW 8 s dan keyin NO_PROVIDER bilan butun oqimni o'chirardi.
+    if (d.type === 'needProvider') connect();
 
     // Birinchi tomoshabin SW yordamida moov o'rnini topdi — uni kontent
     // keshiga yozamiz. Faqat doc_id/size mos kelganda va katalogdagi video
