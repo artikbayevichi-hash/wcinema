@@ -211,6 +211,10 @@
   }
 
   function ensureTopic(reel) {
+    // Mavzu id'si allaqachon `__WCBOOT.topic` (SQL kesh) dan kelgan bo'lsa,
+    // `api/video-topic.php` ga so'rov yuborish SHART EMAS — chat va url
+    // `open()` da `APP` dan tuzilgan. Bu bitta so'rov (hamda 1 RTT) tejaydi.
+    if (S.topicId > 0) return Promise.resolve(true);
     return fetchJson(baseUrl(TOPIC_API + '?' + topicQuery(reel.id) + '&_=' + Date.now()))
       .then(function (d) {
         if (d && d.disabled) return { disabled: true };

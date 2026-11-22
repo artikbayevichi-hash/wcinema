@@ -2786,9 +2786,14 @@
     var label = e
       ? D.title + ' · ' + e.season + '-fasl ' + e.number + '-qism'
       : D.title;
+    // Izoh mavzusi `StreamBootstrap` tomonidan SQL keshiga yozilgan va
+    // `__WCBOOT.topic` ichida tayyor keladi.Uni uzatamiz — tg-comments.js
+    // `api/video-topic.php` ga so'rov yubormaydi (1 ta so'rov tejaladi).
+    var SB = global.WCStreamBoot;
+    var bootTopic = SB && typeof SB.topicId === 'function' ? SB.topicId() : 0;
     return global.TGComments.open({
       id: key,
-      topic_id: 0,
+      topic_id: bootTopic || 0,
       title: label,
       comments: 0
     }).catch(function () { /* modul o'zi ko'rsatadi */ });
