@@ -78,7 +78,12 @@ $siteName  = SITE_NAME;
         }
         html.tgl-day .fst-logo img { filter: invert(1); }
         html.tgl-day .fst-title {
-            background: linear-gradient(90deg, #000000, #000000);
+            /* Gradient + background-clip:text ba'zi WebView'larda butun
+               sarlavhani qora quti qilib ko'rsatadi — oddiy qora matn ishlatamiz. */
+            background: none;
+            -webkit-background-clip: border-box;
+            background-clip: border-box;
+            -webkit-text-fill-color: #000000;
             color: #000000;
         }
         html.tgl-day .fst-enter {
