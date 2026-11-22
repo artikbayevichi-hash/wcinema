@@ -780,6 +780,10 @@ async function indexRegion(size, doc) {
 function prefetchTail(size, doc) {
   if (!(size > CHUNK)) return Promise.resolve(null);          // juda kichik fayl
   const key = tailKey(doc, size);
+  // FAST-START: SQL xaritasida `moov` boshda ekani ma'lum bo'lsa, dum
+  // oynasini umuman yuklamaymiz — indeks birinchi bo'lakda allaqachon bor.
+  const known = IDX_WIN.get(key);
+  if (known && known.inHead === true) return Promise.resolve(null);
   const ready = TAIL_CACHE.get(key);
   if (ready && ready.bytes) return Promise.resolve(ready);     // allaqachon tayyor
   if (TAIL_PROMISE.has(key)) return TAIL_PROMISE.get(key);     // davom etyapti
@@ -1668,6 +1672,7 @@ function r2Seed(doc, size, parts, bytes, part) {
 
 const STATS = { requests: 0, bytes: 0, seeks: 0, par: 0, r2: 0 };
 let PROVIDES = 0;                    // sahifa necha marta "ulangan" — diagnostika
+let KEEPS = 0;                       // SW'ga kelgan keepalive pinglari
 
 // Sahifadagi log oynasiga xabar yuborish (diagnostika)
 function say(msg) {
@@ -1716,6 +1721,11 @@ self.addEventListener('activate', (e) => e.waitUntil((async function () {
   LAST_PRUNE = 0;
   maybePrune();
   await self.clients.claim();
+  // SW qayta tug'ildi — xotira bo'sh, `provider` yo'q. Sahifaga DARHOL
+  // xabar beramiz: video bosilgunga qadar port tayyor bo'ladi. Bu brauzer
+  // bo'sh SW'ni o'chirib yuborgan holatda ham oqimni uzilishsiz davom
+  // ettiradi (yangi MTProto sessiya ochilmaydi — faqat port almashadi).
+  askForProvider();
 })()));
 
 // ---------------------------------------------------------------------- xabarlar
@@ -1735,6 +1745,11 @@ self.addEventListener('message', (e) => {
     if (e.waitUntil) e.waitUntil(self.clients.claim());
     return;
   }
+
+  // --- Sahifa SW'ni "tirik" ushlab turadi ------------------------------
+  // Xabar olishning o'zi SW'ni uyg'otadi va bo'sh turganligi sababli
+  // o'chirilishining oldini oladi. Java yoki tarmoq so'rovi yo'q.
+  if (d.type === 'keepalive') { KEEPS++; return; }
 
   // --- Sahifa o'zini javobgar deb e'lon qildi ------------------------
   if (d.type === 'provide') {
@@ -1849,7 +1864,7 @@ self.addEventListener('message', (e) => {
     const p = e.ports && e.ports[0];
     const s = 'so\'rov: ' + STATS.requests + ' · ' + (STATS.bytes / 1048576).toFixed(1)
       + ' MB · seek: ' + STATS.seeks + ' ta · parallel: ' + STATS.par
-      + ' · ulash: ' + PROVIDES;
+      + ' · ulash: ' + PROVIDES + ' · ping: ' + KEEPS;
     say('📊 ' + s);
     if (p) p.postMessage({ type: 'stats', text: s });
   }
@@ -1925,6 +1940,13 @@ function readFromPage(offset, length) {
       const i = waiting.findIndex((j) => j.id === id);
       if (i >= 0) waiting.splice(i, 1);
       clearTimeout(timer);
+      // Eski port o'lik bo'lishi mumkin (sahifa reload bo'lgan, yoki SW
+      // qayta ishga tushganda xotirada eski port qolgan). Uni tashlab,
+      // sahifadan YANGI port so'raymiz — aks holda keyingi barcha so'rovlar
+      // ham shu o'lik portga yuborilib, video umuman ochilmay qoladi.
+      if (provider) { try { provider.close(); } catch (e) {} }
+      provider = null;
+      askForProvider();
       reject(new Error('sahifaga yetkazib bo\'lmadi: ' + err.message));
     }
   });

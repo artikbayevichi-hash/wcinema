@@ -1194,6 +1194,7 @@
   // keyin ping yuboramiz. `warmFast()` mavjud ulanishni qayta ishlatadi.
   function kaWake() {
     try { warmFast(); } catch (e) {}
+    try { swKeepPing(); } catch (e) {}
     kaTick(true);
   }
 
@@ -1207,6 +1208,35 @@
       });
       global.addEventListener('online', kaWake);
       global.addEventListener('pageshow', kaWake);
+    } catch (e) { /* jim */ }
+  }
+
+  // ======================================= SERVICE WORKERNI TIRIK USHLASH
+  //
+  // Brauzer bo'sh turgan SW'ni ixtiyoriy ravishda o'chirib yuboradi. U o'chsa,
+  // xotirasidagi `provider` (sahifaga yo'naltirilgan MessagePort) ham yo'qoladi
+  // va keyingi `Range` so'rovi avval SW'ni qayta ishga tushirishni kutadi.
+  // Ko'rish paytida yengil xabar yuborib turamiz: SW o'chmaydi, port tirik
+  // qoladi, keyingi video bosilganda qayta ulanish kutmaydi.
+  var SW_KEEP_MS = 20000;
+  var swKeepBound = false;
+
+  function swKeepPing() {
+    try {
+      if (document.hidden) return;
+      var c = swCtl();
+      if (!c) return;
+      c.postMessage({ type: 'keepalive', t: Date.now() });
+    } catch (e) { /* SW hali tayyor emas — keyingi pingda yetkazamiz */ }
+  }
+
+  function bindSWKeepAlive() {
+    if (swKeepBound) return;
+    swKeepBound = true;
+    try {
+      setInterval(swKeepPing, SW_KEEP_MS);
+      global.addEventListener('online', swKeepPing);
+      global.addEventListener('pageshow', swKeepPing);
     } catch (e) { /* jim */ }
   }
 
@@ -2255,6 +2285,14 @@
   function warmTail(size, docId) {
     try {
       if (!(Number(size) > 0) || docId == null || docId === '') return;
+      // FAST-START: `moov` fayl boshida bo'lsa, dum oynasini yuklash behuda —
+      // indeks allaqachon birinchi bo'lakda keladi. Bu 1 kanal trafigi va
+      // 1 RTT tejaladi (ayniqsa sekin tarmoqda ilk kadr tez chiqadi).
+      var SBoot = global.WCStreamBoot;
+      if (SBoot && typeof SBoot.indexInfo === 'function') {
+        var ii = SBoot.indexInfo(String(docId), Number(size));
+        if (ii && ii.moov && ii.moov.inHead === true) return;
+      }
       var msg = { type: 'warmtail', size: Number(size), doc: String(docId) };
       var ctl = swCtl();
       if (ctl) { ctl.postMessage(msg); return; }
@@ -3202,10 +3240,15 @@
     }
   });
 
-  // SW yangilandi -> controller almashdi -> darhol qayta ulanamiz.
+  // SW yangilandi / o'chib qayta tug'ildi -> controller almashdi.
+  // Yangi SW xotirasi BO'SH bo'ladi: unda `provider` porti yo'q. Shuning
+  // uchun S.chan bor-yo'qligiga qaramay, portni QAYTA yaratamiz. Bu yangi
+  // MTProto sessiya ochmaydi — faqat sahifa <-> SW xabar kanali almashadi
+  // (AUTH_KEY_DUPLICATED xavfi yo'q). Ilgari `S.chan !== null` tekshiruvi
+  // tufayli bu holatda port umuman tiklanmasdi va oqim to'xtab qolardi.
   navigator.serviceWorker &&
   navigator.serviceWorker.addEventListener('controllerchange', function () {
-    if (S.chan !== null) connect();
+    connect();
   });
 
   // ============================================================ 6. UI holat
@@ -4739,6 +4782,9 @@
         // WebSocket'ni yopadi ("Connection to dc 2 was lost") va keyingi klik
         // 1–3 s qayta ulanishni kutadi. Ping taymeri shuni oldini oladi.
         try { bindKeepAlive(); } catch (e) {}
+        // SW'ni ham o'chirib qo'ymaymiz: bo'sh SW qayta ishga tushganda
+        // `provider` porti yo'qoladi va birinchi bo'lak kutib qoladi.
+        try { bindSWKeepAlive(); } catch (e) {}
         // GramJS klienti (login yoki idle prefetch) tayyor bo'lsa — kaliti
         // yo'q DC'larni ham oldindan ochamiz. Klient hali yo'q bo'lsa
         // `warmDcs()` hech narsa qilmaydi; `ensureSession()` tugagach yana
