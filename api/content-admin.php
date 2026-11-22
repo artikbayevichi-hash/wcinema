@@ -288,6 +288,16 @@ function purgeContent($db, $cid) {
     foreach ($files as $f) {
         removeLocalFile($f);
     }
+    purgeFeedHttpCache();
+}
+
+/** Katalog/bosh sahifa response keshini yangilaydi (kontent o'zgarganda). */
+function purgeFeedHttpCache() {
+    if (!class_exists('HttpCache')) {
+        return;
+    }
+    HttpCache::purge('catalog');
+    HttpCache::purge('home');
 }
 
 /**
@@ -554,6 +564,7 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
                 tgPreviewEnqueueUrl($firstUrl);
             }
         }
+        purgeFeedHttpCache();
         contentOk('Kontent yaratildi', ['id' => $id, 'episode_id' => $episodeId]);
     } else {
         $cid = inputInt('id');
@@ -562,6 +573,7 @@ if (in_array($action, ['create_content', 'update_content'], true)) {
             fail('Kontent topilmadi', 404);
         }
         $db->update('content', $fields, 'id = ?', [$cid]);
+        purgeFeedHttpCache();
         contentOk('Kontent yangilandi', ['id' => $cid]);
     }
 }
@@ -763,6 +775,7 @@ if ($action === 'bulk_status' || $action === 'bulk_delete') {
             fail('Holat noto‘g‘ri', 400);
         }
         $db->update('content', ['status' => $st], 'id IN (' . implode(',', $ids) . ')', []);
+        purgeFeedHttpCache();
         contentOk(count($ids) . ' ta kontent holati: ' . $st, ['count' => count($ids)]);
     }
     foreach ($ids as $cid) {

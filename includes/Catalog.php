@@ -776,11 +776,12 @@ class Catalog {
                 ];
             }
 
-            // Ommaviy t.me posti uchun HLS keshi tayyor bo'lmasa, serverda to'liq
-            // videoni yuklab worker ishga tushirmaymiz; sahifani tuzishda t.me ga
-            // sinxron so'rov ham yubormaymiz. Brauzer videoni Telegram'dan oladi,
-            // sovuq HLS kutishi va origin trafikining oldi olinadi.
-            if ($hlsEnabled && $publicTgPost) {
+            // Barcha videolar foydalanuvchining OCHIQ kanalida. Shuning uchun
+            // public post har doim to'g'ridan-to'g'ri Telegram yo'lidan boradi —
+            // HLS_ENABLED yoqilgan/yopiqligiga bog'liq emas. Bu TgResolve'ning
+            // sovuq kestda 2 ta t.me so'rovi (15 s timeout) yuborishining oldini
+            // oladi; brauzer baytlarni to'g'ridan-to'g'ri Telegram'dan oladi.
+            if ($publicTgPost) {
                 return $this->playbackTelegram(
                     (string) $url,
                     self::telegramThumbPoster($url) ?: ($item['poster'] ?? null),
@@ -1535,6 +1536,64 @@ class Catalog {
         }
 
         return $out;
+    }
+
+    /**
+     * Keshdagi (kontent-level) kartochkalarga FAQAT ko'ruvchiga tegishli
+     * bayroqlarni qo'yadi: has_liked / has_disliked / in_watchlist.
+     *
+     * Keshda shaxsiy ma'lumot yo'q. Har kartochka uchun alohida so'rov
+     * o'rniga 3 ta xaritaviy so'rov ishlatiladi.
+     */
+    public function viewerFlags(array $items, $viewerId) {
+        $viewerId = (int) $viewerId;
+        if ($viewerId <= 0 || !$items) {
+            return $items;
+        }
+        $ids = [];
+        foreach ($items as $it) {
+            $id = (int) ($it['id'] ?? 0);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        if (!$ids) {
+            return $items;
+        }
+        $ids  = array_values($ids);
+        $in   = implode(',', $ids);
+        $args = array_merge([$viewerId], $ids);
+
+        $liked = $disliked = $saved = [];
+        foreach ($this->db()->fetchAll(
+            "SELECT content_id FROM likes
+              WHERE user_id = ? AND type = 'like' AND content_id IN ($in)",
+            $args
+        ) as $r) {
+            $liked[(int) $r['content_id']] = true;
+        }
+        foreach ($this->db()->fetchAll(
+            "SELECT content_id FROM likes
+              WHERE user_id = ? AND type = 'dislike' AND content_id IN ($in)",
+            $args
+        ) as $r) {
+            $disliked[(int) $r['content_id']] = true;
+        }
+        foreach ($this->db()->fetchAll(
+            "SELECT content_id FROM watchlist WHERE user_id = ? AND content_id IN ($in)",
+            $args
+        ) as $r) {
+            $saved[(int) $r['content_id']] = true;
+        }
+
+        foreach ($items as &$it) {
+            $id = (int) ($it['id'] ?? 0);
+            $it['has_liked']    = !empty($liked[$id]);
+            $it['has_disliked'] = !empty($disliked[$id]);
+            $it['in_watchlist'] = !empty($saved[$id]);
+        }
+        unset($it);
+        return $items;
     }
 
     private $dbInstance = null;

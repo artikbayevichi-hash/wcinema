@@ -27,6 +27,14 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Reels — <?php echo htmlspecialchars(SITE_NAME); ?></title>
     <?php require __DIR__ . '/includes/perf-head.php'; ?>
+    <?php /* Player va oqim kodi HTML oxirida `defer` bilan yuklanadi.
+             preload ularni HTML parse bilan PARALLEL keltiradi — birinchi
+             reel ochilganda kutubxona allaqachon keshda bo'ladi. `defer`
+             tartibi buzilmaydi: preload FAQAT yuklaydi, bajarmaydi. */ ?>
+    <link rel="preload" as="script" fetchpriority="high"
+          href="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>">
+    <link rel="preload" as="script"
+          href="assets/js/reels.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/reels.js') ?: 1; ?>">
     <meta name="description" content="Qisqa vertikal videolar — <?php echo htmlspecialchars(SITE_NAME); ?>">
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/reels.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/reels.css') ?: 1; ?>">

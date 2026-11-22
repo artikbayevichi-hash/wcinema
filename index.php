@@ -60,6 +60,12 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES); ?></title>
     <?php require __DIR__ . '/includes/perf-head.php'; ?>
+    <?php /* Kinolar / animelar / multfilmlar ro'yxati shu sahifada.
+             Player va feed kodi pastda yuklanadi — ularni oldindan keltiramiz. */ ?>
+    <link rel="preload" as="script" fetchpriority="high"
+          href="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>">
+    <link rel="preload" as="script"
+          href="assets/js/app.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/app.js') ?: 1; ?>">
     <meta name="description" content="<?php echo htmlspecialchars($pageDesc, ENT_QUOTES); ?>">
 
     <!-- Telegram Mini App / tarmoqqa chiqarish -->

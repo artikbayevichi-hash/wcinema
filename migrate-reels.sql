@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS `reels` (
     `likes_count`      int(11)      NOT NULL DEFAULT 0,
     `shares_count`     int(11)      NOT NULL DEFAULT 0,
 
+    -- "top" saralash uchun tayyor qiymat. Ifodani ORDER BY da ishlatish
+    -- indeksni ishlamaydi (filesort); bu ustun avtomatik yangilanadi.
+    `hot_score`        int(11)      GENERATED ALWAYS AS
+                                    (`views_count` * 10 + `likes_count` * 3) STORED,
+
     `created_at`       timestamp    NOT NULL DEFAULT current_timestamp(),
     `updated_at`       timestamp    NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
 
@@ -49,6 +54,9 @@ CREATE TABLE IF NOT EXISTS `reels` (
     -- Oqim har doim "tasdiqlanganlar ichidan eng yangisi" bo'yicha o'qiladi.
     -- Bu indeks shu so'rov uchun kerak (sort + filtr).
     KEY `idx_feed`      (`status`, `kind`, `id`),
+    -- kind filtrlanmaganda idx_feed tartiblashga yordam bermaydi.
+    KEY `idx_reels_new` (`status`, `id`),
+    KEY `idx_reels_hot` (`status`, `hot_score`, `id`),
     KEY `idx_user`      (`user_id`, `status`),
     KEY `idx_content`   (`content_id`),
     KEY `idx_created`   (`created_at`),

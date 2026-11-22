@@ -68,14 +68,17 @@ class Reels {
     // =====================================================================
 
     /**
-     * Oqim (feed).
+     * Oqimning FAQAT KONTENT qismi.
      *
-     * @param int   $userId     joriy foydalanuvchi (yoki null) - "yoqdimi" belgisi uchun
-     * @param int   $limit
-     * @param int   $offset
-     * @param string $sort  'new' | 'top' | 'mine'
+     * Bu yerda ko'ruvchiga bog'liq HECH NARSA yo'q: blok filtri ham,
+     * "yoqdimi / saqladimi / kuzatyaptimi" bayroqlari ham qo'yilmaydi
+     * (`decorate(..., 0)` shularning barchasini o'tkazib yuboradi). Shu
+     * sababli natija 30 s ga keshlanib, barcha tashrifchilar ulashadi.
+     * Ko'ruvchi qismi keyin `applyViewer()` bilan ustiga qo'yiladi.
+     *
+     * @param int $ownerId faqat 'mine' uchun (keshlanmaydi)
      */
-    public function getFeed($userId, $limit = 10, $offset = 0, $sort = 'new', $seed = 0) {
+    public function getFeedBase($limit = 10, $offset = 0, $sort = 'new', $seed = 0, $ownerId = 0) {
         $limit  = max(1, min(30, (int) $limit));
         $offset = max(0, (int) $offset);
         $seed   = max(0, (int) $seed);
@@ -86,35 +89,18 @@ class Reels {
         // o'ylaydi va qayta yuklaydi).
         if ($sort === 'mine') {
             $where  = 'r.user_id = ?';
-            $params = [(int) $userId];
+            $params = [(int) $ownerId];
             $order  = 'r.id DESC';
         } else {
             $where  = 'r.status = 1';
             $params = [];
-            // "top" = o'zaroqlik bo'yicha (ko'rish x10 + yoqish x3).
-            // Sababi: atigi 100 ko'rishli video ham 5000 yoqishli videodan
-            // "mashhur" bo'lishi mumkin. Oddiy likes_count DESC esa
-            // eski videolarni bir o'ringa yig'adi va yangi qisqa videolar
-            // hech qachon yuqoriga chiqmay qoladi.
-            $order = ($sort === 'top')
-                ? '(r.views_count * 10 + r.likes_count * 3) DESC, r.id DESC'
-                : 'r.id DESC';
-            // YouTube uslubidagi yangilanish: har ochilishda oqim tartibi
-            // tasodifiy aralashadi. `seed` sahifa ochilganda bir marta
-            // generatsiya qilinadi - sahifalashda takrorlanmaydi.
+            $order  = ($sort === 'top') ? $this->hotOrder() : 'r.id DESC';
+            // YouTube uslubidagi yangilanish: oqim tartibi aralashadi.
+            // `seed` API tomonidan bucket'ga normalizatsiya qilinadi — bir
+            // bucket ichidagi barcha sahifalar bir xil tartibni oladi.
             if ($seed > 0 && $sort !== 'top') {
                 $order = 'RAND(' . $seed . ')';
             }
-        }
-
-        // Bloklangan foydalanuvchilarning reelslari oqimda KO'RINMAYDI
-        // (ikkala tomon ham: meni bloklagan ham, meni bloklaganim ham).
-        $hidden = $this->blocks()->hiddenIds($userId);
-        if ($hidden) {
-            $ids = array_map('intval', array_keys($hidden));
-            $ph  = implode(',', array_fill(0, count($ids), '?'));
-            $where .= ' AND r.user_id NOT IN (' . $ph . ')';
-            $params = array_merge($params, $ids);
         }
 
         $sql = "SELECT r.*,
@@ -133,8 +119,93 @@ class Reels {
                 ORDER BY $order
                 LIMIT $limit OFFSET $offset";
 
-        $rows = $this->db()->fetchAll($sql, $params);
-        return $this->decorate($rows, $userId);
+        return $this->decorate($this->db()->fetchAll($sql, $params), 0);
+    }
+
+    /** "top" tartibi: indeks bor bo'lsa uni ishlat, yo'qsa eski formula. */
+    private function hotOrder() {
+        if (self::$hotScoreColumn === null) {
+            $row = $this->db()->fetchOne("SHOW COLUMNS FROM `reels` LIKE 'hot_score'");
+            self::$hotScoreColumn = !empty($row);
+        }
+        return self::$hotScoreColumn
+            ? 'r.hot_score DESC, r.id DESC'
+            : '(r.views_count * 10 + r.likes_count * 3) DESC, r.id DESC';
+    }
+    private static $hotScoreColumn = null;
+
+    /**
+     * Keshdagi kontent itemlariga faqat KO'RUVCHIGA tegishli qismini qo'yadi:
+     * blok filtri + liked / saved / reposted / following.
+     * Keshda shaxsiy ma'lumot saqlanmaydi.
+     */
+    public function applyViewer(array $items, $userId) {
+        $userId = (int) $userId;
+        if (!$items) {
+            return [];
+        }
+        if ($userId <= 0) {
+            return $items;
+        }
+
+        $hidden = $this->blocks()->hiddenIds($userId);
+        if ($hidden) {
+            $items = array_values(array_filter($items, static function ($it) use ($hidden) {
+                $aid = (int) ($it['author']['id'] ?? 0);
+                return $aid <= 0 || empty($hidden[$aid]);
+            }));
+            if (!$items) {
+                return [];
+            }
+        }
+
+        $ids      = array_column($items, 'id');
+        $liked    = $this->likedMap($ids, $userId);
+        $saved    = $this->flagMap('reel_saves', $ids, $userId);
+        $reposted = $this->flagMap('reel_reposts', $ids, $userId);
+
+        $authorIds = [];
+        foreach ($items as $it) {
+            $aid = (int) ($it['author']['id'] ?? 0);
+            if ($aid > 0) {
+                $authorIds[$aid] = $aid;
+            }
+        }
+        $following = $authorIds ? $this->followingMap(array_values($authorIds), $userId) : [];
+
+        foreach ($items as &$it) {
+            $rid = (int) $it['id'];
+            $aid = (int) ($it['author']['id'] ?? 0);
+            $it['liked']     = !empty($liked[$rid]);
+            $it['saved']     = !empty($saved[$rid]);
+            $it['reposted']  = !empty($reposted[$rid]);
+            $it['following'] = !empty($following[$aid]);
+        }
+        unset($it);
+        return $items;
+    }
+
+    /** Kesh kaliti uchun seed bucket'i (HttpCache bilan bitta qoida). */
+    public static function seedBucket($seed, $size = 30000000) {
+        return class_exists('HttpCache')
+            ? HttpCache::seedBucket($seed, $size)
+            : (($seed = (int) $seed) <= 0 ? 0 : intdiv($seed, max(1, (int) $size)) + 1);
+    }
+
+    /** Bucket uchun barqaror RAND() qiymati — barcha sahifalar bir xil tartibda. */
+    public static function seedForBucket($bucket, $size = 30000000) {
+        return class_exists('HttpCache')
+            ? HttpCache::seedForBucket($bucket, $size)
+            : (($bucket = (int) $bucket) <= 0 ? 0 : ($bucket - 1) * max(1, (int) $size) + 12345);
+    }
+
+    /** To'liq oqim (keshsiz chaqiruvchilar uchun). */
+    public function getFeed($userId, $limit = 10, $offset = 0, $sort = 'new', $seed = 0) {
+        $ownerId = ($sort === 'mine') ? (int) $userId : 0;
+        return $this->applyViewer(
+            $this->getFeedBase($limit, $offset, $sort, $seed, $ownerId),
+            $userId
+        );
     }
 
     public function countFeed($sort = 'new') {
@@ -881,7 +952,16 @@ class Reels {
         }
 
         $this->db()->delete('reels', 'id = ?', [(int) $reelId]);
+        $this->purgeFeedCache();
         return ['success' => true, 'message' => 'O‘chirildi'];
+    }
+
+    /** Feed keshini yangilaydi (kontent o'zgarganda). */
+    private function purgeFeedCache() {
+        if (class_exists('HttpCache')) {
+            HttpCache::purge('reelfeed');
+            HttpCache::purge('reeltotal');
+        }
     }
 
     /**
@@ -1611,6 +1691,7 @@ class Reels {
             : null;
 
         $this->db()->update('reels', $data, 'id = ?', [(int) $reelId]);
+        $this->purgeFeedCache();
 
         // Sayt ichidagi bildirishnoma (Telegram xabaridan tashqari).
         try {

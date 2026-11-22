@@ -30,25 +30,31 @@ if ($perPage <= 0) {
 }
 $perPage = min(60, max(1, $perPage > 0 ? $perPage : CATALOG_PAGE_SIZE));
 
+$sort = in_array($sort, ['new', 'popular', 'rating', 'az'], true) ? $sort : 'new';
+$rawSeed = max(0, inputInt('seed', 0));
+$bucket  = HttpCache::seedBucket($rawSeed);
+
 $opt = [
     'category_slug' => $category !== '' ? $category : null,
     'genre_id'      => $genreId > 0 ? $genreId : null,
     'search'        => $search !== '' ? $search : null,
-    'sort'          => in_array($sort, ['new', 'popular', 'rating', 'az'], true) ? $sort : 'new',
+    'sort'          => $sort,
     'limit'         => $perPage,
     'offset'        => ($page - 1) * $perPage,
     // Har yuklanishda tartib yangilanadi (RAND(seed)). Faqat "new" tartibda
-    // qo'llanadi; aniq saralashlar (popular/rating/az) o'z ma'nosini saqlaydi.
-    'seed'          => max(0, inputInt('seed', 0)),
+    // qo'llanadi. Bucket ichida seed barqaror — aks holda kesh ishlamaydi.
+    'seed'          => HttpCache::seedForBucket($bucket),
 ];
 
-$compute = function () use ($catalog, $opt, $perPage, $page, $userId) {
+// FAQAT KONTENT qismi keshlanadi: kartochkalar, total, sahifa ma'lumoti.
+// Ko'ruvchiga tegishli bayroqlar keyin `viewerFlags()` bilan qo'yiladi.
+$compute = function () use ($catalog, $opt, $perPage, $page) {
     $items = $catalog->listContent($opt);
     $total = $catalog->countContent($opt);
 
     return [
         'items' => array_map(
-            static fn($c) => $catalog->toPublicArray($c, $userId),
+            static fn($c) => $catalog->toPublicArray($c, null),
             $items
         ),
         'page'     => $page,
@@ -64,21 +70,24 @@ $compute = function () use ($catalog, $opt, $perPage, $page, $userId) {
     ];
 };
 
-// Foydalanuvchiga xos bayroqlar (watchlist va h.k.) bo'lmasa — kesh.
-$isAnon = $userId === null && clientUserId() === 0;
-if ($isAnon) {
-    $out = HttpCache::json(
-        HttpCache::key('catalog', [
-            $opt['category_slug'], $opt['genre_id'], $opt['search'],
-            $opt['sort'], $opt['limit'], $opt['offset'], $opt['seed'],
-        ]),
-        60,
-        60,
-        $compute
-    );
-} else {
+// Kontent qismi hamma uchun bitta keshda (foydalanuvchiga bog'liq emas).
+$out = HttpCache::json(
+    HttpCache::key('catalog', [
+        $opt['category_slug'], $opt['genre_id'], $opt['search'],
+        $opt['sort'], $opt['limit'], $opt['offset'], $bucket,
+    ]),
+    60,
+    60,
+    $compute
+);
+
+// Kinolar / animelar / multfilmlar — bitta katalog API'si. Barcha
+// tashrifchilar (login qilganlar ham) bir xil kontent keshidan foydalanadi;
+// faqat ustiga shaxsiy bayroqlar qo'yiladi.
+$viewerId = (int) ($userId ?: clientUserId());
+if ($viewerId > 0) {
+    $out['items'] = $catalog->viewerFlags($out['items'], $viewerId);
     HttpCache::privateNoStore();
-    $out = $compute();
 }
 
 Auth::ok($out);

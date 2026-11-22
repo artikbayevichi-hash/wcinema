@@ -23,6 +23,13 @@ require_once __DIR__ . '/../includes/Reels.php';
 $reels = new Reels();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+/** Yozish amali muvaffaqiyatli bo'lganda kontent-level feed keshini yangilaydi. */
+function reelsWriteOk($data) {
+    HttpCache::purge('reelfeed');
+    HttpCache::purge('reeltotal');
+    ok($data);
+}
+
 // Joriy foydalanuvchi. Sayt brauzerdagi MTProto orqali ishlaganda PHP
 // sessiyasi BO'LMAYDI — shu sabab `tg_me` (wc_tg_me_v1) dan ham
 // aniqlaymiz (like/view/izoh uchun yetarli; admin huquqi bermaydi).
@@ -55,24 +62,61 @@ if ($method === 'GET' || $method === 'HEAD') {
 
     $limit  = inputInt('limit', REEL_PAGE_SIZE);
     $offset = inputInt('offset', 0);
+    $seed   = max(0, inputInt('seed', 0));
+    $userId = (int) $userId;
 
-    // "saved" — foydalanuvchi saqlagan (bookmark) reelslar, Instagram'dagi
-    // "Saqlanganlar" bo'limi uchun. Qolganlari odatdagi oqim.
-    $items = $sort === 'saved'
-        ? $reels->savedGrid($userId, $limit, $offset)
-        : $reels->getFeed($userId, $limit, $offset, $sort, max(0, inputInt('seed', 0)));
+    // Ommaviy oqim (new/top): KONTENT qismi 30 s keshda, ko'ruvchi qismi
+    // (blok filtri + bayroqlar) har so'rovda ustiga qo'yiladi.
+    // mine/saved butunlay shaxsiy — keshlanmaydi.
+    $publicFeed = in_array($sort, ['new', 'top'], true);
+    if ($publicFeed) {
+        $bucket    = Reels::seedBucket($seed);
+        $orderSeed = Reels::seedForBucket($bucket);
+
+        $base = HttpCache::json(
+            HttpCache::key('reelfeed', [$sort, $limit, $offset, $bucket]),
+            30,
+            30,
+            static function () use ($reels, $limit, $offset, $sort, $orderSeed) {
+                return $reels->getFeedBase($limit, $offset, $sort, $orderSeed);
+            }
+        );
+        $totalRow = HttpCache::json(
+            HttpCache::key('reeltotal', [$sort]),
+            30,
+            30,
+            static function () use ($reels, $sort) {
+                return ['n' => $reels->countFeed($sort)];
+            }
+        );
+        $total = (int) ($totalRow['n'] ?? 0);
+        $items = $reels->applyViewer($base, $userId);
+    } else {
+        $items = $sort === 'saved'
+            ? $reels->savedGrid($userId, $limit, $offset)
+            : $reels->getFeed($userId, $limit, $offset, $sort, $seed);
+        $total = $sort === 'saved' ? null : $reels->countFeed($sort);
+    }
+
+    // Keshdagi base itemlari kontent-level, lekin JAVOB shaxsiy bayroqlarni
+    // o'z ichiga oladi — login qilganlarda public kesh boshqaruvini o'chiramiz.
+    if ($userId > 0) {
+        HttpCache::privateNoStore();
+    }
 
     ok([
         'items'      => $items,
         'sort'       => $sort,
         'limit'      => $limit,
         'offset'     => $offset,
-        'has_more'   => count($items) === $limit,
-        'total'      => $sort === 'saved' ? null : $reels->countFeed($sort),
+        'has_more'   => $total !== null
+            ? (($offset + count($items)) < $total)
+            : (count($items) === $limit),
+        'total'      => $total,
         // Ko'ruvchining haqiqiy (DB) id'si. Mijoz `tg_me` (Telegram id)
         // orqali keladi, lekin `author.id` — DB id. "O'chirish" tugmasini
         // to'g'ri ko'rsatish uchun shu ikkisini solishtirish kerak.
-        'viewer_id'  => $userId ? (int) $userId : 0,
+        'viewer_id'  => $userId,
         'my_stats'   => $userId ? $reels->authorStats($userId) : null,
     ]);
 }
@@ -103,7 +147,7 @@ switch ($action) {
         if (!$r['success']) {
             fail($r['message'], 404);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // ---------------------------------------------------------------- save
@@ -116,7 +160,7 @@ switch ($action) {
         if (!$r['success']) {
             fail($r['message'], 404);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // --------------------------------------------------------------- repost
@@ -129,7 +173,7 @@ switch ($action) {
         if (!$r['success']) {
             fail($r['message'], 404);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // --------------------------------------------------------------- follow
@@ -142,7 +186,7 @@ switch ($action) {
         if (!$r['success']) {
             fail($r['message'], 400);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // ---------------------------------------------------------------- view
@@ -155,7 +199,7 @@ switch ($action) {
             // hozircha ruxsat berilmagan. stream.php ham shu sabab 403 qaytaradi.
             fail($r['message'], 403);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // ---------------------------------------------------------------- delete
@@ -167,7 +211,7 @@ switch ($action) {
         if (!$r['success']) {
             fail($r['message'], 403);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // ------------------------------------------------------------- comment
@@ -180,7 +224,7 @@ switch ($action) {
         if (!$r['success']) {
             fail($r['message'], 400);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // ------------------------------------------------------- comment_delete
@@ -194,7 +238,7 @@ switch ($action) {
         if (!$r['success']) {
             fail($r['message'], 403);
         }
-        ok($r);
+        reelsWriteOk($r);
     }
 
     // ---------------------------------------------------------------- share
@@ -208,7 +252,7 @@ switch ($action) {
             fail('Reels topilmadi', 404);
         }
         $reels->addShare($id);
-        ok([
+        reelsWriteOk([
             'message' => 'Ulashildi',
             'url'     => SITE_URL . '/reels.php?reel=' . (int) $id,
             'share_to' => 'https://t.me/share/url?url='

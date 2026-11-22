@@ -35,6 +35,28 @@ class HttpCache
         return $d;
     }
 
+    /**
+     * Tasodifiy seed'ni kesh uchun chekli bucket'ga tushiradi.
+     *
+     * Har sahifa ochilishda yangi random seed yaratilsa, kesh kaliti ham
+     * har safar yangi bo'ladi — kesh hech qachon ishlamaydi. Bucketlash
+     * natijasida bir guruh tashrifchilar bitta kesh yozuvini ulashadi.
+     */
+    public static function seedBucket($seed, $size = 30000000): int
+    {
+        $seed = (int) $seed;
+        $size = max(1, (int) $size);
+        return $seed <= 0 ? 0 : intdiv($seed, $size) + 1;
+    }
+
+    /** Bucket uchun barqaror RAND() qiymati (sahifalar bir xil tartibda). */
+    public static function seedForBucket($bucket, $size = 30000000): int
+    {
+        $bucket = (int) $bucket;
+        $size   = max(1, (int) $size);
+        return $bucket <= 0 ? 0 : ($bucket - 1) * $size + 12345;
+    }
+
     /** Kalitni xavfsiz fayl nomiga aylantiradi. */
     public static function key(string $name, array $parts = []): string
     {
@@ -132,6 +154,13 @@ class HttpCache
     public static function privateNoStore(): void
     {
         if (!headers_sent()) {
+            // Keshdagi kontent-level base o'qilganda HttpCache::json() public
+            // header'lar qo'yib qo'ygan bo'ladi. Ular o'chirilmasa javob
+            // ikkita ziddiyatli Cache-Control bilan ketadi (CDN noto'g'ri
+            // keshlab qo'yishi mumkin).
+            header_remove('Cache-Control');
+            header_remove('X-WC-Cache');
+            header_remove('X-WC-TTL');
             header('Cache-Control: private, no-store, max-age=0');
             header('X-WC-Cache: BYPASS');
         }
