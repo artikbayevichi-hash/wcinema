@@ -34,26 +34,21 @@ body.tgl-page {
   overflow-x: hidden;
 }
 
-/* Day (oq fon + qora elementlar) — <html class="tgl-day">
-   Eslatma: oq-qora paletrada asosiy rang QORA bo'lishi kerak. Aks holda
-   oq tugma/oq matn oq fonda butunlay yo'q bo'lib ketadi. */
+/* Day — sayt bilan bir xil qora fon + oq elementlar.
+   Oq fonda oq logotip/sarlavha ko'rinmay qolgani uchun kunduzgi rejim
+   ham qora fonli: logos har doim oq, matn har doim oq bo'ladi. */
 html.tgl-day body.tgl-page {
-  --tgl-primary:      #000000;
-  --tgl-primary-rgb:  0, 0, 0;
-  --tgl-surface:      #ffffff;
-  --tgl-bg:           #ffffff;
-  --tgl-text:         #000000;
-  --tgl-text2:        #666666;
-  --tgl-border:       #d0d0d0;
-  --tgl-danger:       #000000;
-  --tgl-light:        rgba(var(--tgl-primary-rgb), .08);
-  --tgl-light-filled: rgba(var(--tgl-primary-rgb), .10);
+  --tgl-primary:      #ffffff;
+  --tgl-primary-rgb:  255, 255, 255;
+  --tgl-surface:      #181818;
+  --tgl-bg:           #000000;
+  --tgl-text:         #ffffff;
+  --tgl-text2:        #aaaaaa;
+  --tgl-border:       #2a2a2a;
+  --tgl-danger:       #ffffff;
+  --tgl-light:        rgba(var(--tgl-primary-rgb), .14);
+  --tgl-light-filled: rgba(var(--tgl-primary-rgb), .16);
 }
-/* Oq fonda qora tugma ichidagi matn oq bo'lishi shart. */
-html.tgl-day .tgl-btn-primary { color: #ffffff; }
-html.tgl-day .tgl-noscript { background: rgba(0, 0, 0, .08); color: #000000; }
-/* Logo oq tasvir — oq fonda yo'q bo'lib ketmasligi uchun teskari rang. */
-html.tgl-day .tgl-logo-svg { filter: invert(1); }
 
 #tgLogin [hidden],
 .tgl-root [hidden] { display: none !important; }
@@ -70,7 +65,7 @@ html.tgl-day .tgl-logo-svg { filter: invert(1); }
 }
 html.tgl-day .tgl-bg {
   background:
-    radial-gradient(1200px 820px at 50% -20%, #ffffff 0%, #ffffff 55%, #ffffff 100%);
+    radial-gradient(1200px 820px at 50% -20%, #141414 0%, #0a0a0a 55%, #000000 100%);
 }
 .tgl-blob {
   position: absolute;
@@ -84,9 +79,9 @@ html.tgl-day .tgl-bg {
 .tgl-blob.b3 { width: 420px; height: 420px; background: #ffffff; top: 42%; left: 58%; animation: tglFloat3 30s ease-in-out infinite; }
 
 html.tgl-day .tgl-blob { opacity: .5; filter: blur(90px); }
-html.tgl-day .tgl-blob.b1 { background: #f2f2f2; }
-html.tgl-day .tgl-blob.b2 { background: #f2f2f2; }
-html.tgl-day .tgl-blob.b3 { background: #f2f2f2; }
+html.tgl-day .tgl-blob.b1 { background: #ffffff; }
+html.tgl-day .tgl-blob.b2 { background: #ffffff; }
+html.tgl-day .tgl-blob.b3 { background: #ffffff; }
 
 @keyframes tglFloat1 {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -153,7 +148,6 @@ html.tgl-day .tgl-blob.b3 { background: #f2f2f2; }
   box-shadow: 0 18px 50px rgba(0, 0, 0, .38);
   animation: tglCardIn .32s cubic-bezier(.4, 0, .2, 1);
 }
-html.tgl-day .tgl-card { box-shadow: 0 18px 50px rgba(47, 47, 47, .16); }
 @keyframes tglCardIn {
   from { opacity: 0; transform: translateY(14px) scale(.99); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
