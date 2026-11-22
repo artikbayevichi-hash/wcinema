@@ -261,6 +261,18 @@ function wc_logo_img($alt = '', $attrs = '') {
         <!-- Bildirishnomalar -->
         <?php echo ig_item('notifications.php', 'notifications', 'bell', 'Bildirishnomalar', $NAV_ACTIVE); ?>
 
+        <!-- Takliflar yoki shikoyat qilish: oynani feedback.js ochadi -->
+        <button class="ig-item" type="button" data-feedback-open
+                aria-haspopup="dialog" aria-controls="feedbackDialog" title="Taklif yoki shikoyat">
+            <span class="ig-ico"><?php echo ig_svg('send'); ?></span>
+            <span class="ig-txt">Taklif yoki shikoyat</span>
+        </button>
+        <a class="ig-item ig-feedback-link" href="feedback.php"
+           title="Murojaatlarim" aria-label="Murojaatlarim">
+            <span class="ig-ico"><?php echo ig_svg('bookmark'); ?></span>
+            <span class="ig-txt">Murojaatlarim</span>
+        </a>
+
         <?php if ($igIsAdmin): ?>
             <div class="ig-sep"></div>
             <div class="ig-group">
@@ -309,6 +321,8 @@ function wc_logo_img($alt = '', $attrs = '') {
             </div>
         </div>
         <?php endif; ?>
+        <button class="ig-mobar-btn" type="button" data-feedback-open
+                aria-haspopup="dialog" aria-controls="feedbackDialog" aria-label="Taklif yoki shikoyat"><?php echo ig_svg('send'); ?></button>
         <a class="ig-mobar-btn" href="notifications.php" aria-label="Bildirishnomalar"><?php echo ig_svg('bell'); ?></a>
         <button class="ig-mobar-btn" id="igMoreBtnM" type="button" aria-label="Sozlamalar"><?php echo ig_svg('settings'); ?></button>
     </div>
@@ -473,6 +487,16 @@ function wc_logo_img($alt = '', $attrs = '') {
 
             <div class="ig-set-group">
                 <div class="ig-set-label">Aloqa</div>
+                <button class="ig-set-row" type="button" data-feedback-open aria-haspopup="dialog" aria-controls="feedbackDialog">
+                    <span class="ig-set-ico"><?php echo ig_svg('send'); ?></span>
+                    <span class="ig-set-txt">Taklif yoki shikoyat yuborish</span>
+                    <span class="ig-set-arrow">&rsaquo;</span>
+                </button>
+                <a class="ig-set-row" href="feedback.php">
+                    <span class="ig-set-ico"><?php echo ig_svg('bookmark'); ?></span>
+                    <span class="ig-set-txt">Murojaatlarim</span>
+                    <span class="ig-set-arrow">&rsaquo;</span>
+                </a>
                 <a class="ig-set-row" href="https://t.me/<?php echo htmlspecialchars(TELEGRAM_BOT_USERNAME); ?>" target="_blank" rel="noopener">
                     <span class="ig-set-ico"><?php echo ig_svg('globe'); ?></span>
                     <span class="ig-set-txt">Bot&#8217;ga o&#8217;tish</span>
@@ -491,6 +515,34 @@ function wc_logo_img($alt = '', $attrs = '') {
 
         </div>
     </div>
+</div>
+
+<!-- ============================== Taklif / shikoyat oynasi ============================== -->
+<div class="feedback-dialog" id="feedbackDialog" role="dialog" aria-modal="true"
+     aria-labelledby="feedbackTitle" hidden>
+    <div class="feedback-backdrop" data-feedback-close></div>
+    <section class="feedback-panel" tabindex="-1">
+        <button class="feedback-x" type="button" data-feedback-close aria-label="Yopish">&times;</button>
+        <div class="feedback-kicker">W CINEMA · ALOQA</div>
+        <h2 id="feedbackTitle">Takliflar yoki shikoyat qilish</h2>
+        <p class="feedback-lead">Fikringizni yozing — admin o‘qib, javob yozadi. Javob kelganda saytda bildirishnoma olasiz.</p>
+
+        <form id="feedbackForm">
+            <div class="feedback-kind" role="radiogroup" aria-label="Xabar turi">
+                <label><input type="radio" name="feedbackType" value="suggestion" checked><span>Taklif</span></label>
+                <label><input type="radio" name="feedbackType" value="complaint"><span>Shikoyat</span></label>
+            </div>
+            <label class="feedback-label" for="feedbackMessage">Xabaringiz</label>
+            <textarea id="feedbackMessage" name="feedbackMessage" maxlength="1000" rows="6"
+                      placeholder="Nima yoqmayapti yoki nima yaxshilashni taklif qilasiz?"></textarea>
+            <div class="feedback-foot">
+                <span class="feedback-count"><b id="feedbackCount">0</b>/1000</span>
+                <a href="feedback.php" class="feedback-mine">Murojaatlarim</a>
+                <button class="feedback-send" id="feedbackSend" type="submit">Yuborish</button>
+            </div>
+            <p class="feedback-status" id="feedbackStatus" role="status" aria-live="polite"></p>
+        </form>
+    </section>
 </div>
 
 <!-- ============================== Bildirishnomalar oynasi (flyout) ============================== -->
@@ -1132,4 +1184,5 @@ window.addEventListener('DOMContentLoaded', function () {
 <script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/notifications.js') ?: 1; ?>"></script>
 <script src="assets/js/dm-badge.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/dm-badge.js') ?: 1; ?>"></script>
 <script src="assets/js/donate.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/donate.js') ?: 1; ?>"></script>
+<script src="assets/js/feedback.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/feedback.js') ?: 1; ?>"></script>
 <?php /* Eski `tv.js` spatial navigatsiyasi `tv-mode.js` ichiga ko'chirildi. */ ?>

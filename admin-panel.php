@@ -61,6 +61,7 @@ $logV = @filemtime(__DIR__ . '/assets/img/logo.png') ?: 1;
         <button class="nav-item" data-view="reels"><span class="ic">📱</span> Reels</button>
         <button class="nav-item" data-view="users"><span class="ic">👥</span> Foydalanuvchilar</button>
         <button class="nav-item" data-view="notify"><span class="ic">🔔</span> Bildirishnoma</button>
+        <a class="nav-item" href="admin-feedback.php"><span class="ic">✉️</span> Taklif va shikoyatlar</a>
         <button class="nav-item" data-view="stats"><span class="ic">📈</span> Statistika</button>
         <button class="nav-item" data-view="settings"><span class="ic">⚙️</span> Sozlamalar</button>
         <button class="nav-item" data-view="logs"><span class="ic">🧾</span> Loglar</button>

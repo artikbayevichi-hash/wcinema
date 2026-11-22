@@ -108,6 +108,11 @@ try {
             <h2>Bildirishnoma</h2>
             <p>Sayt ichi + Telegram orqali xabar yuborish</p>
         </a>
+        <a class="card" href="admin-feedback.php">
+            <span class="ic">✉️</span>
+            <h2>Taklif va shikoyatlar</h2>
+            <p>Foydalanuvchi xabarlari · javob yozish · bildirishnoma</p>
+        </a>
     </div>
 
     <div class="panel" style="margin-top:18px">

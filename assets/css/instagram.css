@@ -1031,3 +1031,94 @@ body.donate-open { overflow: hidden; }
     .donate-panel { width: 100%; padding: 28px 20px calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 24px 24px 18px 18px; }
     .donate-panel h2 { font-size: 21px; }
 }
+
+/* ==========================================================================
+   Taklif / shikoyat oynasi va "Murojaatlarim" sahifasi
+   ========================================================================== */
+button.ig-set-row {
+    width: 100%; background: transparent; border: 0; color: inherit;
+    text-align: left; font: inherit; cursor: pointer;
+}
+
+.feedback-dialog {
+    position: fixed; inset: 0; z-index: 340;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.feedback-dialog[hidden] { display: none; }
+.feedback-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.66); backdrop-filter: blur(4px); }
+.feedback-panel {
+    position: relative; width: min(480px, 100%); max-height: 90vh; overflow: auto;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 18px;
+    padding: 28px 26px 24px; box-shadow: 0 24px 70px rgba(0,0,0,.5);
+    animation: fbIn .18s ease-out;
+}
+@keyframes fbIn { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+.feedback-x {
+    position: absolute; right: 14px; top: 12px; width: 34px; height: 34px;
+    border: 0; border-radius: 50%; background: var(--card-2); color: var(--text);
+    font-size: 22px; line-height: 1; cursor: pointer;
+}
+.feedback-x:hover { background: #333a49; }
+.feedback-kicker { font-size: 10.5px; font-weight: 800; letter-spacing: 1.4px; color: var(--accent); }
+.feedback-panel h2 { margin: 8px 0 6px; font-size: 22px; line-height: 1.25; }
+.feedback-lead { margin: 0 0 18px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.feedback-kind { display: flex; gap: 8px; margin-bottom: 16px; }
+.feedback-kind label { flex: 1; cursor: pointer; }
+.feedback-kind input { position: absolute; opacity: 0; width: 0; height: 0; }
+.feedback-kind span {
+    display: block; padding: 10px 12px; text-align: center; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card-2);
+    font-size: 13.5px; font-weight: 700; color: var(--muted);
+}
+.feedback-kind input:checked + span { border-color: var(--accent); color: #fff; background: rgba(42,171,238,.16); }
+.feedback-kind input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.feedback-label { display: block; margin-bottom: 7px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.feedback-panel textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 130px;
+    padding: 12px 13px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--card-2); color: var(--text); font: inherit; font-size: 14px; line-height: 1.5;
+}
+.feedback-panel textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.feedback-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.feedback-count { font-size: 12px; color: var(--muted); }
+.feedback-mine { margin-left: auto; font-size: 12.5px; color: var(--accent); text-decoration: none; }
+.feedback-mine:hover { text-decoration: underline; }
+.feedback-send {
+    min-height: 40px; padding: 0 20px; border: 0; border-radius: 10px;
+    background: var(--accent); color: #fff; font-size: 13.5px; font-weight: 800; cursor: pointer;
+}
+.feedback-send:disabled { opacity: .6; cursor: wait; }
+.feedback-status { margin: 12px 0 0; min-height: 18px; font-size: 12.5px; line-height: 1.5; }
+.feedback-status.is-ok { color: #4ade80; }
+.feedback-status.is-error { color: #ff7b7b; }
+.feedback-panel :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.fb-lead { margin: 0 0 18px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.fb-list { display: grid; gap: 12px; max-width: 760px; }
+.fb-item {
+    padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px;
+    background: var(--card-2);
+}
+.fb-item.is-new { border-color: var(--accent); }
+.fb-item-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.fb-kind {
+    padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 800;
+    background: rgba(42,171,238,.16); color: var(--accent);
+}
+.fb-kind.is-complaint { background: rgba(255,92,92,.14); color: #ff8181; }
+.fb-state { font-size: 11.5px; color: var(--muted); }
+.fb-when { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.fb-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fb-reply {
+    margin-top: 13px; padding: 12px 14px; border-radius: 10px;
+    border-left: 3px solid var(--accent); background: rgba(42,171,238,.08);
+}
+.fb-reply-h { font-size: 11.5px; font-weight: 800; color: var(--accent); margin-bottom: 6px; }
+.fb-reply-h span { margin-left: 8px; font-weight: 500; color: var(--muted); }
+.fb-reply-text { font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+    .feedback-dialog { align-items: flex-end; padding: 8px; }
+    .feedback-panel { width: 100%; max-height: 92vh; padding: 26px 18px 18px; border-radius: 20px 20px 14px 14px; }
+    .feedback-foot { flex-wrap: wrap; }
+}
