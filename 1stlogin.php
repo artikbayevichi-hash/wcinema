@@ -73,7 +73,7 @@ $siteName  = SITE_NAME;
            uchun barcha urg'ular qora, ikkilamchi matn kulrang. */
         html.tgl-day body.tgl-page { --fst-accent: #000000; }
         html.tgl-day .fst-logo {
-            background: rgba(0, 0, 0, .08);
+            background: #ffffff;
             box-shadow: 0 18px 50px rgba(0, 0, 0, .16);
         }
         html.tgl-day .fst-logo img { filter: invert(1); }
