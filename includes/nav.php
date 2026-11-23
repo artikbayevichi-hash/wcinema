@@ -1190,3 +1190,7 @@ window.addEventListener('DOMContentLoaded', function () {
 <script defer src="assets/js/site-banner.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/site-banner.js') ?: 1; ?>"></script>
 <?php endif; ?>
 <?php /* Eski `tv.js` spatial navigatsiyasi `tv-mode.js` ichiga ko'chirildi. */ ?>
+<?php /* Doimiy MTProto ulanishi: barcha foydalanuvchi sahifalarida bitta klient
+        tirik turadi. Ikki marta yuklanishning oldini `tg-persist.php` ichidagi
+        DOMContentLoaded tekshiruvi oladi (asosiy sahifalarda TgStream bor). */ ?>
+<?php require __DIR__ . '/tg-persist.php'; ?>
