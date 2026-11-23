@@ -247,10 +247,19 @@
     return Promise.resolve(nearby.length);
   }
 
-  /** Keyingi qismni oldindan tayyorlab qo'yadi (baytlari bilan). */
+  /**
+   * Keyingi qismni oldindan tayyorlab qo'yadi (faqat BOSHI + moov dumi).
+   *
+   * Siljiydigan oyna: 2-qism ko'rilayotganda 3-qism, 3-qismga o'tgach
+   * 4-qism tayyorlanadi. `3 s ko'rgach` degan eski cheklov olib tashlandi:
+   * endi yangi qismning BIRINCHI KADRI chiqishi bilanoq navbatdagi qism
+   * fon rejimida olinadi — keyingi bosish "seek" kabi tez bo'ladi.
+   *
+   * @param {boolean} force  qism almashish jarayonida ham chaqirishga ruxsat
+   */
   var nextWarmDone = {};   // "channel/post" -> true
-  function warmNextEpisode() {
-    if (S.switching) return;
+  function warmNextEpisode(force) {
+    if (S.switching && !force) return;
     var i = epIndex(S.selectedId);
     var nx = i >= 0 ? S.episodes[i + 1] : null;
     if (!nx || !nx.tg_channel || !nx.tg_post) return;
@@ -797,6 +806,10 @@
         }
         wireVideo(tv);
         prefetchAdjacent();
+        // Birinchi kadr chiqishi bilan keyingi qismning BOSHINI tayyorlaymiz.
+        // 3 soniya kutmaymiz — bu anime qismlarida "keyingi" bosilganda
+        // video yangi Telegram so'rovini kutmaydi.
+        onVideoReady(function () { warmNextEpisode(); });
         if (typeof pb.onVideo === 'function') { try { pb.onVideo(tv); } catch (ex) {} }
       }
     });
@@ -2885,8 +2898,13 @@
     syncEpisodeTitle();
     syncActiveEpisode(epId);
 
-    // Keyingi qism ma'lumotini oldindan tayyorlash (faqat tarmoq, DOM yo'q).
-    onVideoReady(prefetchAdjacent);
+    // Siljiydigan oyna: S.selectedId allaqachon YANGI qism (N+1). Shu qism
+    // ochilgan zahoti uning keyingisi (N+2) ham tayyorlanadi — 3 s kutish yo'q.
+    // `force` kerak: `switchEpisode` hali S.switching=true bo'lganda chaqiramiz.
+    onVideoReady(function () {
+      prefetchAdjacent();
+      warmNextEpisode(true);
+    });
     mountPlayer();
   }
 
