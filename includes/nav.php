@@ -1181,6 +1181,10 @@ window.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <script src="assets/js/tv-mode.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/tv-mode.js') ?: 1; ?>"></script>
+<?php /* Bitta badge so'rovi: notifications + DM. 15/30 s lik ikki poller
+        o'rniga bitta so'rov va kesh; video o'ynayotganda deyarli so'rov yo'q.
+        notifications.js / dm-badge.js dan OLDIN yuklanishi shart. */ ?>
+<script src="assets/js/badge-poll.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/badge-poll.js') ?: 1; ?>"></script>
 <script src="assets/js/notifications.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/notifications.js') ?: 1; ?>"></script>
 <script src="assets/js/dm-badge.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/dm-badge.js') ?: 1; ?>"></script>
 <script src="assets/js/donate.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/donate.js') ?: 1; ?>"></script>

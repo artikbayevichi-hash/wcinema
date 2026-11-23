@@ -543,6 +543,8 @@
     if (!a || a.type !== 'dm') return;
     dmPost({ action: 'read', peer_id: a.peer.id }).then(function (d) {
       if (d && typeof d.unread === 'number') updateChatBadge(d.unread);
+      // Brauzerning 30 s lik private keshida eski son qolmasligi uchun.
+      if (window.WCBadges) window.WCBadges.invalidate();
     }).catch(function () {});
   }
 

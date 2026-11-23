@@ -222,11 +222,17 @@
     if (!fresh.length || !PANEL.hidden) return;  // oyna ochiq bo'lsa ustiga chiqarmaymiz
     fresh.slice(0, 3).reverse().forEach(showToast);
   }
+  function applyBadges(d) {
+    if (!d || typeof d.unread === 'undefined') return;
+    setBadge(d.unread);
+    handleRecent(d.recent || []);
+  }
   function refreshCount() {
-    apiGet('api/notifications.php?action=count').then(function (d) {
-      if (!d || typeof d.unread === 'undefined') return;
-      setBadge(d.unread);
-      handleRecent(d.recent || []);
+    // Asosiy yo'l: badge-poll.js bitta so'rovda count + DM + recent olib
+    // beradi. U yo'q bo'lgan sahifalarda eski zaxira ishlayveradi.
+    if (global.WCBadges) return global.WCBadges.refresh();
+    return apiGet('api/notifications.php?action=count').then(function (d) {
+      applyBadges(d);
     }).catch(function () {});
   }
 
@@ -319,7 +325,11 @@
 
   function clearUnread() {
     setBadge(0);
-    apiPost('action=read_all').catch(function () {});
+    apiPost('action=read_all').then(function () {
+      // Server keshini yozuv o'chirgan, lekin brauzer 30 s lik private keshda
+      // eski sonni ushlab turmasligi uchun keshdan o'tkazib yuboramiz.
+      if (global.WCBadges) global.WCBadges.invalidate();
+    }).catch(function () {});
   }
 
   // ----------------------------------------------------------------- panel
@@ -347,7 +357,14 @@
   function init() {
     bindBells();
     setBadge(0);
-    refreshCount();
+    if (global.WCBadges) {
+      // Interval yo'q: badge-poll o'zi vaqtini, ko'rinishini va keshini
+      // boshqaradi. Yangi kelgan ma'lumot kelganda badge yangilanadi.
+      global.WCBadges.subscribe(applyBadges);
+      if (global.WCBadges.state()) applyBadges(global.WCBadges.state());
+    } else {
+      refreshCount();
+    }
 
     if (CLOSE) CLOSE.addEventListener('click', close);
     if (MARK) MARK.addEventListener('click', function () {
@@ -367,19 +384,23 @@
       if (!row) return;
       row.classList.remove('unread');
       var id = row.getAttribute('data-id');
-      if (id) apiPost('action=read&id=' + encodeURIComponent(id)).catch(function () {});
+      if (id) apiPost('action=read&id=' + encodeURIComponent(id)).then(function () {
+        if (global.WCBadges) global.WCBadges.invalidate();
+      }).catch(function () {});
     });
 
-    // Live yangilanish: sahifa ko'rinib turganda davriy ravishda tekshiramiz.
-    setInterval(function () {
-      if (document.visibilityState === 'visible') refreshCount();
-    }, 30000);
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') refreshCount();
-    });
-    window.addEventListener('focus', refreshCount);
-    // Izoh yozilgach (tg-comments.js) darhol yangilash uchun hodisa.
-    window.addEventListener('wc:ntf', refreshCount);
+    // Zaxira rejim: badge-poll.js yuklanmagan sahifalarda eski poller.
+    // Asosiy rejimda bularning HECH BIRI ishlamaydi (qo'shimcha so'rov yo'q).
+    if (!global.WCBadges) {
+      setInterval(function () {
+        if (document.visibilityState === 'visible') refreshCount();
+      }, 30000);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') refreshCount();
+      });
+      window.addEventListener('focus', refreshCount);
+      window.addEventListener('wc:ntf', refreshCount);
+    }
   }
 
   // Boshqa sahifalar (masalan, notifications.php to'liq sahifasi) uchun.

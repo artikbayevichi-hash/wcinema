@@ -12,6 +12,7 @@
 
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/TelegramBot.php';
+require_once __DIR__ . '/Badges.php';
 
 class Auth {
     private $db;
@@ -355,6 +356,7 @@ class Auth {
             'message'     => 'Kino, anime va multfilmlar katalogiga xush kelibsiz.',
             'target_url'  => SITE_URL . '/index.php',
         ]);
+        Badges::forget((int) $newId);   // yangi foydalanuvchi badge keshining eskirishi
 
         return (int) $newId;
     }

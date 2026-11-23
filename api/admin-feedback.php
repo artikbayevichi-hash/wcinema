@@ -110,8 +110,8 @@ if ($action === 'reply') {
         [$reply, $adminId > 0 ? $adminId : null, $id]
     );
 
-    // Foydalanuvchiga bildirishnoma: qo'ng'iroqcha 30 s ichida yoki sahifa
-    // ochilganda yangilanadi (notifications.js count poll).
+    // Foydalanuvchiga bildirishnoma: Notifications::add() badge keshini
+    // darhol o'chiradi — 30 s li so'rov kutish shart emas.
     $ntf = new Notifications($db);
     $preview = function_exists('mb_substr') ? mb_substr($reply, 0, 300) : substr($reply, 0, 300);
     $ntf->add((int) $row['user_id'], 'reply', [

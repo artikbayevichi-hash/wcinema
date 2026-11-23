@@ -5,7 +5,10 @@
    ko'rsatadi. Chat sahifasi ochiq bo'lmasa ham ishlaydi (butun sayt),
    shuning uchun foydalanuvchi xabarni qayerda bo'lsa ham ko'radi.
 
-   Manba: api/dm.php?action=unread (server DM). Telegram MTProto emas.
+   Endi o'zining 15 s lik `api/dm.php?action=unread` so'rovi YO'Q:
+   `badge-poll.js` bitta `api/badges.php` so'rovida DM sonini ham olib,
+   bu yerga `WCBadges.subscribe()` orqali beradi. Eski poller faqat
+   badge-poll yuklanmagan sahifalarda zaxira sifatida qoladi.
    ========================================================================== */
 (function () {
   'use strict';
@@ -33,6 +36,7 @@
     }
   }
 
+  // Zaxira (badge-poll yo'q bo'lsa).
   function poll() {
     var qs = 'action=unread';
     var raw = meRaw();
@@ -46,9 +50,18 @@
   }
 
   function start() {
+    if (window.WCBadges) {
+      window.WCBadges.subscribe(function (d) {
+        if (d && typeof d.dm !== 'undefined') setBadge(d.dm);
+      });
+      if (window.WCBadges.state() && typeof window.WCBadges.state().dm !== 'undefined') {
+        setBadge(window.WCBadges.state().dm);
+      }
+      return;
+    }
+    // Zaxira rejim: eski mustaqil poller.
     poll();
     setInterval(poll, INTERVAL);
-    // Sahifa ko'rinadigan bo'lganda darhol yangilaymiz (orqaga qaytganda).
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) poll();
     });

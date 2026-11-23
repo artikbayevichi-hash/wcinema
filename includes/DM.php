@@ -17,6 +17,7 @@
 
 require_once __DIR__ . '/Uploader.php';
 require_once __DIR__ . '/Blocks.php';
+require_once __DIR__ . '/Badges.php';
 
 class DM
 {
@@ -369,6 +370,7 @@ class DM
               WHERE recipient_id = ? AND sender_id = ? AND read_at IS NULL",
             [date('Y-m-d H:i:s'), $me, $peer]
         );
+        Badges::forget($me);
         return true;
     }
 
@@ -709,6 +711,9 @@ class DM
     /** Ikkala tomonga ham kontakt yozuvi (ro'yxat tartibi uchun). */
     private function touchContacts($a, $b)
     {
+        // Yangi xabar qabul qiluvchining o'qilmagan sonini o'zgartiradi —
+        // uning badge keshini darhol o'chiramiz (TTL kutmaymiz).
+        Badges::forget((int) $b);
         foreach ([[$a, $b], [$b, $a]] as $pair) {
             $this->db->query(
                 "INSERT INTO chat_contacts (owner_id, peer_id, last_at)

@@ -12,6 +12,7 @@
 // Migration hali ishga tushirilmagan bo'lsa ham klass ishlashda davom etadi:
 // hasExtended() ustunlarni aniqlaydi va kerak bo'lsa oddiy rejimga o'tadi.
 // ============================================================================
+require_once __DIR__ . '/Badges.php';
 
 class Notifications {
     /** @var Database */
@@ -159,7 +160,11 @@ class Notifications {
             return 0;
         }
 
-        return (int) $this->db->insert('notifications', $row);
+        $id = (int) $this->db->insert('notifications', $row);
+        if ($id > 0) {
+            Badges::forget($userId);   // badge keshini darhol eskitamiz
+        }
+        return $id;
     }
 
     // -------------------------------------------------------- hodisa yordamchilari
@@ -254,7 +259,7 @@ class Notifications {
      *
      * @return array ['items'=>[], 'unread'=>int, 'has_more'=>bool]
      */
-    public function listFor($userId, $limit = 30, $offset = 0) {
+    public function listFor($userId, $limit = 30, $offset = 0, $withCount = true) {
         $userId = (int) $userId;
         $limit  = max(1, min(60, (int) $limit));
         $offset = max(0, (int) $offset);
@@ -354,7 +359,8 @@ class Notifications {
 
         return [
             'items'   => $items,
-            'unread'  => $this->unreadCount($userId),
+            // `badges.php` allaqachon sanoqni olgan — ikkinchi COUNT kerak emas.
+            'unread'  => $withCount ? $this->unreadCount($userId) : 0,
             'has_more'=> $hasMore,
         ];
     }
@@ -420,7 +426,11 @@ class Notifications {
         if ($this->hasExtended()) {
             $data['read_at'] = date('Y-m-d H:i:s');
         }
-        return (bool) $this->db->update('notifications', $data, 'id = ? AND user_id = ?', [$id, $userId]);
+        $done = (bool) $this->db->update('notifications', $data, 'id = ? AND user_id = ?', [$id, $userId]);
+        if ($done) {
+            Badges::forget($userId);
+        }
+        return $done;
     }
 
     public function markAllRead($userId) {
@@ -432,6 +442,10 @@ class Notifications {
         if ($this->hasExtended()) {
             $data['read_at'] = date('Y-m-d H:i:s');
         }
-        return (bool) $this->db->update('notifications', $data, 'user_id = ? AND is_read = 0', [$userId]);
+        $done = (bool) $this->db->update('notifications', $data, 'user_id = ? AND is_read = 0', [$userId]);
+        if ($done) {
+            Badges::forget($userId);
+        }
+        return $done;
     }
 }

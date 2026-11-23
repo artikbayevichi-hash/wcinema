@@ -15,6 +15,7 @@
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/Cache.php';
 require_once __DIR__ . '/TgMeta.php';   // Telegram thumb poster (fayl yuklanmaydi)
+require_once __DIR__ . '/Badges.php';
 
 class Catalog {
 
@@ -1221,6 +1222,7 @@ class Catalog {
                 'message'    => $item['title'],
                 'target_url' => SITE_URL . '/watch.php?c=' . (int) $contentId,
             ]);
+            Badges::forget((int) $item['user_id']);   // muallifning badge'i darhol yangilanadi
         }
 
         return $this->voteResult($contentId, $userId);
