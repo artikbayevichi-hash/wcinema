@@ -194,6 +194,12 @@
   //   video baytlari sayt serveridan O'TMAYDI.
   var fastClientPromise = null;
 
+  // Ulanish faqat sahifa ochiq bo'lganda tirik. Tab yashirinsa (almashish)
+  // UZILMAYDI — fon video oqimi davom etishi kerak. Faqat `pagehide` da
+  // o'chirilib, `pageshow` da yana yoqiladi: bunda yashirin tab'da ping
+  // yuborilmaydi va bfcache'da eski socket qotib qolmaydi.
+  var siteActive = true;
+
   function fastClient() {
     if (fastClientPromise !== null) return fastClientPromise;
     fastClientPromise = (function () {
@@ -1126,12 +1132,21 @@
   // qilinadi va foydalanuvchi login sahifasiga tushib qoladi. Shuning uchun
   // eski yo'liga o'tishda tez klient ALMASH ib qoldiriladi.
   function closeFastClient() {
+    var pending = fastClientPromise;
     if (S.fast) { try { S.fast.close(); } catch (e) {} }
     S.fast = null;
     // MUHIM: keshdagi promise ham tozalanadi. Aks holda `fastClient()` va
     // `kaFast()` yopilgan klientni qayta-qayta qaytaradi: birinchi fallback'dan
     // keyin BARCHA videolar o'chadi ("ikki videodan keyin ochmaydi" sababi).
     fastClientPromise = null;
+    // Yaratilish jarayoni hali tugamagan bo'lsa, keyinroq kelgan klientni
+    // ham yopamiz — saytga qayta kirganda ikki parallel sessiya
+    // (AUTH_KEY_DUPLICATED) tufayli chiqib ketishining oldini oladi.
+    if (pending && typeof pending.then === 'function') {
+      Promise.resolve(pending).then(function (f) {
+        if (f) { try { f.close(); } catch (e) {} }
+      }, function () {});
+    }
   }
 
   // ============================================== DC ULANISHINI USHLAB TURISH
@@ -1182,6 +1197,7 @@
 
   function kaTick(force) {
     try {
+      if (!siteActive) return;              // sahifadan chiqilgan — ping YO'Q
       if (!force && document.hidden) return;
       if (kaBusy) return;
       kaBusy = true;
@@ -1211,6 +1227,54 @@
     } catch (e) { /* jim */ }
   }
 
+  // ================================ SAYTGA KIRISH / CHIQISH HAYOTIY SIKLI
+  //
+  // Saytga kirganda (yangi yuklanish yoki bfcache'dan qaytish) Telegram
+  // ulanishi DARHOL boshlanadi. Sahifadan chiqib ketganda (`pagehide`)
+  // yopiladi va ping to'xtaydi. Qaytib kirganda (`pageshow`) qayta ochiladi.
+  //
+  // E'tibor: faqat `pagehide` ishlatamiz, `visibilitychange`/`blur` emas —
+  // tab almashganda video fonida o'ynashda davom etishi kerak. Bunday
+  // tab'da `kaTick()` allaqachon `document.hidden` tekshiradi (ping yo'q).
+  var lifecycleBound = false;
+
+  function disconnectSite() {
+    if (!siteActive) return;
+    siteActive = false;
+    try { cancelPrefetch(); } catch (e) {}
+    try { closeFastClient(); } catch (e) {}
+    try { if (S.chan) { S.chan.port1.close(); S.chan = null; } } catch (e) {}
+    // GramJS klientiga tegmaymiz: u faqat login/izohlar uchun ochiladi va
+    // yopish-qayta ochish QR oqimini qayta ishga tushirib yuborardi.
+  }
+
+  function connectSite() {
+    siteActive = true;
+    try { warmFast(); } catch (e) {}
+    try { bindKeepAlive(); } catch (e) {}
+    try { bindSWKeepAlive(); } catch (e) {}
+    // Ulanish tugashini kutmaymiz: `warmFast()` handshake'ni boshlaydi,
+    // `kaWake()` esa SW'ni uyg'otib birinchi pingni yuboradi.
+    try { kaWake(); } catch (e) {}
+    // bfcache'dan qaytganda oqim hali davom etayotgan bo'lsa, yopilgan
+    // SW kanalini yangi provider porti bilan tiklaymiz va tez klientni
+    // qayta bog'laymiz (aks holda o'qish GramJS'ga tushib qolardi).
+    try {
+      if (S.size > 0) {
+        var f = fastClient();
+        if (f) S.fast = f;
+        connect();
+      }
+    } catch (e) {}
+  }
+
+  function bindSiteLifecycle() {
+    if (lifecycleBound) return;
+    lifecycleBound = true;
+    global.addEventListener('pagehide', disconnectSite);
+    global.addEventListener('pageshow', connectSite);
+  }
+
   // ======================================= SERVICE WORKERNI TIRIK USHLASH
   //
   // Brauzer bo'sh turgan SW'ni ixtiyoriy ravishda o'chirib yuboradi. U o'chsa,
@@ -1223,6 +1287,7 @@
 
   function swKeepPing() {
     try {
+      if (!siteActive) return;              // sahifadan chiqilgan — ping YO'Q
       if (document.hidden) return;
       var c = swCtl();
       if (!c) return;
@@ -4777,6 +4842,9 @@
       // Bunday sahifada WebSocket ochish behuda: kanalni video baytlaridan
       // oldin egallaydi. Shuning uchun faqat Telegram yo'li uchun qizdiramiz.
       if (!isDirectBoot()) {
+        // Kirish/chiqish sikli: saytga kirganda ulanamiz, chiqib ketganda
+        // yopamiz, qayta kirganda darhol ochamiz (bfcache ham shu yo'l).
+        try { bindSiteLifecycle(); } catch (e) {}
         warmFast();
         // Ulanishni tirik ushlab turish: ~60 s harakatsizlikdan keyin Telegram
         // WebSocket'ni yopadi ("Connection to dc 2 was lost") va keyingi klik
@@ -5595,7 +5663,12 @@
     gate: function () { if (gateNode) { gateNode.hidden = false; } },
     boshqarish: {          // diagnostika uchun (konsoldan)
       holat: function () { return S; },
-      session: loadSession
+      session: loadSession,
+      // Saytga kirish/chiqish ulanish holati (tekshirish uchun).
+      ulanish: function () {
+        var c = null; try { c = swCtl(); } catch (e) {}
+        return { active: siteActive, fast: !!S.fast, sw: !!c, chan: !!S.chan };
+      }
     }
   };
 })(window);
