@@ -547,7 +547,11 @@
         // Javob: pong#347773c5 msg_id:long ping_id:long — `msg_id` aynan
         // yuborilgan ping xabarining id'si bo'ladi.
         PING: 0x7abe77ec,
-        PONG: 0x347773c5
+        PONG: 0x347773c5,
+        // Transport xatolari: server eski server_salt bilan yuborilgan
+        // paketni qabul qilmaydi va YANGI salt'ni qaytaradi.
+        BAD_MSG_NOTIFICATION: 0xa7eff811,
+        BAD_SERVER_SALT: 0xedab447b
     };
 
     const LAYER = 229;
@@ -1024,6 +1028,33 @@
                 return;
             }
         }
+        // bad_server_salt#edab447b bad_msg_id:long bad_msg_seq_no:int
+        //   error_code:int new_server_salt:long = BadMsgNotification
+        // Server eski salt bilan shifrlangan so'rovni rad etadi. Konvert
+        // ichidagi `msg.salt` allaqachon yangilangan bo'lsa ham, bu xabar
+        // aniq YANGI salt'ni ko'rsatadi. So'rovni shu salt bilan, YANGI
+        // msg_id va seq_no bilan qayta yuborish shart — aks holda javob
+        // hech kelmaydi va 8 s timeout bo'ladi.
+        // (Oldin bu xabar `parseRpc` da tanilmay, javobsiz qolardi.)
+        if (mbody.length >= 28) {
+            const ctor0 = new DataView(mbody.buffer, mbody.byteOffset, 4).getUint32(0, true);
+            if (ctor0 === TL.BAD_SERVER_SALT) {
+                const br = new TgReader(mbody, 0);
+                br.u32();
+                const badId = br.long();
+                const p = this.pending.get(badId);
+                this.salt.set(mbody.subarray(20, 28));   // new_server_salt
+                if (p && p.query && (p.saltRetries || 0) < 2) {
+                    clearTimeout(p.timer);
+                    this.pending.delete(badId);
+                    this.request(p.query, (p.saltRetries || 0) + 1).then(
+                        function (v) { p.resolve(v); },
+                        function (e) { p.reject(e); }
+                    );
+                }
+                return;
+            }
+        }
         const parsed = parseRpc(msg.body);
         if (!parsed) return;
         if (parsed.kind === 'result' || parsed.kind === 'error') {
@@ -1104,7 +1135,7 @@
         throw new Error('Kutilmagan javob turi: 0x' + ctor.toString(16));
     }
 
-    MtConnection.prototype.request = function (queryBytes) {
+    MtConnection.prototype.request = function (queryBytes, saltRetries) {
         const self = this;
         return this.connect().then(function () {
             let body = queryBytes;
@@ -1136,7 +1167,10 @@
                     self.pending.delete(msgId);
                     reject(new Error('Telegram RPC javobi 8 s ichida kelmadi'));
                 }, 8000);
-                self.pending.set(msgId, { resolve: resolve, reject: reject, timer: timer });
+                self.pending.set(msgId, {
+                    resolve: resolve, reject: reject, timer: timer,
+                    query: body, saltRetries: saltRetries || 0
+                });
                 try {
                     self.ws.send(encrypted.buffer);
                 } catch (e) {
