@@ -268,6 +268,11 @@
   // `FILE_REFERENCE_INVALID` javobi keladi va kod o'zi GramJS'ga o'tadi —
   // ya'ni xavfsiz. Uzoq TTL esa qayta ochishda 6 s lik sovuq yo'lni yo'q qiladi.
   var DOC_META_TTL = 6 * 60 * 60 * 1000;  // 6 soat
+  // AMALIY refresh intervali: Telegram ba'zan havolani ~1 soatda eskiradi.
+  // 6 soatlik TTL faqat "yozuv yashaydi" degan chegara; undan oldinroq,
+  // saytga kirganda yangilab turamiz. Aks holda ochilishda ikki marta
+  // `api/tg-doc.php?fresh=1` (5–8 s) kutiladi va video ~30 s kechikadi.
+  var DOC_REFRESH_MS = 45 * 60 * 1000;   // 45 daqiqa
 
   function b64ToU8(b64) {
     try {
@@ -600,12 +605,12 @@
   // `keepalive` + jim catch: bu fon ishi, video ochilishini HECH qachon
   // kutib turdirmaydi.
   var _gramWrote = {};
-  function gramWriteback(key, m) {
+  function gramWriteback(key, m, force) {
     if (!key || !m || !m.fr) return;
     var kp = String(key).split('/');
     var ch = kp[0] || '', post = Number(kp[1] || 0);
     if (!ch || !(post > 0)) return;
-    if (_gramWrote[key]) return;      // bir sessiyada bir marta
+    if (_gramWrote[key] && !force) return;   // bir sessiyada bir marta
     _gramWrote[key] = 1;
     try {
       var body = new URLSearchParams({
@@ -623,7 +628,7 @@
     } catch (e) { /* jim: yozib qo'yish ixtiyoriy qulaylik */ }
   }
 
-  function docMetaPut(key, doc) {
+  function docMetaPut(key, doc, write, force) {
     if (!key || !doc) return;
     var vi = videoInfo(doc);
     var meta = {
@@ -639,7 +644,7 @@
       source: 'gram'
     };
     docMetaSave(key, meta);
-    gramWriteback(key, meta);
+    if (write !== false) gramWriteback(key, meta, !!force);
   }
 
   // `FILE_MIGRATE_X` kelganda metama'lumotdagi DC eskirgan bo'ladi.
@@ -901,20 +906,30 @@
   // shuning uchun bu bepul: kanal bo'yicha bitta RPC bilan hamma videolarning
   // metama'lumotini olamiz va lokal keshga yozamiz. Keyin bosilgan video
   // faqat BAYTLARINI yuklaydi (25 KB minimal klient, GramJS'siz).
-  function prefetchManyGram(list) {
+  function prefetchManyGram(list, opts) {
     if (!list || !list.length) return Promise.resolve(0);
+    opts = opts || {};
+    // `refresh`: saytga kirganda eskirgan havolalarni QAYTA olish.
+    // `writeback`: serverga yoziladigan yozuvlar soni (ko'p video bo'lsa
+    // barchasini yozish DB'ga yuk bo'ladi — faqat eng ko'p ko'rilganlari).
+    var force = !!opts.refresh;
+    var wbMax = typeof opts.writeback === 'number' ? opts.writeback : -1;
+    var wb = 0;
 
     var need = [];
     var seen = {};
     for (var i = 0; i < list.length; i++) {
       var it = list[i] || {};
       var ch = String(it.channel || it.ch || '').replace(/^@/, '');
-      var post = Number(it.post || 0);
+      var post = Number(it.post || it.p || 0);
       if (!ch || !post) continue;
       var key = ch + '/' + post;
       if (seen[key]) continue;
       seen[key] = 1;
-      if (docMetaGet(key)) continue;      // brauzer keshida bor
+      var old = docMetaGet(key);
+      // Oddiy chaqiruvda kesh bor — o'tkazamiz. Yangilash rejimida esa
+      // faqat DOC_REFRESH_MS dan eski yozuv qayta olinadi.
+      if (old && !(force && Date.now() - old.t > DOC_REFRESH_MS)) continue;
       need.push({ ch: ch, post: post, key: key });
     }
     if (!need.length) return Promise.resolve(0);
@@ -950,7 +965,8 @@
                   if (!doc) continue;
                   for (var pi = 0; pi < chunk.length; pi++) {
                     if (Number(chunk[pi].post) === Number(msg.id)) {
-                      docMetaPut(chunk[pi].key, doc);
+                      var doWb = wbMax !== 0 && (wbMax < 0 || wb++ < wbMax);
+                      docMetaPut(chunk[pi].key, doc, doWb, force);
                       saved++;
                       // GramJS hujjatini RAM keshiga ham yozamiz — bosilganda
                       // `findDoc` RPC'si kerak bo'lmaydi (video darhol ochiladi).
@@ -1060,6 +1076,14 @@
     // havolani qayta-qayta berardi, video esa butunlay ochilmay qolardi.
     // Shuning uchun eng ishonchli yo'lni TOH sayraymiz — keshni emas,
     // Telegram orqali yangilangan havolani olamiz.
+    // AVVAL saytga kirganda GramJS bilan yangilangan lokal havolani sinab
+    // ko'ramiz. Bu holda serverga `fresh=1` yuborib 5–8 s kutish SHART EMAS
+    // (ikki marta kutish video ochilishini ~30 s ga cho'zardi).
+    var local = docMetaGet(key);
+    if (local && local.fr && local.fr !== cur && (Date.now() - local.t) < DOC_REFRESH_MS) {
+      if (apply(local)) return Promise.resolve(true);
+    }
+
     var p = docMetaFromServer(opts, true).then(function (m) {
       if (!m || !m.fr || m.fr === cur) return false;
       return apply(m);

@@ -1,18 +1,21 @@
 /* ============================================================================
- * tg-prefetch.js — "issiq start": mashhur videolar metama'lumotini tayyorlash
+ * tg-prefetch.js — "issiq start": BARCHA videolar havolasini yangilaydi
  * ----------------------------------------------------------------------------
- * Muammo: foydalanuvchi katalogdan videoni bosganda, sayt avval Telegram'dan
- * hujjatni TOPIB (kanal/post), keyin birinchi baytlarni yuklaydi. Bu ~0.5-1.5s.
+ * Muammo: `file_reference` vaqt o'tishi bilan eskiradi. Eski havola bilan
+ * video ochilganda Telegram rad etadi va kod `api/tg-doc.php?fresh=1` bilan
+ * 5–8 s kutadi (ikki marta) — foydalanuvchi ~30 s kutib qoladi.
  *
- * Yechim: bosh sahifada sahifa bo'sh turganda mashhur videolar metama'lumoti
- * kichik guruhlar bilan olinadi. Video baytlari oldindan yuklanmaydi; foydalanuvchi
- * videoni bosgandagina oqim boshlanadi.
+ * Yechim: saytga kirganda (har 30 daqiqada bir marta) BARCHA videolarning
+ * kanal/post juftligini olib, havolani foydalanuvchining O'Z sessiyasi
+ * (GramJS) bilan yangilab, lokal keshga yozamiz. Video bosilganda yangi
+ * havola tayyor bo'ladi — sekin `fresh=1` umuman chaqirilmaydi.
  *
- * CHEKLOVLAR (muhim, foydalanuvchi internetini yeb qo'ymaslik uchun):
+ * CHEKLOVLAR (foydalanuvchi internetini yeb qo'ymaslik uchun):
  *   - `saveData` yoqilgan yoki 2G/slow-2g → UMUMAN ishlamaydi.
- *   - Har qanday tarmoqda faqat metama'lumot; video baytlari yuklanmaydi.
- *   - Bir sahifada ko'pi bilan 20 ta mashhur video, 4 tadan kichik batch.
- *   - Data Saver/2G da o'chadi; video o'ynayotgan paytda boshlanmaydi.
+ *   - Faqat metama'lumot (~200 bayt/video); VIDEO BAYTLARI yuklanmaydi.
+ *   - 20 tadan batch, orasida 500 ms tanaffus; video o'ynasa to'xtaydi.
+ *   - Serverga faqat eng ko'p ko'rilgan 40 tasining havolasi yoziladi;
+ *     qolganlari brauzerning o'z keshida saqlanadi.
  *
  * O'chirish: localStorage.setItem('wc_prefetch','0')
  *            yoki window.__WCPF = {off:true}
@@ -28,8 +31,12 @@
 
   var BASE = (w.APP && w.APP.base) || '';
   var GAP  = 500;                  // batchlar orasidagi tanaffus
-  var META_ITEMS = 60;
-  var META_BATCH = 20;             // server batch: bitta so'rovda 20 ta hujjat
+  var META_ITEMS = 60;             // zaxira ro'yxat (video-refs.php ishlamasa)
+  var META_BATCH = 20;             // bitta Telegram RPC ga 20 ta post
+  var REFRESH_GAP_MS = 30 * 60 * 1000;  // saytga kirishda har 30 daqiqada
+  var WRITEBACK = 40;              // serverga yoziladigan eng ko'p yozuv
+
+  var api = w.WCPrefetch = { last: null, running: false };
 
   function conn() {
     return w.navigator && (w.navigator.connection || w.navigator.mozConnection || w.navigator.webkitConnection) || null;
@@ -66,35 +73,40 @@
     return new Promise(function (res, rej) {
       var t0 = Date.now();
       (function poll() {
-        if (w.TgStream && (typeof w.TgStream.prefetchMany === 'function'
-            || typeof w.TgStream.prefetchManyGram === 'function')) return res(w.TgStream);
+        if (w.TgStream && typeof w.TgStream.prefetchManyGram === 'function') return res(w.TgStream);
         if (Date.now() - t0 > timeoutMs) return rej(new Error('no TgStream'));
         setTimeout(poll, 400);
       })();
     });
   }
 
-  // Server keshi isitish (`api/tg-doc.php?warm=1`) 2026-11-12 da OLIB
-  // TASHLANDI: bot sessiyasi bergan `file_reference` foydalanuvchi akkauntida
-  // ishlamaydi, ya'ni bu isitish pleerga foyda bermasdi — faqat serverda
-  // bekorga Telegram RPC ishlatardi.
+  // BARCHA videolar: {ch, p} juftliklari. Bitta kichik, 10 daqiqa keshli JSON.
+  // Endpoint ishlamasa — eski "eng ko'p ko'rilgan 60 ta" ro'yxatiga qaytamiz.
+  async function loadList() {
+    try {
+      var r = await fetch((BASE || '') + '/api/video-refs.php', { credentials: 'omit' });
+      if (r.ok) {
+        var d = await r.json();
+        if (d && d.success && d.items && d.items.length) {
+          return d.items.map(function (x) {
+            return { channel: String(x.ch || '').replace(/^@/, ''), post: Number(x.p || 0) };
+          }).filter(function (x) { return x.channel && x.post > 0; });
+        }
+      }
+    } catch (e) { /* zaxira ro'yxatga o'tamiz */ }
 
-  function loadList() {
-    var url = (BASE || '') + '/api/hot.php?n=' + encodeURIComponent(String(META_ITEMS));
-    return fetch(url, { credentials: 'omit' }).then(function (r) {
-      return r.ok ? r.json() : null;
-    }).then(function (j) {
-      return (j && j.items) ? j.items : [];
-    });
+    var r2 = await fetch((BASE || '') + '/api/hot.php?n=' + META_ITEMS, { credentials: 'omit' });
+    if (!r2.ok) return [];
+    var j = await r2.json();
+    return (j && j.items ? j.items : []).filter(function (it) {
+      return it && it.channel && Number(it.post) > 0;
+    }).slice(0, META_ITEMS);
   }
 
   // ------------------------------------------------------------------------
   // "DAVOM ETTIRISH": foydalanuvchi oxirgi ko'rgan video eng ehtimoliy
   // qayta bosiladigan video. Faqat SHU BITTA videoning boshi (2–4 MB)
   // tayyorlanadi — minglab foydalanuvchida ham Telegram'ga yuk deyarli yo'q.
-  //
-  // Tarix `wc_lib_v1` (brauzer) da saqlanadi; kanal/post esa mavjud
-  // `api/prefetch-context.php` dan olinadi (bitta kichik JSON).
   // ------------------------------------------------------------------------
   function lastWatched() {
     try {
@@ -135,71 +147,60 @@
   }
 
   async function run() {
-    // Faqat bosh sahifada: watch.php o'z qism ro'yxatini, boshqa sahifalar esa
-    // o'z ishini boshqaradi. Dinamik katalog kartalariga bog'lanmaymiz.
-    if (!document.getElementById('homeFeed')) return;
+    if (api.running) return api.last;
+    api.running = true;
+    try {
+      var p = policy();
+      if (!p.ok || document.hidden) return null;
 
-    var p = policy();
-    if (!p.ok) return;
+      var T;
+      try { T = await waitForTgStream(20000); } catch (e) { return null; }
 
-    var T;
-    try { T = await waitForTgStream(20000); } catch (e) { return; }
+      await waitIdle();
+      if (document.hidden || videoBusy()) return null;
 
-    await waitIdle();
-    if (videoBusy()) return;
+      // 0) "Davom ettirish" — faqat bitta video, eng katta ehtimol bilan.
+      await warmContinue(T);
+      if (document.hidden || videoBusy()) return null;
 
-    // 0) "Davom ettirish" — faqat bitta video, eng katta ehtimol bilan
-    //    qayta ochiladi. Boshqa hech narsa yuklanmaydi.
-    await warmContinue(T);
-    if (document.hidden || videoBusy()) return;
+      // 1) BARCHA videolar havolasini yangilash (30 daqiqada bir marta).
+      var last = 0;
+      try { last = Number(localStorage.getItem('wc_refs_at') || 0) || 0; } catch (e) {}
+      if (Date.now() - last < REFRESH_GAP_MS) return api.last;
 
-    // 1) SERVER keshini isitish OLIB TASHLANDI (2026-11-12).
-    //
-    // Nima uchun: server (bot sessiyasi, MadelineProto) bergan
-    // `file_reference` foydalanuvchining O'Z akkauntida ishlamaydi —
-    // Telegram uni `FILE_REFERENCE_INVALID` bilan rad etadi. Ya'ni bu kesh
-    // pleerga hech qanday foyda bermasdi, faqat har 10 daqiqada serverda
-    // bekorga Telegram RPC ishga tushirardi. Metama'lumot endi faqat
-    // foydalanuvchining O'Z sessiyasi bilan (3-qadam) olinadi.
+      // Server keshini isitish (`prefetchMany`, bot sessiyasi) o'chirilgan:
+      // bot havolasi tomoshabbin akkauntida ishlamaydi. Faqat GramJS.
+      if (typeof T.hasSession === 'function' && !T.hasSession()) return null;
+      if (typeof T.prefetchManyGram !== 'function') return null;
 
-    var items = [];
-    try { items = await loadList(); } catch (e) { return; }
+      var items = await loadList();
+      if (!items.length) return null;
 
-    // Ro'yxat ko'rishlar soni bo'yicha tartiblangan. Faqat metama'lumot
-    // keshlanadi; video baytlari yuklanmaydi.
-    items = items.filter(function (it) {
-      return it && it.channel && Number(it.post) > 0;
-    }).slice(0, META_ITEMS);
-    if (!items.length) return;
-
-    // 2) Server meta yo'li (`prefetchMany`) 2026-11-12 dan O'CHIRILGAN —
-    //    doim 0 qaytaradi (bot `file_reference` foydalanuvchi akkauntida
-    //    ishlamaydi). Chaqiruv API mosligi uchun qoldirilgan.
-    var got = 0;
-    if (typeof T.prefetchMany === 'function') {
-      try { got = await T.prefetchMany(items); } catch (e) { got = 0; }
-    }
-
-    // 3) ASOSIY yo'l: foydalanuvchining O'Z sessiyasi (GramJS). Telegram
-    //    aynan shu sessiyaga tegishli `file_reference` beradi — shuning
-    //    uchun faqat shu yo'l ishonchli ishlaydi.
-    if (got >= items.length) return;
-    try { if (typeof T.hasSession === 'function' && !T.hasSession()) return; } catch (e) { return; }
-    if (typeof T.prefetchManyGram !== 'function') return;
-
-    // Allaqachon keshlangan yozuvlarni `prefetchManyGram` o'zi tashlab
-    // yuboradi, shuning uchun ro'yxatni qayta filtrlamaymiz.
-    var rest = items;
-    for (var i = 0; i < rest.length; i += META_BATCH) {
-      if (document.hidden || videoBusy()) break;
-      try {
-        await T.prefetchManyGram(rest.slice(i, i + META_BATCH));
-      } catch (e) { /* bitta batch xato bo'lsa — keyingisi davom etadi */ }
-      if (i + META_BATCH < rest.length) {
-        await new Promise(function (r) { setTimeout(r, GAP); });
+      var done = 0, wbLeft = WRITEBACK;
+      for (var i = 0; i < items.length; i += META_BATCH) {
+        if (document.hidden || videoBusy()) break;
+        var batch = items.slice(i, i + META_BATCH);
+        try {
+          var n = await T.prefetchManyGram(batch, { refresh: true, writeback: wbLeft });
+          n = Number(n) || 0;
+          done += n;
+          wbLeft = Math.max(0, wbLeft - n);
+        } catch (e) { /* bitta batch xato bo'lsa — keyingisi davom etadi */ }
+        if (i + META_BATCH < items.length) {
+          await new Promise(function (r) { setTimeout(r, GAP); });
+        }
       }
+
+      try { localStorage.setItem('wc_refs_at', String(Date.now())); } catch (e) {}
+      api.last = { at: Date.now(), items: items.length, refreshed: done };
+      return api.last;
+    } finally {
+      api.running = false;
     }
   }
+
+  api.run = run;
+  api.status = function () { return api.last; };
 
   function start() {
     // `load` dan keyin — sahifaning asosiy ishlari tugagach.
