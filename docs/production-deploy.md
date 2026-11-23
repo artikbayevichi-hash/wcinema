@@ -39,11 +39,9 @@ SITE_URL=https://cinema.example.com
 ALLOWED_HOSTS=cinema.example.com,www.cinema.example.com
 ```
 
-So'ng `php cli/...` skriptlar va bot webhook manzilini yangilang:
-
-```bash
-curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://cinema.example.com/api/tg-webhook.php"
-```
+Bot `bot.php` orqali **polling** rejimida ishlaydi, webhook endpoint yo'q —
+`setWebhook` chaqirish kerak emas. `.env` dagi `SITE_URL` va bot tokeni
+yangilangach, `php bot.php` jarayonini qayta ishga tushiring.
 
 ## 3. VPS (eng katta ishonchlilik yutug'i)
 

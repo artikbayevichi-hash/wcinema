@@ -298,7 +298,7 @@ function mainMenu() {
     }
     $rows[] = [['text' => '✍️ Savol berish (operator)', 'callback_data' => 'support_ask']];
     if (SITE_URL !== '') {
-        $rows[] = [['text' => '🌐 Saytni ochish', 'url' => SITE_URL . '/login.php']];
+        $rows[] = [['text' => '🌐 Saytni ochish', 'url' => SITE_URL . '/1stlogin.php']];
     }
     return $rows;
 }

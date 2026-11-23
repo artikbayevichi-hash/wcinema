@@ -262,27 +262,6 @@
                 : ae.getAttribute('data-ep') ? 'ep:' + ae.getAttribute('data-ep')
                 : 'href:' + (ae.getAttribute('href') || '');
         }
-        var like = doc.getElementById('actLike');
-    var save = doc.getElementById('actWatchlist');
-    var likeCount = doc.getElementById('actLikeN');
-    var liked = !!(like && like.classList.contains('on'));
-    var saved = !!(save && save.classList.contains('on'));
-    var commentsCount = doc.getElementById('commentsCount');
-    var commentsLabel = commentsCount && commentsCount.textContent.trim()
-        ? 'Izohlar: ' + commentsCount.textContent.trim()
-        : 'Izohlarni ko‘rish yoki yozish';
-    var _legacyActionsRow = '<section class="tv-row tv-actions-row"><h3>Ushbu video</h3>'
-        + '<div class="tv-row-track tv-action-track">'
-            + '<button type="button" class="tv-card tv-action-card' + (liked ? ' on' : '') + '" data-tv-action="like" aria-pressed="' + (liked ? 'true' : 'false') + '">'
-            + '<span class="tv-action-icon" aria-hidden="true">👍</span><span class="tv-card-ttl">Yoqdi</span>'
-            + '<span class="tv-card-meta">' + esc(likeCount ? likeCount.textContent : 'Yoqdi') + '</span></button>'
-        + '<button type="button" class="tv-card tv-action-card' + (saved ? ' on' : '') + '" data-tv-action="save" aria-pressed="' + (saved ? 'true' : 'false') + '">'
-        + '<span class="tv-action-icon" aria-hidden="true">🔖</span><span class="tv-card-ttl">Keyinroq ko‘rish</span>'
-        + '<span class="tv-card-meta">' + (saved ? 'Saqlanganlar ichida' : 'Saqlanganlarga qo‘shish') + '</span></button>'
-        + '<button type="button" class="tv-card tv-action-card" data-tv-action="comments">'
-        + '<span class="tv-action-icon" aria-hidden="true">💬</span><span class="tv-card-ttl">Izohlar</span>'
-        + '<span class="tv-card-meta">' + esc(commentsLabel) + '</span></button>'
-            + '</div></section>' + episodesRowHtml();
         // Amallar (Yoqdi, Saqlash...) endi pleyer panelida; bu yerda qismlar va kutubxona qatorlari.
         var htmlOut = episodesRowHtml() + libRowsHtml();
         for (var i = 0; i < ROWS.length; i++) htmlOut += itemsRowHtml(ROWS[i]);

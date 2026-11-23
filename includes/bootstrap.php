@@ -170,31 +170,6 @@ function contentIdInput() {
 }
 
 /**
- * php.ini hajmlarini baytga aylantiradi: "40M" -> 41943040.
- *
- * Nima uchun kerak: fayl yuklash chegarasini ikki joyda tekshirish
- * kerak - birinchisi php.ini (server, kodga tegilmagan), ikkinchisi
- * bizning REEL_MAX_UPLOAD_MB (config). Ularni taqqoslash uchun
- * ikkalasini ham baytga o'tkazish kerak. "Noto'g'ri qiymat" qaytib
- * kelsa, 0 qaytaramiz - "min(0, ...)" butun chegarani 0 qilib
- * qo'yadi va har qanday fayl rad etilardi.
- */
-function ini_bytes($v) {
-    $v = trim((string) $v);
-    if ($v === '' || $v === '-1') {
-        return 0;
-    }
-    $unit = strtolower(substr($v, -1));
-    $num  = (int) $v;
-    switch ($unit) {
-        case 'g': return $num * 1024 * 1024 * 1024;
-        case 'm': return $num * 1024 * 1024;
-        case 'k': return $num * 1024;
-        default:  return $num;
-    }
-}
-
-/**
  * HTML xavfsiz chiqarish uchun yagona nuqta.
  *
  * Nima uchun: sahifalarda sepga chiqarishdan oldin har bir satrni

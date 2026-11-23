@@ -52,8 +52,7 @@ kanalga joylash), `api/reel-intent.php` (zaxira: botga qo'lda yuborish),
 uni **to'g'ridan-to'g'ri Telegram kanalga** (`REELS_CHANNEL`) joylaydi va
 serverdagi vaqtinchalik faylni darhol o'chiradi — saytda fayl SAQLANMAYDI.
 Tomoshabinlar videoni Telegram'dan ko'radi (`t.me/...`), shu bois sayt
-serveriga og'irlik tushmaydi. `api/content-upload.php` (admin poster fayli)
-ataylab o'chirilgan (410) — poster faqat URL bilan saqlanadi.
+serveriga og'irlik tushmaydi. Poster faqat URL bilan saqlanadi.
 
 ### MP4 faststart (progressiv ijro)
 
@@ -156,8 +155,9 @@ Demo login faqat `localhost` + `ALLOW_DEMO_LOGIN=1` (+ Host tekshiruvi bilan).
 
 1. **Apache + PHP 8.x + MySQL** (XAMPP). php.ini'da:
    `post_max_size=256M`, `upload_max_filesize=256M`, `max_input_time=300`.
-2. DB import: `database.sql` (asos), `migrate.sql` + `migrate-reels.sql`
-   + `migrate-reels-telegram.sql` (yangilanishlar uchun).
+2. DB import: `database.sql` (asos), keyin barcha `migrate-*.sql` va
+   `migrations/*.sql` fayllari nom tartibida. `migrate-views.sql` faqat bir
+   marta ishga tushiriladi — ichida `views` sanoqni 0 ga tushiradi.
 3. `.env` (repo'ga yozilmaydi, `.gitignore` da):
    ```env
    TELEGRAM_BOT_TOKEN=...
@@ -170,8 +170,8 @@ Demo login faqat `localhost` + `ALLOW_DEMO_LOGIN=1` (+ Host tekshiruvi bilan).
    ```
    > `REELS_CHANNEL` — ommaviy Telegram kanal. Bot (`@...`) shu kanalga
    > **admin** qilib qo'shilishi va **Post Messages** huquqi bo'lishi shart.
-4. Tunnel (Mini App HTTPS talab qiladi): `start-tunnel.bat` →
-   BotFather'da `/setmenubutton` ga yangi URL bering.
+4. Tunnel (Mini App HTTPS talab qiladi): `cf-tunnel.ps1` (yoki `tunnel.ps1`,
+   `cf-show.ps1`) → BotFather'da `/setmenubutton` ga yangi URL bering.
 5. Telegram'da botga **`/start`** yuboring (428 need_start holatini yo'q qiladi).
 
 ---
@@ -181,11 +181,12 @@ Demo login faqat `localhost` + `ALLOW_DEMO_LOGIN=1` (+ Host tekshiruvi bilan).
 ```
 tele_uzdub/
 ├── config.php               # Sozlamalar (env_value orqali, token .env'dan)
-├── database.sql             # To'liq sxema
-├── migrate.sql / migrate-reels.sql
-├── start-tunnel.bat         # HTTPS tunnel (Cloudflare quick tunnel)
+├── database.sql             # Asosiy sxema
+├── migrate*.sql, migrations/ # Yangilanishlar (yangi o'rnatishda kerak)
+├── cf-tunnel.ps1, tunnel.ps1 # HTTPS tunnel (Cloudflare)
+├── 1stlogin.php, tg-login.php # Kirish: splash -> QR
 ├── index.php                # Bosh sahifa + player
-├── login.php / logout.php
+├── logout.php
 ├── bot.php                  # W CINEMA SUPPORT bot (FAQ + savollarni
 │                           #   adminga uzatish, sayt-login, reels)
 ├── mini-app-setup.php       # BotFather sozlash qo'llanmasi
@@ -194,7 +195,7 @@ tele_uzdub/
 ├── admin-content.php        # ★ Kontent boshqaruvi (admin)
 ├── admin-reels.php          # Reels moderatsiya (admin)
 ├── includes/
-│   ├── bootstrap.php        # Kirish qatlami: ok/fail, input, esc, ini_bytes,
+│   ├── bootstrap.php        # Kirish qatlami: ok/fail, input, esc,
 │   │                        #   requireAdmin, session
 │   ├── Database.php         # PDO wrapper (insert/update/delete, errmode)
 │   ├── TelegramBot.php      # Bot API + initData HMAC
@@ -208,11 +209,10 @@ tele_uzdub/
 │   ├── stream.php           # Range video oqimi
 │   ├── telegram-save.php    # Qismni chat'ga (POST) / holat (GET)
 │   ├── content-admin.php    # ★ Kontent CRUD (admin)
-│   ├── content-upload.php   # O'CHIRILGAN (fayl yuklash yo'q, 410)
 │   ├── reels.php            # Reels feed/action
 │   ├── reel-create.php      # Clip yaratish (episode kesish)
 │   ├── reel-intent.php      # Telegram kanalga yuborishni boshlash
-│   ├── reel-upload.php      # O'CHIRILGAN (fayl yuklash yo'q, 410)
+│   ├── reel-upload.php      # Videoni Telegram kanalga yuklash
 │   ├── reel-moderate.php    # Reels moderatsiya (admin)
 │   └── reel-authors.php     # Reklamachi reytingi
 ├── assets/

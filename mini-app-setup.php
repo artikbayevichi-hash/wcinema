@@ -173,7 +173,7 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
         <div class="status bad">
             ⚠️ <b>Hozir sayt localhost'da.</b><br>
             Telegram Mini App <b>faqat HTTPS</b> manzilda ishlaydi. Avval
-            <code>start-tunnel.bat</code> faylini ishga tushiring va yangi
+            <code>cf-tunnel.ps1</code> faylini ishga tushiring va yangi
             manzilni shu yerga kiriting.
         </div>
     <?php elseif (!$schemeOk): ?>
@@ -212,7 +212,7 @@ $botLink    = 'https://t.me/' . TELEGRAM_BOT_USERNAME;
                o'zgartirishingiz mumkin.</p>
             <div class="warning">
                 ⚠️ Tunnel har qayta ishga tushganda yangi manzil beradi.
-                Eskirgan manzil ishlamaydi — bu holda <code>start-tunnel.bat</code>
+                Eskirgan manzil ishlamaydi — bu holda <code>cf-tunnel.ps1</code>
                 ni qayta ishga tushirib, yangisini shu yerga kiriting.
             </div>
         </div>
@@ -255,7 +255,7 @@ support - Savol berish</div>
         <b>ngrok Free rejasi ishlamaydi.</b> U har bir brauzer so'roviga
         ogohlantirish sahifasi (ERR_NGROK_6024) qo'yadi — hatto API so'rovlari
         ham HTML qaytaradi, shuning uchun Mini App yuklanmaydi. Loyihaning
-        <code>start-tunnel.bat</code> fayli Cloudflare tunnelidan foydalanadi,
+        <code>cf-tunnel.ps1</code> fayli Cloudflare tunnelidan foydalanadi,
         u bu muammoni yo'q qiladi.
     </div>
 
