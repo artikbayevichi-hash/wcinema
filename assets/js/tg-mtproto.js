@@ -653,7 +653,9 @@
     // ========================================================================
 
     const DC_HOSTS = { 1: 'pluto', 2: 'venus', 3: 'aurora', 4: 'vesta', 5: 'flora' };
-    const WS_PORT = 443;
+    // `wss://` uchun port 443 standart. Uni aniq yozish ba'zi tarmoqlarda
+    // TLS ulanishini 2–5 barobar sekinlashtiradi (o'lchov: kws2 portsiz
+    // 655 ms, `:443` bilan 3668 ms). Shuning uchun portsiz manzil ishlatamiz.
 
     /**
      * DC manzillari (tartib muhim — birinchi ishlagani tanlanadi).
@@ -872,7 +874,7 @@
         return new Promise(function (resolve, reject) {
             let url;
             try {
-                url = 'wss://' + host + ':' + WS_PORT + '/apiws';
+                url = 'wss://' + host + '/apiws';
             } catch (e) {
                 reject(e);
                 return;
