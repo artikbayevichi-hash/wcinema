@@ -29,8 +29,18 @@
     openedPeerId: 0,
     dmLastId: 0,
     dmPoll: null,
-    dmTypingTmr: null
+    dmTypingTmr: null,
+    // Jonli oqim: ochiq suhbat faqat bitta yengil so'rov bilan kuzatiladi.
+    dmLive: false,
+    roomLive: false,
+    roomPoll: null,
+    roomBusy: false,
+    roomMaxId: 0,
+    liveGen: 0,
+    liveChan: null
   };
+  var DM_POLL_MS = 1500;
+  var ROOM_POLL_MS = 2000;
 
   // ----------------------------------------------------------- yordamchilar
   function M() { return global.TgMedia; }
@@ -219,7 +229,9 @@
     closeSharePlayer();
     closePicker();                        // emoji/stiker/GIF paneli ham yopiladi
     try { toggleFmt(false); } catch (e) {} // formatlash menyusi yopiladi
-    if (C.active && C.active.type === 'dm') { stopDmPoll(); loadContacts(); }
+    stopDmPoll();
+    stopRoomLive();
+    if (C.active && C.active.type === 'dm') loadContacts();
     C.active = null;
     C.locked = false; C.lockedReason = '';
     var lv = el('chatListView'), th = el('chatThread');
@@ -261,11 +273,13 @@
     C.active = { type: 'room', room: room, topicId: room.topic_id ? Number(room.topic_id) : 0, title: room.title };
     C.locked = false; C.lockedReason = '';
     stopDmPoll();
+    stopRoomLive();
     openChat(room.title, room.url || '');
     if (!CHAT) { status('Chat sozlanmagan'); return; }
     if (!room.topic_id) { status('Bu xona hozircha tayyor emas'); return; }
     ensureRoomPeer().then(function () { return joinChat(); })
       .then(function () { return readRoom(); })
+      .then(function () { startRoomLive(); })
       .catch(function (e) { status('Yuklab bo\'lmadi: ' + esc(errMsg(e))); });
   }
 
@@ -298,6 +312,7 @@
     C.active = { type: 'dm', peer: contact, peerEntity: null, title: contactName(contact) };
     C.dmLastId = 0;
     stopDmPoll();
+    stopRoomLive();
     // Blok bo'lsa kompozitor o'chadi (server ham blokni tekshiradi).
     var blocked = !!contact.blocked;
     C.locked = blocked;
@@ -559,6 +574,7 @@
         if (!d || d.success === false || !d.message) throw new Error((d && d.message) || 'Yuborilmadi');
         replaceDmRow(tmpId, d.message);
         C.dmLastId = Math.max(C.dmLastId, Number(d.message.id) || 0);
+        announceLive('dm', a.peer.id);
         return true;
       }).catch(function (e) {
         removeDmRow(tmpId);
@@ -597,6 +613,7 @@
       if (!d || d.success === false || !d.message) throw new Error((d && d.message) || 'Yuborilmadi');
       appendDmMessage(d.message);
       C.dmLastId = Math.max(C.dmLastId, Number(d.message.id) || 0);
+      announceLive('dm', a.peer.id);
       return true;
     }).catch(function (e) {
       toast('Yuborilmadi: ' + (e && e.message ? e.message : errMsg(e)));
@@ -604,15 +621,100 @@
     });
   }
 
-  // --- Polling: ochiq suhbatda yangi xabarlarni 3 sekundda oladi ---
+  // --- Jonli oqim: ochiq suhbat yangi xabarlarni darhol qabul qiladi ---
+  function resumeLive() {
+    if (document.hidden || !C.active) return;
+    if (C.active.type === 'room' && C.roomLive && !C.roomPoll) {
+      C.roomPoll = setInterval(roomLiveTick, ROOM_POLL_MS);
+      roomLiveTick();
+    }
+    if (C.active.type === 'dm' && C.dmLive && !C.dmPoll) {
+      C.dmPoll = setInterval(dmPollTick, DM_POLL_MS);
+      dmPollTick();
+    }
+  }
+  function pauseLive() {
+    if (C.roomPoll) { clearInterval(C.roomPoll); C.roomPoll = null; }
+    if (C.dmPoll) { clearInterval(C.dmPoll); C.dmPoll = null; }
+  }
   function startDmPoll() {
     stopDmPoll();
-    C.dmPoll = setInterval(dmPollTick, 3000);
+    stopRoomLive();
+    C.dmLive = true;
+    resumeLive();
   }
   function stopDmPoll() {
+    C.dmLive = false;
     if (C.dmPoll) { clearInterval(C.dmPoll); C.dmPoll = null; }
     setTypingIndicator(false);
   }
+  function startRoomLive() {
+    stopDmPoll();
+    stopRoomLive();
+    C.roomLive = true;
+    C.liveGen++;
+    resumeLive();
+  }
+  function stopRoomLive() {
+    C.roomLive = false;
+    C.liveGen++;   // eski so'rov javobi endi e'tiborga olinmaydi
+    if (C.roomPoll) { clearInterval(C.roomPoll); C.roomPoll = null; }
+  }
+
+  /** Xona xabarlarining eng katta id'sini eslab, faqat yangilarini qidiramiz. */
+  function noteRoomMax(m) {
+    var id = Number(m && m.id) || 0;
+    if (id > C.roomMaxId) C.roomMaxId = id;
+  }
+
+  /**
+   * Umumiy xona (Telegram topic) uchun yengil jonli tekshiruv.
+   * Yangi xabar topsakgina readRoom() bilan to'liq qayta chizadi.
+   */
+  function roomLiveTick() {
+    var a = C.active;
+    if (!a || a.type !== 'room' || !a.topicId || !C.roomLive
+        || C.roomBusy || document.hidden || !Api()) return;
+    var gen = C.liveGen, tid = a.topicId, peer = C.roomPeer;
+    C.roomBusy = true;
+    getClient().then(function (c) {
+      return c.invoke(new (Api().messages.GetReplies)({
+        peer: peer, msgId: tid, offsetId: 0, offsetDate: 0, addOffset: 0,
+        limit: 20, maxId: 0, minId: 0, hash: 0
+      }));
+    }).then(function (res) {
+      C.roomBusy = false;
+      if (gen !== C.liveGen || !C.active || C.active.topicId !== tid || !C.roomLive) return;
+      var max = 0;
+      ((res && res.messages) || []).forEach(function (m) {
+        if (m && m.className === 'Message' && Number(m.id) > max) max = Number(m.id);
+      });
+      if (max > C.roomMaxId) readRoom().catch(function () {});
+    }).catch(function () { C.roomBusy = false; });
+  }
+
+  /** Shu brauzerning boshqa oynasiga yuborish haqida darhol xabar beradi. */
+  function announceLive(kind, key) {
+    if (!C.liveChan) return;
+    try { C.liveChan.postMessage({ kind: kind, key: Number(key) || 0, at: Date.now() }); } catch (e) {}
+  }
+  try {
+    if (global.BroadcastChannel) {
+      C.liveChan = new BroadcastChannel('wc-chat');
+      C.liveChan.onmessage = function (e) {
+        var d = e && e.data;
+        if (!d || document.hidden || !C.active) return;
+        if (d.kind === 'room' && C.active.type === 'room' && C.active.topicId === d.key) roomLiveTick();
+        if (d.kind === 'dm' && C.active.type === 'dm' && Number(C.active.peer.id) === d.key) dmPollTick();
+      };
+    }
+  } catch (e) { C.liveChan = null; }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) pauseLive(); else resumeLive();
+  });
+  window.addEventListener('pagehide', pauseLive);
+  window.addEventListener('pageshow', resumeLive);
   function dmPollTick() {
     var a = C.active;
     if (!a || a.type !== 'dm') return;
@@ -629,7 +731,10 @@
           hasNew = true;
         }
       });
-      if (hasNew) markDmRead();
+      if (hasNew) {
+        markDmRead();
+        loadContacts();   // ro'yxatdagi oxirgi xabar ham darhol yangilanadi
+      }
       setTypingIndicator(!!(d && d.typing));
     }).catch(function () {});
   }
@@ -701,6 +806,8 @@
     });
     scrollBottom(true);
     feed.__msgs = msgs;
+    C.roomMaxId = 0;
+    msgs.forEach(noteRoomMax);
   }
 
   function rowHtml(m) {
@@ -873,6 +980,8 @@
       var d = M().mediaDescriptor(m);
       if (row && d) { try { M().wireMedia(row, m, d); } catch (e) {} }
       scrollBottom(true);
+      noteRoomMax(m);
+      announceLive('room', C.active && C.active.topicId);
     } else {
       reloadActive();
     }

@@ -41,8 +41,15 @@
     loading: false,
     count: -1,         // joriy mavzudagi izohlar soni (Telegram'dan)
     likes: {},         // optimistik layk holati: { [msgId]: {count, mine} }
-    threads: null      // root izoh -> javoblar guruhi
+    threads: null,     // root izoh -> javoblar guruhi
+    maxLiveId: 0,      // jonli kuzatuvdagi oxirgi xabar id'si
+    live: false        // izohlar oynasi ochiq va jonli kuzatuv ishga tushgan
   };
+
+  // Jonli izohlar: faqat ochiq oyna + ko'rinadigan tabda bitta yengil so'rov.
+  // Yangi xabar topsakgina to'liq reload() qilamiz (har 2 s da qayta chizish yo'q).
+  var LIVE_MS = 2000;
+  var liveTimer = null, liveBusy = false, liveGen = 0, liveChan = null;
 
   // ------------------------------------------------------------- yordamchilar
   function T() { return global.TgStream || null; }
@@ -280,7 +287,23 @@
     if (n < 0) n = Math.max(0, S.count || 0);
     setCount(topicId, Math.max(0, n + d));
     if (S.topicId === topicId) S.count = cntCache[topicId].n;
+    announceLive(topicId);
   }
+
+  /** Xuddi shu brauzerning boshqa oynasiga darhol xabar beradi (tarmoqsiz). */
+  function announceLive(topicId) {
+    if (!liveChan) return;
+    try { liveChan.postMessage({ topic: Number(topicId), at: Date.now() }); } catch (e) {}
+  }
+  try {
+    if (global.BroadcastChannel) {
+      liveChan = new BroadcastChannel('wc-comments');
+      liveChan.onmessage = function (e) {
+        var d = e && e.data;
+        if (d && S.live && !document.hidden && Number(d.topic) === S.topicId) liveTick();
+      };
+    }
+  } catch (e) { liveChan = null; }
 
   /**
    * Mavzudagi izohlar soni (izohlar oynasi OCHILMASDAN).
@@ -1485,6 +1508,7 @@
 
   function reload() {
     if (!S.topicId) return Promise.resolve();
+    S.loading = true;
     return loadReplies(50).then(function (res) {
       S.users = {};
       (res.users || []).forEach(function (u) { S.users[String(u.id)] = u; });
@@ -1506,10 +1530,58 @@
       return loadNames(ids).then(function () {
         renderMessages(msgs, res.count);
         updateOpenTgLinks();
+        msgs.forEach(function (m) {
+          if (Number(m.id) > S.maxLiveId) S.maxLiveId = Number(m.id);
+        });
         return msgs;
       });
-    });
+    }).finally(function () { S.loading = false; });
   }
+
+  // ------------------------------------------------------------ jonli oqim
+  /** Faqat yangi xabar bormi deb so'raydi; bo'lsa to'liq reload() qiladi. */
+  function liveTick() {
+    if (!S.live || !S.topicId || S.loading || liveBusy || document.hidden) return;
+    var gen = liveGen, tid = S.topicId;
+    liveBusy = true;
+    loadReplies(20).then(function (res) {
+      liveBusy = false;
+      if (gen !== liveGen || tid !== S.topicId || !S.live) return;
+      var max = 0;
+      ((res && res.messages) || []).forEach(function (m) {
+        if (m && m.className === 'Message' && Number(m.id) > max) max = Number(m.id);
+      });
+      if (!max || max <= S.maxLiveId) return;
+      // O'qib turgan joyi sakrab ketmasligi uchun scroll holatini saqlaymiz.
+      var list = listEl(), top = list ? list.scrollTop : 0;
+      return reload().then(function () { if (list) list.scrollTop = top; });
+    }).catch(function () { liveBusy = false; });
+  }
+
+  function startLive() {
+    stopLive();
+    S.live = true;
+    if (!document.hidden) liveTimer = setInterval(liveTick, LIVE_MS);
+  }
+  function stopLive() {
+    liveGen++;              // eski so'rovning javobi endi qabul qilinmaydi
+    S.live = false;
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  }
+  function pauseLive() {
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  }
+  function resumeLive() {
+    if (!S.live || document.hidden || liveTimer) return;
+    liveTimer = setInterval(liveTick, LIVE_MS);
+    liveTick();
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (!S.live) return;
+    if (document.hidden) pauseLive(); else resumeLive();
+  });
+  window.addEventListener('pagehide', stopLive);
+  window.addEventListener('pageshow', function () { resumeLive(); });
 
   // ------------------------------------------------------------- yozish
   /**
@@ -1684,6 +1756,8 @@
 
   // ------------------------------------------------------------- ochish
   function open(reel) {
+    stopLive();
+    S.maxLiveId = 0;
     S.reel = reel;
     S.topicId = reel.topic_id ? Number(reel.topic_id) : 0;
     S.users = {};
@@ -1713,6 +1787,9 @@
         return getClient();
       }).then(function () {
         return reload();
+      }).then(function (msgs) {
+        startLive();
+        return msgs;
       }).catch(function (e) {
         var m = errMsg(e);
         if (/AUTH_REQUIRED|AUTH_REVOKED|AUTH_KEY/.test(m)) {
@@ -1740,6 +1817,7 @@
   }
 
   function close() {
+    stopLive();
     // Yozib turilayotgan ovozni to'xtatib, kompozitorni tiklaymiz.
     if (composerVoice) composerVoice.close();
     S.reel = null;
