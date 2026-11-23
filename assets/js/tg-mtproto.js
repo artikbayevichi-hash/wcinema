@@ -1433,14 +1433,36 @@
         // (sog'lom ulanishlar bilan birga) yopib, qaytadan handshake qilardi —
         // video ochilishi sezilarli sekinlashardi. Bunday xatoni chaqiruvchi
         // (`tg-stream.js`) o'z qayta urinishi bilan hal qiladi.
-        function send(dcId, body) {
+        function send(dcId, body, retried) {
             const id = dcId || session.dcId;
-            return sendAttempt(id, body).catch(function (e) {
-                const onMedia = !!(e && typeof e.host === 'string' && e.host.indexOf('-1.') !== -1);
-                if (!onMedia) throw e;
-                mediaState.ok = false;
-                resetConnections();
-                return sendAttempt(id, body);
+
+            const doSend = function () {
+                return sendAttempt(id, body).catch(function (e) {
+                    const onMedia = !!(e && typeof e.host === 'string' && e.host.indexOf('-1.') !== -1);
+                    if (!onMedia) throw e;
+                    mediaState.ok = false;
+                    resetConnections();
+                    return sendAttempt(id, body);
+                });
+            };
+
+            return doSend().catch(function (e) {
+                const msg = String((e && (e.errorMessage || e.message)) || e);
+                // Tarmoq qisqa uzilganda yoki server javobi kechikganda
+                // `request()` 8 s dan keyin rad etadi. Ilgari bu yerda hech
+                // qanday qayta urinish yo'q edi: bitta uzilish butun video
+                // oqimini buzardi. Ulanishni YOPIP, yangi msg_id/seq_no bilan
+                // bir marta qayta yuboramiz (upload.getFile idempotent).
+                if (retried || !/RPC javobi|WebSocket|Ulanish yopildi|vaqti tugadi/.test(msg)) {
+                    throw e;
+                }
+                const c = clients.get(id);
+                if (c) {
+                    try { c.close(); } catch (e2) { /* allaqachon yopilgan */ }
+                    clients.delete(id);
+                }
+                closeExtras();
+                return send(id, body, true);
             });
         }
 
