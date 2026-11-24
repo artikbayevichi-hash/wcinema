@@ -634,6 +634,15 @@
             btn.classList.add('active');
             state.category = btn.dataset.cat;
             state.genre = 0;
+            if (!state.category) {
+                // "Hammasi" — aralash bosh sahifa feed'iga qaytamiz.
+                $('#homeView').hidden = false;
+                $('#listView').hidden = true;
+                loadHome();
+                return;
+            }
+            showListView();
+            updateListTitle();
             loadList(true);
         });
     }

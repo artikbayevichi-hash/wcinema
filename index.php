@@ -121,11 +121,14 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
      umuman tegmaydi.
      ================================================================== -->
 
-<!-- Instagram uslubidagi navigatsiya (desktop yon panel / mobil pastki panel) -->
+<!-- YouTube uslubidagi navigatsiya: desktop tepa panel + yon guide,
+     mobil tepa panel + yozuvli pastki tablar -->
 <?php $NAV_ACTIVE = 'home'; require __DIR__ . '/includes/nav.php'; ?>
 
-<!-- Filtr paneli olib tashlandi: qidiruv chap paneldagi "Qidiruv" tugmasi orqali
-     alohida oynada ochiladi (includes/nav.php #igSearch). -->
+<!-- YouTube uslubidagi kategoriya chiplari: app.js renderCategories() to'ldiradi. -->
+<div class="yt-chips-bar">
+    <div class="chips" id="catChips" role="toolbar" aria-label="Kategoriyalar"></div>
+</div>
 
 <div class="loading" id="loading" hidden><span class="spinner"></span></div>
 

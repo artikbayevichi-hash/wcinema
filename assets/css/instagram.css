@@ -20,7 +20,92 @@
        uni o'lchab shu o'zgaruvchiga yozadi — yuqori panellar shuncha pastga
        siljiydi, kontent esa banner ostida qolmaydi. */
     --wc-ann-h: 0px;
+    /* YouTube uslubidagi yuqori panel balandligi (faqat katta ekranda ko'rinadi). */
+    --yt-mast-h: 56px;
 }
+
+/* ==========================================================================
+   YOUTUBE USLUBIDAGI TEPA PANEL (kompyuter)
+   Hamburger · brend · o'rtadagi qidiruv · Yaratish · bildirishnoma · avatar
+   ========================================================================== */
+.yt-mast {
+    position: fixed;
+    top: var(--wc-ann-h); left: 0; right: 0;
+    z-index: 65;
+    height: var(--yt-mast-h);
+    padding: 0 16px;
+    display: none;
+    align-items: center;
+    gap: 18px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+}
+.yt-mast-left { display: flex; align-items: center; gap: 14px; min-width: 170px; }
+.yt-icon-btn {
+    width: 40px; height: 40px; flex: 0 0 auto;
+    border: 0; border-radius: 50%; background: none;
+    color: var(--text); cursor: pointer;
+    display: grid; place-items: center;
+}
+.yt-icon-btn:hover, .yt-icon-btn:focus-visible { background: var(--card); }
+.yt-menu-lines { display: flex; flex-direction: column; gap: 4px; width: 20px; }
+.yt-menu-lines i { display: block; height: 2px; border-radius: 2px; background: currentColor; }
+.yt-mast-brand {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--text); text-decoration: none;
+    font-size: 18px; font-weight: 800; letter-spacing: .2px;
+    white-space: nowrap;
+}
+.yt-mast-brand img { width: 30px; height: 30px; object-fit: contain; display: block; }
+.yt-mast-search {
+    flex: 0 1 640px; margin: 0 auto;
+    height: 40px; display: flex; align-items: center; gap: 10px;
+    padding: 0 4px 0 16px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--card); color: var(--muted); text-decoration: none;
+}
+.yt-mast-search:hover { border-color: var(--text); }
+.yt-mast-search .ig-ico { width: 20px; height: 20px; }
+.yt-mast-search .ig-ico .ig-svg { width: 20px; height: 20px; }
+.yt-mast-search-ph { flex: 1; font-size: 14px; }
+.yt-mast-search-btn {
+    width: 36px; height: 36px; flex: 0 0 auto;
+    border-radius: 50%; background: var(--card-2);
+    display: grid; place-items: center; color: var(--text);
+}
+.yt-mast-search-btn .ig-svg { width: 19px; height: 19px; }
+.yt-mast-right { display: flex; align-items: center; gap: 10px; min-width: 170px; justify-content: flex-end; }
+.yt-create-pill {
+    height: 36px; padding: 0 14px;
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--card); color: var(--text);
+    font-size: 13px; font-weight: 700; text-decoration: none;
+    white-space: nowrap;
+}
+.yt-create-pill:hover { background: var(--card-2); }
+.yt-create-pill .ig-ico { width: 18px; height: 18px; }
+.yt-create-pill .ig-svg { width: 18px; height: 18px; }
+.yt-mast-ntf { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
+.yt-mast-avatar {
+    width: 34px; height: 34px; flex: 0 0 auto;
+    border-radius: 50%; overflow: hidden;
+    display: grid; place-items: center; text-decoration: none;
+}
+.yt-mast-avatar .ig-avatar { width: 34px; height: 34px; }
+
+/* YouTube kategoriya chiplari (bosh sahifadagi #catChips). */
+.yt-chips-bar {
+    position: sticky;
+    top: calc(var(--wc-ann-h) + var(--ig-mobar-h) + env(safe-area-inset-top, 0px));
+    z-index: 50;
+    padding: 6px 12px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+}
+.yt-chips-bar .chips { padding-bottom: 0; }
+.yt-chips-bar .chip { background: var(--card-2); border-color: transparent; color: var(--text); }
+.yt-chips-bar .chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
 
 /* ==========================================================================
    DESKTOP: chap yon panel
@@ -314,6 +399,8 @@ body.ig-shell {
     color: var(--text);
 }
 .ig-mobar-btn .ig-svg { width: 23px; height: 23px; }
+.ig-mobar-avatar { width: 34px; height: 34px; }
+.ig-mobar-avatar .ig-avatar { width: 32px; height: 32px; font-size: 13px; }
 
 /* Juda kichik ekranlarda (360px) brend yozuvi joyni yeg'adi —
    faqat logotip qoladi, tugmalar siqilmaydi. */
@@ -370,10 +457,17 @@ body.ig-shell {
     border-top: 1px solid var(--line);
 }
 .ig-tabbar a {
-    flex: 1;
-    display: flex; align-items: center; justify-content: center;
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px;
     font-size: 22px; color: var(--text); text-decoration: none;
     position: relative;
+}
+/* YouTube mobilidagi kichik yozuvli tablar */
+.ig-tab-lbl {
+    font-size: 10px; line-height: 1; font-weight: 600;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
 }
 /* Chat tabida o'qilmagan xabarlar badge'i - ikonka yoniga joylashadi. */
 .ig-tabbar a .ig-tab-badge {
@@ -386,10 +480,15 @@ body.ig-shell {
     width: 4px; height: 4px; border-radius: 50%;
     background: var(--accent);
 }
-.ig-tabbar a.ig-tab-create { font-size: 25px; }
-.ig-tabbar .ig-svg { width: 25px; height: 25px; }
+.ig-tabbar .ig-svg { width: 23px; height: 23px; }
 .ig-tabbar a.active .ig-svg { fill: currentColor; }
-.ig-tabbar a.ig-tab-create .ig-svg { width: 28px; height: 28px; stroke-width: 2.1; }
+/* Markazdagi oq doira ichidagi "+" (YouTube mobili, faqat oq/qora) */
+.ig-tabbar a.ig-tab-create .ig-svg {
+    width: 21px; height: 21px; stroke-width: 2.2;
+    padding: 7px; box-sizing: content-box;
+    border-radius: 50%;
+    background: var(--text); color: var(--bg);
+}
 
 /* ==========================================================================
    Responsive sozlash
@@ -398,6 +497,16 @@ body.ig-shell {
     /* Yig'ilgan holat: faqat ikonkalar (YouTube mini guide) */
     .ig-side { display: flex; width: 76px; overflow: visible; }
     .ig-mobar, .ig-tabbar { display: none; }
+
+    /* YouTube tepa paneli faqat kompyuterda; yon panel va kontent uning
+       ostidan boshlanadi. Banner balandligi (@wc-ann-h) ham hisobga olinadi. */
+    .yt-mast { display: flex; }
+    .ig-side { top: calc(var(--wc-ann-h) + var(--yt-mast-h)); }
+    body.ig-shell { padding-top: calc(var(--wc-ann-h) + var(--yt-mast-h)); }
+    .yt-chips-bar {
+        top: calc(var(--wc-ann-h) + var(--yt-mast-h));
+        padding: 8px 16px;
+    }
 
     /* Tarkib yig'ilgan kenglikka moslashadi — ochilganda panel ustidan chiqadi */
     body.ig-shell { padding-left: 76px; padding-bottom: 24px; }
@@ -444,11 +553,24 @@ body.ig-shell {
     .ig-side:hover .ig-sub:not([hidden]),
     .ig-side:focus-within .ig-sub:not([hidden]) { display: flex; }
 
-    /* Sahifalar: sticky elementlar yon panel ichiga tushmasin */
-    body.ig-shell .filters { top: var(--wc-ann-h); }
-    body.ig-shell .pf-top { top: var(--wc-ann-h); }
-    body.ig-shell .pf-tabs { top: calc(var(--wc-ann-h) + 57px); }
-    body.ig-shell .up-top { top: var(--wc-ann-h); }
+    /* Hamburger bilan "yelimlangan" holat: sichqoncha chiqib ketganda ham
+       kengayganicha turadi (YouTube'dagi doimiy ochilgan guide kabi). */
+    .ig-side.open {
+        width: 244px;
+        box-shadow: 8px 0 28px rgba(0, 0, 0, .45);
+    }
+    .ig-side.open .ig-txt { display: inline; }
+    .ig-side.open .ig-caret { display: inline; }
+    .ig-side.open .ig-tg-status,
+    .ig-side.open .ig-side-foot { display: flex; }
+    .ig-side.open .ig-sub:not([hidden]) { display: flex; }
+    .ig-side.open .ig-item { justify-content: flex-start; }
+
+    /* Sahifalar: sticky elementlar tepa panel ostida turadi */
+    body.ig-shell .filters { top: calc(var(--wc-ann-h) + var(--yt-mast-h)); }
+    body.ig-shell .pf-top { top: calc(var(--wc-ann-h) + var(--yt-mast-h)); }
+    body.ig-shell .pf-tabs { top: calc(var(--wc-ann-h) + var(--yt-mast-h) + 57px); }
+    body.ig-shell .up-top { top: calc(var(--wc-ann-h) + var(--yt-mast-h)); }
 
     /* Reels to'liq ekran: yon paneldan keyin boshlanadi */
     body.reels-body.ig-shell { padding-left: 76px; }

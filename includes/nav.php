@@ -181,42 +181,45 @@ function wc_logo_img($alt = '', $attrs = '') {
   } catch (e) {}
 })();
 </script>
-<!-- ============================== Desktop: yon panel ============================== -->
-<aside class="ig-side" id="igSide">
-    <!-- BREND qatori: logo + nom + "Joylash" (+) tugmasi.
-         Tugma brend yonida turadi — keng sariq banner emas, ixcham va
-         har doim ko'rinadi (yig'ilgan panel holatida ham). -->
-    <div class="ig-brand-row">
-        <a class="ig-brand" href="index.php">
-            <?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?>
-            <span class="ig-brand-text"><?php echo htmlspecialchars(SITE_NAME); ?></span>
-        </a>
-        <a class="ig-create" href="<?php echo $igCreateH; ?>" title="Reels yuklash" aria-label="Reels yuklash">
-            <?php echo ig_svg('plus'); ?>
+<!-- ==================== Desktop: YouTube uslubidagi tepa panel ====================
+     Hamburger chapdagi yo‘l ko‘rsatkichni ochadi/yopadi; qidiruv o‘rtada;
+     "Yaratish", bildirishnoma va avatar o‘ngda. Barcha tugmalar oldingi
+     funksiyalarini saqlaydi (qidiruv #igSearch, bildirishnoma #igNtf). -->
+<header class="yt-mast" id="ytMast">
+    <div class="yt-mast-left">
+        <button class="yt-icon-btn" id="igMenuBtn" type="button"
+                aria-label="Menyu" aria-controls="igSide" aria-expanded="false" title="Menyu">
+            <span class="yt-menu-lines" aria-hidden="true"><i></i><i></i><i></i></span>
+        </button>
+        <a class="yt-mast-brand" href="index.php" aria-label="<?php echo esc(SITE_NAME); ?> — bosh sahifa">
+            <?php echo wc_logo_img(SITE_NAME, 'width="30" height="30"'); ?>
+            <span><?php echo htmlspecialchars(SITE_NAME); ?></span>
         </a>
     </div>
+    <a class="yt-mast-search" href="index.php" data-nav-search="1" title="Qidiruv" role="button">
+        <span class="ig-ico"><?php echo ig_svg('search'); ?></span>
+        <span class="yt-mast-search-ph">Qidiruv</span>
+        <span class="yt-mast-search-btn" aria-hidden="true"><?php echo ig_svg('search'); ?></span>
+    </a>
+    <div class="yt-mast-right">
+        <a class="yt-create-pill" href="<?php echo $igCreateH; ?>" title="Reels yuklash" aria-label="Reels yuklash">
+            <span class="ig-ico"><?php echo ig_svg('plus'); ?></span><span>Yaratish</span>
+        </a>
+        <a class="ig-mobar-btn yt-mast-ntf" href="notifications.php" title="Bildirishnomalar" aria-label="Bildirishnomalar">
+            <?php echo ig_svg('bell'); ?>
+        </a>
+        <a class="yt-mast-avatar ig-profile-top" href="<?php echo $igProfileH; ?>" title="Profil" aria-label="Profil">
+            <?php echo $igAvatar; ?>
+        </a>
+    </div>
+</header>
 
+<!-- ============================== Desktop: yon panel ============================== -->
+<aside class="ig-side" id="igSide">
     <nav class="ig-nav">
-        <!-- Profil (eng yuqorida) -->
-        <a class="ig-item ig-profile-top<?php echo $NAV_ACTIVE === 'profile' ? ' active' : ''; ?>"
-           href="<?php echo $igProfileH; ?>" title="Profil">
-            <span class="ig-ico"><?php echo $igAvatar; ?></span>
-            <span class="ig-txt"><?php echo esc($igName); ?></span>
-        </a>
-
-        <!-- Qidiruv -->
-        <a class="ig-item<?php echo $NAV_ACTIVE === 'search' ? ' active' : ''; ?>"
-           href="index.php" data-nav-search="1" title="Qidiruv">
-            <span class="ig-ico"><?php echo ig_svg('search'); ?></span><span class="ig-txt">Qidiruv</span>
-        </a>
-
-        <!-- Bosh sahifa -->
+        <!-- YouTube tartibi: Bosh sahifa · Reels · Chat · kategoriyalar · Siz · sozlamalar -->
         <?php echo ig_item('index.php', 'home', 'home', 'Bosh sahifa', $NAV_ACTIVE); ?>
-
-        <!-- Reels -->
         <?php echo ig_item('reels.php', 'reels', 'reels', 'Reels', $NAV_ACTIVE); ?>
-
-        <!-- Chat -->
         <a class="ig-item<?php echo $NAV_ACTIVE === 'chat' ? ' active' : ''; ?>" href="chat.php" title="Chat">
             <span class="ig-ico"><?php echo ig_svg('chat'); ?><span class="ig-ntf-badge" id="igChatBadge" hidden></span></span>
             <span class="ig-txt">Chat</span>
@@ -243,6 +246,13 @@ function wc_logo_img($alt = '', $attrs = '') {
         </div>
 
         <div class="ig-sep"></div>
+
+        <!-- "Siz" bo'limi (YouTube'dagi You) -->
+        <a class="ig-item ig-profile-top<?php echo $NAV_ACTIVE === 'profile' ? ' active' : ''; ?>"
+           href="<?php echo $igProfileH; ?>" title="Profil">
+            <span class="ig-ico"><?php echo $igAvatar; ?></span>
+            <span class="ig-txt"><?php echo esc($igName); ?></span>
+        </a>
 
         <!-- Kutubxona (ochiladigan bo'lim) -->
         <button class="ig-item ig-lib-toggle" id="igLibBtn" type="button"
@@ -296,46 +306,46 @@ function wc_logo_img($alt = '', $attrs = '') {
     </div>
 </aside>
 
-<!-- ============================== Telefon: yuqori panel ============================== -->
+<!-- ============================== Telefon: YouTube uslubidagi yuqori panel ============================== -->
+<!-- YouTube mobili: logo chapda, qidiruv/bildirishnoma/profil o'ngda. -->
 <header class="ig-mobar">
     <div class="ig-mobar-row">
-        <a class="ig-mobar-brand" href="index.php"><?php echo wc_logo_img(SITE_NAME, 'width="32" height="32"'); ?><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
-        <a class="ig-create ig-create-sm" href="<?php echo $igCreateH; ?>" title="Reels yuklash" aria-label="Reels yuklash"><?php echo ig_svg('plus'); ?></a>
-    </div>
-    <div class="ig-mobar-actions">
-        <?php /* Telefonda qidiruv yuqoridagi panelda emas - faqat pastki
-                navigatsiyada (Instagram uslubidagi markaziy "Qidiruv"). */ ?>
-        <?php if ($igCatMenu): ?>
-        <div class="ig-mobar-cats">
-            <button class="ig-mobar-btn" id="igCatBtnM" type="button"
-                    aria-label="Kataloglar" aria-haspopup="true" aria-expanded="false"
-                    aria-controls="igCatMenuM"><?php echo ig_svg('catalog'); ?></button>
-            <div class="ig-mobar-cats-menu" id="igCatMenuM" hidden>
-                <?php foreach ($igCatMenu as $_mc): ?>
-                <a class="ig-mobar-cat<?php echo $igActiveCat === $_mc['slug'] ? ' active' : ''; ?>"
-                   href="index.php?cat=<?php echo urlencode($_mc['slug']); ?>">
-                    <span class="ig-mobar-cat-ico"><?php echo ig_svg(ig_cat_icon($_mc['slug'])); ?></span>
-                    <span class="ig-mobar-cat-txt"><?php echo esc($_mc['label']); ?></span>
-                </a>
-                <?php endforeach; ?>
+        <a class="ig-mobar-brand" href="index.php"><?php echo wc_logo_img(SITE_NAME, 'width="30" height="30"'); ?><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
+        <div class="ig-mobar-actions">
+            <?php if ($igCatMenu): ?>
+            <div class="ig-mobar-cats">
+                <button class="ig-mobar-btn" id="igCatBtnM" type="button"
+                        aria-label="Kataloglar" aria-haspopup="true" aria-expanded="false"
+                        aria-controls="igCatMenuM"><?php echo ig_svg('catalog'); ?></button>
+                <div class="ig-mobar-cats-menu" id="igCatMenuM" hidden>
+                    <?php foreach ($igCatMenu as $_mc): ?>
+                    <a class="ig-mobar-cat<?php echo $igActiveCat === $_mc['slug'] ? ' active' : ''; ?>"
+                       href="index.php?cat=<?php echo urlencode($_mc['slug']); ?>">
+                        <span class="ig-mobar-cat-ico"><?php echo ig_svg(ig_cat_icon($_mc['slug'])); ?></span>
+                        <span class="ig-mobar-cat-txt"><?php echo esc($_mc['label']); ?></span>
+                    </a>
+                    <?php endforeach; ?>
+                </div>
             </div>
+            <?php endif; ?>
+            <a class="ig-mobar-btn" href="index.php" data-nav-search="1" title="Qidiruv" aria-label="Qidiruv"><?php echo ig_svg('search'); ?></a>
+            <button class="ig-mobar-btn" type="button" data-feedback-open
+                    aria-haspopup="dialog" aria-controls="feedbackDialog" aria-label="Taklif yoki shikoyat"><?php echo ig_svg('send'); ?></button>
+            <a class="ig-mobar-btn" href="notifications.php" aria-label="Bildirishnomalar"><?php echo ig_svg('bell'); ?></a>
+            <button class="ig-mobar-btn ig-mobar-avatar ig-profile-top" id="igMoreBtnM" type="button"
+                    title="Sozlamalar va profil" aria-label="Sozlamalar"><?php echo $igAvatar; ?></button>
         </div>
-        <?php endif; ?>
-        <button class="ig-mobar-btn" type="button" data-feedback-open
-                aria-haspopup="dialog" aria-controls="feedbackDialog" aria-label="Taklif yoki shikoyat"><?php echo ig_svg('send'); ?></button>
-        <a class="ig-mobar-btn" href="notifications.php" aria-label="Bildirishnomalar"><?php echo ig_svg('bell'); ?></a>
-        <button class="ig-mobar-btn" id="igMoreBtnM" type="button" aria-label="Sozlamalar"><?php echo ig_svg('settings'); ?></button>
     </div>
 </header>
 
 <!-- ============================== Telefon: pastki panel ============================== -->
-<!-- Instagram tartibi: Bosh sahifa | Reels | Chat(markazda) | Qidiruv | Profil -->
+<!-- YouTube mobili: Bosh sahifa | Reels | + Yaratish | Chat | Siz -->
 <nav class="ig-tabbar">
-    <a href="index.php" class="<?php echo $NAV_ACTIVE === 'home' ? 'active' : ''; ?>" aria-label="Bosh sahifa"><?php echo ig_svg('home'); ?></a>
-    <a href="reels.php" class="<?php echo $NAV_ACTIVE === 'reels' ? 'active' : ''; ?>" aria-label="Reels"><?php echo ig_svg('reels'); ?></a>
-    <a href="chat.php" class="<?php echo $NAV_ACTIVE === 'chat' ? 'active' : ''; ?>" aria-label="Chat"><?php echo ig_svg('chat'); ?><span class="ig-ntf-badge ig-tab-badge" id="igChatBadgeM" hidden></span></a>
-    <a href="index.php" data-nav-search="1" aria-label="Qidiruv" class="<?php echo $NAV_ACTIVE === 'search' ? 'active' : ''; ?>"><?php echo ig_svg('search'); ?></a>
-    <a href="<?php echo $igProfileH; ?>" class="ig-tab-profile <?php echo $NAV_ACTIVE === 'profile' ? 'active' : ''; ?>" aria-label="Profil"><?php echo $igAvatar; ?></a>
+    <a href="index.php" class="<?php echo $NAV_ACTIVE === 'home' ? 'active' : ''; ?>" aria-label="Bosh sahifa"><?php echo ig_svg('home'); ?><span class="ig-tab-lbl">Bosh sahifa</span></a>
+    <a href="reels.php" class="<?php echo $NAV_ACTIVE === 'reels' ? 'active' : ''; ?>" aria-label="Reels"><?php echo ig_svg('reels'); ?><span class="ig-tab-lbl">Reels</span></a>
+    <a href="<?php echo $igCreateH; ?>" class="ig-tab-create" aria-label="Yaratish" title="Reels yuklash"><?php echo ig_svg('plus'); ?><span class="ig-tab-lbl">Yaratish</span></a>
+    <a href="chat.php" class="<?php echo $NAV_ACTIVE === 'chat' ? 'active' : ''; ?>" aria-label="Chat"><?php echo ig_svg('chat'); ?><span class="ig-ntf-badge ig-tab-badge" id="igChatBadgeM" hidden></span><span class="ig-tab-lbl">Chat</span></a>
+    <a href="<?php echo $igProfileH; ?>" class="ig-tab-profile <?php echo $NAV_ACTIVE === 'profile' ? 'active' : ''; ?>" aria-label="Siz"><?php echo $igAvatar; ?><span class="ig-tab-lbl">Siz</span></a>
 </nav>
 
 <!-- Doimiy donor tugmasi: umumiy nav kiritilgan barcha sahifalarda ko'rinadi. -->
@@ -641,6 +651,36 @@ window.addEventListener('DOMContentLoaded', function () {
     }
     igSettingsBind(setBtn);
     igSettingsBind(setBtnM);
+
+    // ---------------- YouTube uslubidagi menyu tugmasi ----------------
+    // Hamburger chap paneldagi yozuvlarni ochadi. Hover/fokusda ochilish
+    // saqlanib qoladi, lekin tugma yordamida panel "yelimlab" qo'yiladi.
+    var menuBtn = document.getElementById('igMenuBtn');
+    var side    = document.getElementById('igSide');
+    if (menuBtn && side) {
+        var sideKey = 'wc_side_open';
+        function igSideOpen(open) {
+            side.classList.toggle('open', !!open);
+            menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            try { localStorage.setItem(sideKey, open ? '1' : '0'); } catch (e) {}
+        }
+        var sideSaved = false;
+        try { sideSaved = localStorage.getItem(sideKey) === '1'; } catch (e) {}
+        igSideOpen(sideSaved);
+        menuBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            igSideOpen(!side.classList.contains('open'));
+        });
+        document.addEventListener('click', function (e) {
+            if (!side.classList.contains('open')) return;
+            if (side.contains(e.target) || menuBtn.contains(e.target)) return;
+            igSideOpen(false);
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && side.classList.contains('open')) igSideOpen(false);
+        });
+    }
+
     if (setClose) setClose.addEventListener('click', function () { igSettingsOpen(false); });
     if (setPanel) setPanel.addEventListener('click', function (e) {
         // Fon (panel tashqarisi) bosilsa yopiladi.
@@ -968,7 +1008,13 @@ window.addEventListener('DOMContentLoaded', function () {
         tvSearchBox.hidden = true;
         document.body.style.overflow = '';
         // Fokusni "Qidiruv" bandiga qaytaramiz (pult bilan "orqaga" tabiiy).
-        var back = document.querySelector('#igSide [data-nav-search]');
+        // Birinchi KO'RINADIGAN qidiruv tugmasiga qaytaramiz (mast faqat
+        // kompyuterda, mobar faqat telefonda).
+        var backs = document.querySelectorAll('[data-nav-search]');
+        var back = null;
+        for (var bi = 0; bi < backs.length; bi++) {
+            if (backs[bi].getClientRects().length) { back = backs[bi]; break; }
+        }
         if (back) {
             try { back.focus(); back.classList.add('tv-focus'); } catch (e) {}
         }
