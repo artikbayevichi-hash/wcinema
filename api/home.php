@@ -42,7 +42,12 @@ $computeBase = function () use ($catalog, $limit, $offset, $orderSeed) {
     );
 
     return [
-        'categories' => $catalog->getCategories(),
+        // Serial / Dokumental bo'limlari saytdan olib tashlangan —
+        // ularni kategoriya chiplari va navigatsiyaga chiqarmaymiz.
+        'categories' => array_values(array_filter(
+            $catalog->getCategories(),
+            static fn($c) => !in_array((string) ($c['slug'] ?? ''), ['serial', 'dokumental', 'dokument', 'dok'], true)
+        )),
         'genres'     => $catalog->getGenres(20),
         'stats'      => $catalog->getStats(),
         'feed'       => $items,

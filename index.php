@@ -130,8 +130,6 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
     <div class="chips" id="catChips" role="toolbar" aria-label="Kategoriyalar"></div>
 </div>
 
-<div class="loading" id="loading" hidden><span class="spinner"></span></div>
-
 <main>
     <!-- ================================================= Bosh sahifa -->
     <section id="homeView">
@@ -145,10 +143,6 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 
         <!-- Infinite scroll sentinel: oldiga tushilganda keyingi sahifa yuklanadi -->
         <div id="feedSentinel" aria-hidden="true"></div>
-
-        <div class="more-wrap">
-            <button class="btn-more" id="goCatalog">Butun katalogni ko‘rish</button>
-        </div>
     </section>
 
     <!-- ================================================= Ro'yxat -->
@@ -285,10 +279,6 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
         // Hover-preview uchun Service Worker'ni oldindan tayyorlaymiz
         // (reload qilmaydi): sichqoncha ustiga kelganda video kutmasin.
         if (window.TgStream && window.TgStream.warm) window.TgStream.warm();
-
-        // "Butun katalogni ko'rish" - app.js ga alohida hodisa beriladi
-        var b = document.getElementById('goCatalog');
-        if (b) b.onclick = function () { window.dispatchEvent(new Event('wc:showCatalog')); };
     });
 </script>
 </body>

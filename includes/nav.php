@@ -2,14 +2,15 @@
 // ============================================================================
 // includes/nav.php - YouTube TV uslubidagi navigatsiya qobig'i
 // ============================================================================
-//   KATTA EKRAN (>=1000px): chap yon panel (mini guide)
-//     Sichqoncha/fokus panelga kirsa — kengayadi, chiqsa — yig'iladi.
-//     Tartib (tepadan pastga):
-//       Profil · Qidiruv · Bosh sahifa · Reels · Chat · Kino · Animelar ·
-//       Multfilmlar · Kutubxona · Bildirishnomalar
+//   KATTA EKRAN (>=1000px): chap yon panel (ixcham, qotiq mini guide)
+//     Faqat hamburger tugmasi kengaytiradi; hover bilan o'zgarmaydi.
+//     Tartib: Bosh sahifa · Reels · Chat · kategoriyalar · Kutubxona ·
+//       Bildirishnomalar · Taklif/shikoyat · Sozlamalar.
+//     Profil faqat tepa panelning o'ngida — bitta.
 //
 //   TELEFON  (<1000px): yuqori panel + pastki panel
-//     Pastki panel: Bosh sahifa · Reels · Chat · Qidiruv · Profil
+//     Yuqori: brend · kataloglar · qidiruv · taklif · bildirishnoma · sozlamalar.
+//     Pastki: Bosh sahifa · Reels · + · Chat · Siz (yagona profil).
 //
 //   TV REJIMI (html.tv): pult bilan boshqarishga moslashgan katta interfeys.
 //     Avtomatik aniqlanadi yoki `assets/js/tv-mode.js` orqali yoqiladi (`?tv=1`).
@@ -37,13 +38,17 @@ if ($igLogged) {
         ? '<img class="ig-avatar" src="' . esc($user['avatar']) . '" alt="">'
         : '<span class="ig-avatar ig-avatar-in">' . esc($igIn) . '</span>';
 }
-$igName = $igLogged ? ($user['first_name'] ?? 'Profil') : 'Profil';
-
 // Kategoriyalar (chap panel bandlari). Bazaga yangi kategoriya qo'shilsa,
 // u ham avtomatik paydo bo'ladi.
 $igCats = [];
 try { $igCats = $catalog->getCategories(); } catch (Exception $e) { $igCats = []; }
-$igCatOrder = ['kino', 'film', 'anime', 'multfilm', 'multflim', 'serial', 'dokumental', 'dokument'];
+// Serial / Dokumental bo'limlari saytdan olib tashlangan — hech qayerda
+// (chap guide, mobil menyu, chiplar, qidiruv) ko'rinmasin.
+$igHiddenCats = ['serial', 'dokumental', 'dokument', 'dok'];
+$igCats = array_values(array_filter($igCats, function ($c) use ($igHiddenCats) {
+    return !in_array((string) ($c['slug'] ?? ''), $igHiddenCats, true);
+}));
+$igCatOrder = ['kino', 'film', 'anime', 'multfilm', 'multflim'];
 usort($igCats, function ($a, $b) use ($igCatOrder) {
     $ia = array_search($a['slug'] ?? '', $igCatOrder, true);
     $ib = array_search($b['slug'] ?? '', $igCatOrder, true);
@@ -247,12 +252,8 @@ function wc_logo_img($alt = '', $attrs = '') {
 
         <div class="ig-sep"></div>
 
-        <!-- "Siz" bo'limi (YouTube'dagi You) -->
-        <a class="ig-item ig-profile-top<?php echo $NAV_ACTIVE === 'profile' ? ' active' : ''; ?>"
-           href="<?php echo $igProfileH; ?>" title="Profil">
-            <span class="ig-ico"><?php echo $igAvatar; ?></span>
-            <span class="ig-txt"><?php echo esc($igName); ?></span>
-        </a>
+        <!-- Profil faqat tepa panelning o'ng burchagida. Chap guide'da
+             takroriy profil tugmasi bo'lmaydi (ikki avatar birga chiqib qolardi). -->
 
         <!-- Kutubxona (ochiladigan bo'lim) -->
         <button class="ig-item ig-lib-toggle" id="igLibBtn" type="button"
@@ -307,7 +308,8 @@ function wc_logo_img($alt = '', $attrs = '') {
 </aside>
 
 <!-- ============================== Telefon: YouTube uslubidagi yuqori panel ============================== -->
-<!-- YouTube mobili: logo chapda, qidiruv/bildirishnoma/profil o'ngda. -->
+<!-- YouTube mobili: logo chapda, qidiruv/taklif/bildirishnoma/sozlamalar o'ngda.
+     Profil yuqorida yo'q — u faqat pastki "Siz" tabida (bitta). -->
 <header class="ig-mobar">
     <div class="ig-mobar-row">
         <a class="ig-mobar-brand" href="index.php"><?php echo wc_logo_img(SITE_NAME, 'width="30" height="30"'); ?><span><?php echo htmlspecialchars(SITE_NAME); ?></span></a>
@@ -332,8 +334,8 @@ function wc_logo_img($alt = '', $attrs = '') {
             <button class="ig-mobar-btn" type="button" data-feedback-open
                     aria-haspopup="dialog" aria-controls="feedbackDialog" aria-label="Taklif yoki shikoyat"><?php echo ig_svg('send'); ?></button>
             <a class="ig-mobar-btn" href="notifications.php" aria-label="Bildirishnomalar"><?php echo ig_svg('bell'); ?></a>
-            <button class="ig-mobar-btn ig-mobar-avatar ig-profile-top" id="igMoreBtnM" type="button"
-                    title="Sozlamalar va profil" aria-label="Sozlamalar"><?php echo $igAvatar; ?></button>
+            <button class="ig-mobar-btn" id="igMoreBtnM" type="button"
+                    title="Sozlamalar" aria-label="Sozlamalar"><?php echo ig_svg('settings'); ?></button>
         </div>
     </div>
 </header>
@@ -381,7 +383,7 @@ function wc_logo_img($alt = '', $attrs = '') {
 </div>
 
 <!-- ============================== Qidiruv oynasi (alohida) ============================== -->
-<div class="ig-search" id="igSearch" role="dialog" aria-modal="true" aria-label="Saytdan qidirish" hidden>
+<div class="ig-search" id="igSearch" role="dialog" aria-label="Saytdan qidirish" hidden>
     <div class="ig-search-bar">
         <span class="ig-search-ico"><?php echo ig_svg('search'); ?></span>
         <label class="sr-only" for="igSearchInput">Saytdan qidirish</label>
@@ -394,8 +396,6 @@ function wc_logo_img($alt = '', $attrs = '') {
         <button type="button" class="ig-chip" data-cat="film">Kinolar</button>
         <button type="button" class="ig-chip" data-cat="anime">Animelar</button>
         <button type="button" class="ig-chip" data-cat="multfilm">Multfilmlar</button>
-        <button type="button" class="ig-chip" data-cat="serial">Seriallar</button>
-        <button type="button" class="ig-chip" data-cat="dokumental">Dokumental</button>
     </div>
     <div class="ig-search-body">
         <div class="ig-search-hint" id="igSearchHint">Qidirish uchun nom yozing</div>
@@ -850,14 +850,13 @@ window.addEventListener('DOMContentLoaded', function () {
         igCatOpen(false);
         searchBox.hidden = false;
         igRecentRender();
-        document.body.style.overflow = 'hidden';
+        // Kichik ochiladigan panel: sahifa skroli va boshqa tugmalar ishlayveradi.
         if (searchInp) setTimeout(function () { searchInp.focus(); }, 30);
     }
 
     function igCloseSearch() {
         if (!searchBox) return;
         searchBox.hidden = true;
-        document.body.style.overflow = '';
     }
 
     function igResultCard(c) {
@@ -1214,6 +1213,15 @@ window.addEventListener('DOMContentLoaded', function () {
         });
     }
     if (searchX) searchX.addEventListener('click', igCloseSearch);
+    // YouTube uslubidagi kichik panel: tashqarisiga bosilganda yopiladi.
+    // Qidiruv tugmasi ustiga bosilganda esa ochilgach darhol yopilib qolmasligi
+    // uchun uni istisno qilamiz (`[data-nav-search]` o'zi ochadi).
+    document.addEventListener('click', function (e) {
+        if (!searchBox || searchBox.hidden) return;
+        if (searchBox.contains(e.target)) return;
+        if (e.target.closest && e.target.closest('[data-nav-search]')) return;
+        igCloseSearch();
+    });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && searchBox && !searchBox.hidden) igCloseSearch();
     });

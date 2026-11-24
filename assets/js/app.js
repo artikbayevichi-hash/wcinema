@@ -119,10 +119,10 @@
         setTimeout(() => t.remove(), type === 'err' ? 6000 : 3500);
     }
 
-    function setLoading(on) {
-        const el = $('#loading');
-        if (el) el.hidden = !on;
-    }
+    // Sahifa yuqorisidagi doimiy aylanuvchi spinner olib tashlandi.
+    // Yuklash indikatori endi yo'q — chaqiruvlar xavfsiz bo'lishi uchun
+    // funksiya no-op bo'lib qoldi (kartochkalar o'zi asta-sekin chiqadi).
+    function setLoading() {}
 
     // ---------------------------------------------------------------- card
     // Poster ustuvorligi (YouTube uslubi):
@@ -600,8 +600,11 @@
     // chiqmasligi uchun).
     const CAT_EMOJI = {
         kino: '🎬', anime: '🌸', multfilm: '🧸', multflim: '🧸',
-        serial: '📺', film: '🎥', kinoqizi: '🎬', bolalar: '🧸'
+        film: '🎥', kinoqizi: '🎬', bolalar: '🧸'
     };
+    // Serial / Dokumental bo'limlari saytda ko'rinmaydi (API ularni ham
+    // yubormaydi, lekin eski keshdan kelib qolsa — bu yerda qo'riqlaymiz).
+    const HIDDEN_CATS = new Set(['serial', 'dokumental', 'dokument', 'dok']);
 
     function emojiFor(slug, name) {
         const s = String(slug || '').toLowerCase();
@@ -619,7 +622,9 @@
 
         // "Hammasi" har doim birinchi bo'ladi
         const cats = [{ slug: '', name: 'Hammasi', count: 0 }].concat(
-            Array.isArray(categories) ? categories : []
+            (Array.isArray(categories) ? categories : []).filter(
+                c => !HIDDEN_CATS.has(String(c && c.slug || '').toLowerCase())
+            )
         );
 
         wrap.innerHTML = cats.map(c =>
@@ -694,7 +699,7 @@
         let t = 'Katalog';
         if (state.search) t = `"${state.search}" natijalari`;
         else if (state.category) {
-            t = { kino: 'Kino', anime: 'Animelar', multfilm: 'Multfilmlar', serial: 'Seriallar', dokumental: 'Dokumental' }[state.category] || 'Katalog';
+            t = { kino: 'Kino', anime: 'Animelar', multfilm: 'Multfilmlar' }[state.category] || 'Katalog';
         }
         $('#listTitle').textContent = t;
     }
@@ -1577,13 +1582,6 @@
             state.page++;
             loadList(false);
         };
-
-        // "Butun katalogni ko'rish" (index.php dan dispatch qilinadi)
-        window.addEventListener('wc:showCatalog', () => {
-            showListView();
-            updateListTitle();
-            loadList(true);
-        });
 
         // Trimmer modalni yopish
         $$('#trimModal [data-trim-close]').forEach(el => el.onclick = () => {

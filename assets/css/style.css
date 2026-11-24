@@ -461,6 +461,9 @@ main { padding: 4px 0 20px; }
     display: flex; align-items: center; justify-content: center; gap: 10px;
     padding: 30px; color: var(--muted); font-size: 14px;
 }
+/* `hidden` atributi CSS `display:flex` tomonidan yengib qo'yilmasligi uchun
+   (aks holda spinner doim aylanib turardi). */
+.loading[hidden] { display: none; }
 .spinner {
     width: 18px; height: 18px;
     border: 2px solid var(--line);

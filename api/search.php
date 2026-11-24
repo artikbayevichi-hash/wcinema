@@ -69,6 +69,10 @@ $compute = function () use ($q, $limit, $catalog, $userId) {
             'sort'   => 'new',
         ]);
         foreach ($items as $c) {
+            // Olib tashlangan bo'limlar (Serial / Dokumental) qidiruvda ham chiqmasin.
+            if (in_array((string) ($c['category_slug'] ?? ''), ['serial', 'dokumental', 'dokument', 'dok'], true)) {
+                continue;
+            }
             $content[] = $catalog->toPublicArray($c, $userId);
         }
 
