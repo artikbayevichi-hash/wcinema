@@ -17,6 +17,54 @@ $userId = $user ? (int) $user['id'] : null;
 // Chuqur havola: /reels.php?reel=15  -> to'g'ridan-to'g'ri shu reelni ochadi
 $openReel = (int) ($_GET['reel'] ?? 0);
 $myStats  = $userId ? $reels->authorStats($userId) : null;
+
+// ---------------------------------------------------------------------------
+// BIRINCHI SAHIFA 0-RTT: oqimni HTML ichiga qo'yamiz.
+//
+// Ilgari reels.js ochilganda avval `api/reels.php` ga alohida so'rov yuborib,
+// keyin birinchi kadrni ko'rsatardi (50-150 ms kutish). Endi birinchi 10 ta
+// reel allaqacho HTML bilan birga keladi va JS darhol slaydni chizadi.
+// Seedni SERVER tanlaydi va JS'ga uzatadi — shunda "ko'p yuklash" (offset)
+// davomida tartib bir xil bo'ladi, API so'rovi ham xuddi shu seeddan foydalanadi.
+// ---------------------------------------------------------------------------
+$viewUid   = (int) reelUserId();
+$feedSeed  = mt_rand(1, 900000000);
+$feedSize  = max(1, min(30, (int) REEL_PAGE_SIZE));
+$orderSeed = Reels::seedForBucket(Reels::seedBucket($feedSeed));
+$initialFeed = null;
+try {
+    $baseFeed = HttpCache::json(
+        HttpCache::key('reelfeed', ['new', $feedSize, 0, Reels::seedBucket($feedSeed)]),
+        30, 30,
+        static function () use ($reels, $feedSize, $orderSeed) {
+            return $reels->getFeedBase($feedSize, 0, 'new', $orderSeed);
+        }
+    );
+    $totalRow = HttpCache::json(
+        HttpCache::key('reeltotal', ['new']), 30, 30,
+        static function () use ($reels) {
+            return ['n' => $reels->countFeed('new')];
+        }
+    );
+    $feedItems = $reels->applyViewer($baseFeed, $viewUid);
+    $feedTotal = (int) ($totalRow['n'] ?? 0);
+    $initialFeed = [
+        'items'     => $feedItems,
+        'sort'      => 'new',
+        'limit'     => $feedSize,
+        'offset'    => 0,
+        'has_more'  => count($feedItems) < $feedTotal,
+        'total'     => $feedTotal,
+        'viewer_id' => $viewUid,
+    ];
+} catch (\Throwable $e) {
+    // Kesh/DB xatosida sahifa ochilmay qolmasin — JS oddiy API ga qaytadi.
+    $initialFeed = null;
+}
+if ($viewUid > 0) {
+    // Shaxsiy bayroqlar (like/save) HTML ichiga kirdi — CDN keshlamasin.
+    HttpCache::privateNoStore();
+}
 ?>
 <!DOCTYPE html>
 <html lang="uz">
@@ -188,25 +236,33 @@ $myStats  = $userId ? $reels->authorStats($userId) : null;
 
 <script>
     // tg-stream.js uchun (Telegram kanalidagi reelslarni o'ynatish).
-    window.APP = window.APP || {
-        base: <?php echo json_encode(rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\')); ?>,
-        tg: {
-            apiId:   <?php echo (int) TG_API_ID; ?>,
-            apiHash: <?php echo json_encode((string) TG_API_HASH); ?>
-        },
-        // Reels izohlari Telegram forum-guruhda saqlanadi (tg-comments.js).
-        tgCommentsChat: <?php echo json_encode((string) TG_COMMENTS_CHAT); ?>,
-        tgCommentsUrl:  <?php echo json_encode((string) TG_COMMENTS_URL); ?>,
-        // `lottie.min.js` (298 KB) manzili. Bu sahifada skript teg sifatida
-        // YUKLANMAYDI — `tg-comments.js` uni faqat birinchi `.tgs` (animatsiyali)
-        // stiker topilganda `ensureLottie()` orqali yuklaydi. Izohlarda `.tgs`
-        // stiker bo'lsa, shu zahoti yuklanadi; bo'lmasa umuman yuklanmaydi.
-        tgLottie: <?php echo json_encode('assets/vendor/lottie.min.js?v=' . (@filemtime(__DIR__ . '/assets/vendor/lottie.min.js') ?: 1)); ?>
+    // DIQQAT: `nav.php` ichidagi `tg-persist.php` APP ni ALLAQACHON yaratgan
+    // bo'ladi. `window.APP = window.APP || {...}` ishlatilsa bu kalitlar
+    // YO'QOLADI va izohlar faqat API javobiga qarab ishlaydi. Shuning uchun
+    // o'z kalitlarimizni doim (aniq) o'rnatamiz.
+    window.APP = window.APP || {};
+    window.APP.base = <?php echo json_encode(rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/\\')); ?>;
+    window.APP.tg = {
+        apiId:   <?php echo (int) TG_API_ID; ?>,
+        apiHash: <?php echo json_encode((string) TG_API_HASH); ?>
     };
+    // Reels izohlari Telegram forum-guruhda saqlanadi (tg-comments.js).
+    window.APP.tgCommentsChat = <?php echo json_encode((string) TG_COMMENTS_CHAT); ?>;
+    window.APP.tgCommentsUrl  = <?php echo json_encode((string) TG_COMMENTS_URL); ?>;
+    // Mavzularni aynan shu bot ochadi — xato xabari ham shu nom bilan chiqadi.
+    window.APP.tgCommentsBot  = <?php echo json_encode((string) (defined('REELS_BOT_USERNAME') ? REELS_BOT_USERNAME : '')); ?>;
+    // `lottie.min.js` (298 KB) manzili. Bu sahifada skript teg sifatida
+    // YUKLANMAYDI — `tg-comments.js` uni faqat birinchi `.tgs` (animatsiyali)
+    // stiker topilganda `ensureLottie()` orqali yuklaydi. Izohlarda `.tgs`
+    // stiker bo'lsa, shu zahoti yuklanadi; bo'lmasa umuman yuklanmaydi.
+    window.APP.tgLottie = <?php echo json_encode('assets/vendor/lottie.min.js?v=' . (@filemtime(__DIR__ . '/assets/vendor/lottie.min.js') ?: 1)); ?>;
     window.REELS = {
         userId: <?php echo $userId ? (int) $userId : 'null'; ?>,
         userName: <?php echo json_encode($user['first_name'] ?? null); ?>,
         openReel: <?php echo $openReel; ?>,
+        // 0-RTT oqim: birinchi sahifa API so'rovisiz chiziladi (yuqoriga qarang).
+        feedSeed: <?php echo (int) $feedSeed; ?>,
+        initialFeed: <?php echo json_encode($initialFeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>,
         myStats: <?php echo json_encode($myStats); ?>,
         siteName: <?php echo json_encode(SITE_NAME); ?>,
         maxUploadMb: <?php echo (int) REEL_MAX_UPLOAD_MB; ?>,

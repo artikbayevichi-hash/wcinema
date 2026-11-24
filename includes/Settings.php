@@ -99,11 +99,15 @@ class Settings
                     return $this->err('Username: 3–32 ta harf, raqam yoki «_»');
                 }
                 if ($v !== (string) $now['username']) {
-                    $exists = $this->db->fetchOne(
-                        'SELECT id FROM users WHERE username = ? AND id <> ? LIMIT 1',
-                        [$v, $userId]
-                    );
-                    if ($exists) return $this->err('Bu username band');
+                    // Ism bir xil bo'la oladi, username esa ikkala jadvalda ham
+                    // noyob bo'lishi kerak.
+                    $taken = function_exists('username_taken')
+                        ? username_taken($v, $userId)
+                        : (bool) $this->db->fetchOne(
+                            'SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id <> ? LIMIT 1',
+                            [$v, $userId]
+                        );
+                    if ($taken) return $this->err('Bu username band');
                     $data['username'] = $v;
                 }
             }

@@ -47,10 +47,13 @@ if ($username !== '') {
     if ($username === '') {
         $errors[] = 'Username faqat lotin harflar, raqam va _ dan iborat bo\'lishi kerak';
     } else {
-        $dup = Database::getInstance()->fetchOne(
-            "SELECT id FROM users WHERE username = ? AND id <> ? LIMIT 1",
-            [$username, (int) $userId]
-        );
+        // Faqat username noyob bo'lishi shart; bir xil ism normal bo'ladi.
+        $dup = function_exists('username_taken')
+            ? username_taken($username, $userId)
+            : (bool) Database::getInstance()->fetchOne(
+                "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id <> ? LIMIT 1",
+                [$username, (int) $userId]
+            );
         if ($dup) {
             $errors[] = 'Bu username band';
         } else {

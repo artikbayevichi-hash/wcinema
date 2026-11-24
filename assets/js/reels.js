@@ -88,7 +88,10 @@
     // Har ochilishda (refresh) oqim tartibini yangilash uchun seed:
     // server `RAND(seed)` bilan saralaydi, shuning uchun "ko'p yuklash"
     // (offset) davomida ham bir xil tartib va nusxa takrorlanmaydi.
-    const FEED_SEED = Math.floor(Math.random() * 900000000) + 1;
+    // Seedni server tanlaydi (reels.php): birinchi sahifa HTML ichida keladi
+    // va keyingi sahifalar xuddi shu seed bilan olinadi -> tartib buzilmaydi.
+    const FEED_SEED = Number(CFG.feedSeed) || (Math.floor(Math.random() * 900000000) + 1);
+    let initialFeedUsed = false;
 
     const state = {
         sort: 'new',
@@ -348,14 +351,23 @@
         }
 
         try {
-            const q = new URLSearchParams({
-                sort: state.sort,
-                limit: 10,
-                offset: state.offset,
-                seed: FEED_SEED
-            });
-            withMe(q);
-            const d = await api('api/reels.php?' + q.toString());
+            let d;
+            // Birinchi ochilishda API so'rovi YO'Q: ma'lumot HTML ichida.
+            // Bu bir RTT (odatda 50-150 ms) va spinner'ni butunlay olib tashlaydi.
+            if (reset && state.sort === 'new' && !initialFeedUsed
+                && CFG.initialFeed && Array.isArray(CFG.initialFeed.items)) {
+                d = CFG.initialFeed;
+                initialFeedUsed = true;
+            } else {
+                const q = new URLSearchParams({
+                    sort: state.sort,
+                    limit: 10,
+                    offset: state.offset,
+                    seed: FEED_SEED
+                });
+                withMe(q);
+                d = await api('api/reels.php?' + q.toString());
+            }
             state.viewerId = Number(d.viewer_id) || 0;
             const items = d.items || [];
 
@@ -383,6 +395,7 @@
             state.hasMore = !!d.has_more;
             state.slideEls = Array.from(track.querySelectorAll('.reels-slide'));
             wireSlides();
+            warmFeedMeta(state.items);
 
             if (reset) {
                 const idx = CFG.openReel
@@ -402,6 +415,29 @@
     }
 
     // ================================================================ oqim
+
+    // Birinchi bir nechta reelning Telegram metama'lumotini (id / access_hash /
+    // dc / file_reference) bitta server so'rovi bilan oldindan olamiz.
+    // DIQQAT: bu faqat METAMA'LUMOT — video baytlari yuklanmaydi. Bosilganda
+    // `tg-stream.js` allaqachon keshdagi ma'lumot bilan darhol oqim boshlaydi.
+    let feedMetaWarmed = false;
+    function warmFeedMeta(items) {
+        if (feedMetaWarmed || !Array.isArray(items) || !window.TgStream) return;
+        const list = [];
+        items.slice(0, 4).forEach((r) => {
+            const pb = r && r.playback;
+            if (pb && pb.type === 'telegram' && pb.channel && Number(pb.post) > 0) {
+                list.push({ channel: pb.channel, post: Number(pb.post) });
+            }
+        });
+        if (!list.length) return;
+        feedMetaWarmed = true;
+        if (document.hidden) return;               // yashirin tab: fon so'rovi yo'q
+        try {
+            const p = window.TgStream.prefetchMany(list);
+            if (p && p.catch) p.catch(() => {});
+        } catch (e) {}
+    }
 
     // Joriy (birinchi ko'rinadigan) slaydni BAYT darajasida isitamiz.
     //
@@ -1352,6 +1388,40 @@
         if (fab) fab.remove();
     }
 
+    // ------------------------------------------------------- doimiy ulanish
+    // Reels ochilishi Telegram ulanishini KUTMASLIGI uchun:
+    //   1) tez klient (MTProto) sayt yuklanishi bilan isitiladi (`tg-stream.js`),
+    //   2) izohlar uchun ishlatiladigan klient ham oldindan ulanadi,
+    //   3) faqat KO'RINADIGAN tabda yengil ping yuboriladi; yashirin tabda
+    //      hech qanday so'rov yo'q, `pagehide` da barcha kanallar uziladi va
+    //      `pageshow` da darhol qayta ulanadi (mqv: tg-stream lifecycle).
+    let reelsWarmTimer = null;
+    function keepReelsConnected() {
+        if (document.hidden) return;
+        const T = window.TgStream;
+        if (!T) return;
+        try { if (typeof T.keepAlive === 'function') T.keepAlive(); } catch (e) {}
+        try {
+            if (typeof T.hasSession === 'function' && T.hasSession()
+                && typeof T.client === 'function') {
+                const p = T.client();
+                if (p && p.catch) p.catch(() => {});
+            }
+        } catch (e) {}
+    }
+    function bindReelsConnection() {
+        keepReelsConnected();
+        if (reelsWarmTimer) clearInterval(reelsWarmTimer);
+        reelsWarmTimer = setInterval(keepReelsConnected, 60000);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) keepReelsConnected();
+        });
+        window.addEventListener('pageshow', keepReelsConnected);
+        window.addEventListener('pagehide', () => {
+            if (reelsWarmTimer) { clearInterval(reelsWarmTimer); reelsWarmTimer = null; }
+        });
+    }
+
     // ---------------------------------------------------------------- teardown
     function releaseAll() {
         if (window.TgStream) {
@@ -1372,6 +1442,7 @@
 
     wire();
     load(true);
+    bindReelsConnection();
 
     // tg-comments.js "yangi izoh qo'shdim / o'chirdim" deganida yon
     // paneldagi raqamni shu orqali darhol yangilaydi.

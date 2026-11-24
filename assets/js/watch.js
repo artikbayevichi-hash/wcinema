@@ -1619,6 +1619,11 @@
         + (views > 0 ? fmtViews(views) + ' ko‘rildi' : 'Yangi') + '</b></span>');
       var ago = fmtAgo(D.added_at || D.created_at);
       if (ago) parts.push('<span class="watch-stat"><b>' + esc(ago) + '</b></span>');
+      // Kino / anime / multfilmning content ID si qidiruv natijalari bilan
+      // bir xil ko'rinib turadi (watch.php?c=<ID> havolasidagi raqam).
+      var contentId = parseInt(D.id, 10) || 0;
+      if (contentId) parts.push('<span class="watch-stat watch-stat-id">ID: '
+        + contentId + '</span>');
       sub.innerHTML = parts.join('');
     }
 

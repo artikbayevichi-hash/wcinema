@@ -1636,13 +1636,22 @@ class Reels {
         }
         $name = '▶︎ ' . $name;
 
-        $bot = new TelegramBot();
+        // Reels mavzularini ALOHIDA reels boti ochadi. Bu bot kanalga ham,
+        // izohlar guruhiga ham admin qilingan; asosiy botning so'rov limiti
+        // endi izohlar bilan aralashmaydi. Token bo'sh bo'lsa eski bot ishlaydi.
+        $reelToken = defined('REELS_BOT_TOKEN') ? trim((string) REELS_BOT_TOKEN) : '';
+        $reelUser  = defined('REELS_BOT_USERNAME') ? trim((string) REELS_BOT_USERNAME) : '';
+        $bot = new TelegramBot(
+            $reelToken !== '' ? $reelToken : null,
+            $reelUser !== '' ? $reelUser : null
+        );
         $res = $bot->createForumTopic(TG_COMMENTS_CHAT, $name);
         if (!$res || empty($res['message_thread_id'])) {
             return [
                 'success' => false,
                 'message' => 'Mavzu ochilmadi: ' . ($bot->getLastError() ?: 'noma’lum xato')
-                    . ' (guruhda Topics yoqilganini va bot admin ekanini tekshiring)',
+                    . ' (' . ($reelToken !== '' ? 'reels boti' : 'bot')
+                    . ' guruhda admin ekanini va Topics yoqilganini tekshiring)',
             ];
         }
         $topicId = (int) $res['message_thread_id'];

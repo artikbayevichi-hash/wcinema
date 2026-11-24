@@ -82,52 +82,81 @@ function ig_cat_icon($slug) {
 /** YouTube uslubidagi kontur ikonka (SVG). Default: oq kontur, ichi bo'sh. */
 function ig_svg($name) {
     static $icons = [
-        'search'   => '<circle cx="11" cy="11" r="6.6"/><circle style="fill:currentColor;stroke:none" cx="11" cy="11" r="1.5"/><line x1="15.8" y1="15.8" x2="20.6" y2="20.6"/>',
-        'home'     => '<path d="M3.9 10.3 12 3.7l8.1 6.6v8.3a2.4 2.4 0 0 1-2.4 2.4H6.3a2.4 2.4 0 0 1-2.4-2.4z"/><path style="fill:none" d="M13.9 21v-4.3a1.9 1.9 0 0 0-3.8 0V21"/>',
-        'film'     => '<path fill-rule="evenodd" d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm6 4.3v7.4l6-3.7z"/>',
-        'movie'    => '<rect x="2.8" y="5.4" width="18.4" height="13.2" rx="2.8"/><path style="fill:none" d="M7.4 5.4v13.2M16.6 5.4v13.2"/><circle style="fill:currentColor;stroke:none" cx="5.1" cy="8.7" r=".85"/><circle style="fill:currentColor;stroke:none" cx="5.1" cy="12" r=".85"/><circle style="fill:currentColor;stroke:none" cx="5.1" cy="15.3" r=".85"/><circle style="fill:currentColor;stroke:none" cx="18.9" cy="8.7" r=".85"/><circle style="fill:currentColor;stroke:none" cx="18.9" cy="12" r=".85"/><circle style="fill:currentColor;stroke:none" cx="18.9" cy="15.3" r=".85"/>',
-        'reels'    => '<rect style="fill:none" x="3" y="3" width="18" height="18" rx="5.2"/><path style="fill:none" d="M3.4 8.4h17.2"/><path style="fill:currentColor;stroke:none" d="M10.2 11.6v5.8l5-2.9z"/><circle style="fill:currentColor;stroke:none" cx="8" cy="5.9" r="1"/><circle style="fill:currentColor;stroke:none" cx="12" cy="5.9" r="1"/><circle style="fill:currentColor;stroke:none" cx="16" cy="5.9" r="1"/>',
-        // Chat — dumaloq pufakcha va "yozilmoqda" uchta nuqtasi.
-        'chat'     => '<path d="M20.6 11.5c0 4-3.85 7.2-8.6 7.2-1 0-1.96-.15-2.85-.42L4.1 20l1.32-3.7A6.85 6.85 0 0 1 3.4 11.5c0-4 3.85-7.2 8.6-7.2s8.6 3.2 8.6 7.2z"/><circle style="fill:currentColor;stroke:none" cx="8.6" cy="11.5" r="1.15"/><circle style="fill:currentColor;stroke:none" cx="12" cy="11.5" r="1.15"/><circle style="fill:currentColor;stroke:none" cx="15.4" cy="11.5" r="1.15"/>',
-        'library'  => '<path d="M3.6 5.8h3.2v14.1H3.6z"/><path d="M8.4 5.8h3.2v14.1H8.4z"/><path d="M13.2 7.1 16.2 6.2 20.5 18.8 17.5 19.8z"/><path style="fill:none" d="M2.8 20.6h18.4"/>',
-        // Tarix — soat va orqaga o'raluvchi (counter-clockwise) strelka.
-        'history'  => '<path style="fill:none" d="M12 3.9a8.1 8.1 0 1 1-7.9 9.8"/><path style="fill:none" d="M3.6 4.2v5.4h5.4"/><path style="fill:none" d="M12 8.2v4l3 1.8"/>',
-        'clock'    => '<circle cx="12" cy="12" r="8.1"/><path style="fill:none" d="M12 7.5V12l3.1 1.9"/>',
-        // Keyinroq ko'rish — xatcho'p + "qo'shish" belgisi.
-        'later'    => '<path d="M6.6 3.9h10.8v16.2L12 15.9l-5.4 4.2z"/><path style="fill:none" d="M12 7.4v5.4M9.3 10.1h5.4"/>',
-        'like'     => '<path d="M12 20.3 4.62 13.1a4.85 4.85 0 0 1 6.9-6.82l.48.47.48-.47a4.85 4.85 0 0 1 6.9 6.82z"/>',
-        'heart'    => '<path d="M12 20.3 4.62 13.1a4.85 4.85 0 0 1 6.9-6.82l.48.47.48-.47a4.85 4.85 0 0 1 6.9 6.82z"/>',
-        'thumbUp'  => '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>',
-        'thumbDown'=> '<path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>',
-        'send'     => '<path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>',
-        'list'     => '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
-        'camera'   => '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
-        'trash'    => '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+        // Qidiruv — Lucide uslubidagi lupa
+        'search'   => '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+        // Bosh sahifa — Lucide House (zamonaviy uy, eshik bilan)
+        'home'     => '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.5a2 2 0 0 1 2.582 0l7 5.5A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+        // Film — Lucide Film (kino lentasi)
+        'film'     => '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/>',
+        // Kino — Lucide Clapperboard (rejissyor taxtasi)
+        'movie'    => '<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M6.2 5.3l3.1 3.9"/><path d="m12.3 3.5 3 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+        // Reels — Lucide Clapperboard-Play uslubi (video + play)
+        'reels'    => '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.35a.645.645 0 0 1-.968-.56V7.65c0-.52.563-.844.968-.56z"/><path d="M12 17v4"/><path d="M8 21h8"/>',
+        // Chat — Lucide MessageCircle (pufakcha + uch nuqta)
+        'chat'     => '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/>',
+        // Kutubxona — Lucide Library (kitoblar javoni)
+        'library'  => '<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>',
+        // Tarix — Lucide History (orqaga soat)
+        'history'  => '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+        // Soat
+        'clock'    => '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+        // Keyinroq ko'rish — Lucide BookmarkPlus
+        'later'    => '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
+        // Yoqqanlar — Lucide Heart
+        'like'     => '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>',
+        'heart'    => '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>',
+        // ThumbUp — Lucide
+        'thumbUp'  => '<path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z"/>',
+        // ThumbDown — Lucide
+        'thumbDown'=> '<path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88z"/>',
+        // Taklif/shikoyat — Lucide Send (qog'oz samolyot)
+        'send'     => '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+        // Ro'yxat — Lucide List
+        'list'     => '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+        // Kamera — Lucide Camera
+        'camera'   => '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+        // O'chirish — Lucide Trash2
+        'trash'    => '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+        // Tasdiqlash — Lucide Check
         'check'    => '<path d="M20 6 9 17l-5-5"/>',
-        'close'    => '<path d="M18 6 6 18M6 6l12 12"/>',
-        'back'     => '<path d="M15 5l-7 7 7 7"/>',
-        'edit'     => '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
-        'logout'   => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
-        'download' => '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
-        'image'    => '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+        // Yopish — Lucide X
+        'close'    => '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+        // Orqaga — Lucide ChevronLeft
+        'back'     => '<path d="m15 18-6-6 6-6"/>',
+        // Tahrirlash — Lucide Pencil
+        'edit'     => '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+        // Chiqish — Lucide LogOut
+        'logout'   => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+        // Yuklab olish — Lucide Download
+        'download' => '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+        // Rasm — Lucide Image
+        'image'    => '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+        // O'ynatish — Lucide Play
         'play'     => '<polygon points="6 3 20 12 6 21 6 3"/>',
-        'bookmark' => '<path d="M6.8 4.2h10.4a1.3 1.3 0 0 1 1.3 1.3v14.3L12 15.6l-6.5 4.2V5.5a1.3 1.3 0 0 1 1.3-1.3z"/>',
-        // Bildirishnoma — chinakam qo'ng'iroq (kalta tili bilan).
-        'bell'     => '<path d="M18.4 16.6H5.6l1.5-2.3V9.9a4.9 4.9 0 0 1 9.8 0v4.4z"/><path style="fill:none" d="M10.1 16.6a1.9 1.9 0 0 0 3.8 0"/><path style="fill:none" d="M12 3.3v2"/>',
-        'folder'   => '<path d="M3.5 7a2.1 2.1 0 0 1 2.1-2.1h3.3l1.9 2.2h7.6A2.1 2.1 0 0 1 20.5 9.2v8.7a2.1 2.1 0 0 1-2.1 2.1H5.6a2.1 2.1 0 0 1-2.1-2.1z"/><path style="fill:none" d="M7.8 13h8.4M7.8 16.1h5.2"/>',
-        'settings' => '<path style="fill:none" d="M8.4 4.4v3.6M8.4 13.2v6.2M15.6 4.4v8M15.6 17.6v2"/><circle cx="8.4" cy="10.6" r="2.6"/><circle cx="15.6" cy="15" r="2.6"/>',
-        'anime'    => '<path d="M10.6 3.4c.55 2.7 2 4.15 4.9 4.9-2.9.75-4.35 2.2-4.9 4.9-.55-2.7-2-4.15-4.9-4.9 2.9-.75 4.35-2.2 4.9-4.9z"/><path d="M17.3 13.4c.35 1.75 1.3 2.8 3.2 3.3-1.9.5-2.85 1.55-3.2 3.3-.35-1.75-1.3-2.8-3.2-3.3 1.9-.5 2.85-1.55 3.2-3.3z"/>',
-        // Multfilmlar — yuzli havo shari va ipi.
-        'smile'    => '<path d="M12 3.6c3.5 0 6.3 2.7 6.3 6.1 0 3.3-2.8 6.1-6.3 6.1s-6.3-2.8-6.3-6.1c0-3.4 2.8-6.1 6.3-6.1z"/><path style="fill:none" d="M10.9 15.5h2.2l-1.1 2.1z"/><path style="fill:none" d="M12 17.6c0 1.3.5 2.2 1.5 2.9"/><circle style="fill:currentColor;stroke:none" cx="9.8" cy="9" r="1.05"/><circle style="fill:currentColor;stroke:none" cx="14.2" cy="9" r="1.05"/><path style="fill:none" d="M9.7 11.8a3.1 3.1 0 0 0 4.6 0"/>',
-        // Seriallar — antenna va "qism" o'ynatish tugmasi bo'lgan retro TV.
-        'tv'       => '<rect x="2.9" y="7.5" width="18.2" height="12" rx="2.8"/><path style="fill:none" d="M8.3 3.7 12 7.5l3.7-3.8"/><path style="fill:currentColor;stroke:none" d="M10.6 11v5l4.3-2.5z"/>',
-        // Dunyo — botga o'tish.
-        'globe'    => '<circle cx="12" cy="12" r="8.1"/><path style="fill:none" d="M3.9 12h16.2"/><path style="fill:none" d="M12 3.9c2.35 2.35 2.35 13.85 0 16.2M12 3.9c-2.35 2.35-2.35 13.85 0 16.2"/><path style="fill:none" d="M6 7.2h12M6 16.8h12"/>',
-        'tag'      => '<path d="M4.1 4.1h7.4l8.4 8.4-7.4 7.4-8.4-8.4z"/><circle style="fill:currentColor;stroke:none" cx="8.5" cy="8.5" r="1.25"/>',
-        'plus'     => '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
-        'user'     => '<circle cx="12" cy="8.4" r="3.4"/><path d="M5.4 19.4a6.6 6.6 0 0 1 13.2 0"/>',
-        // Kataloglar (mobil header) — Instagram "Explore" uslubidagi grid.
-        'catalog'  => '<rect x="3.4" y="3.4" width="7.4" height="7.4" rx="2.2"/><rect x="13.2" y="3.4" width="7.4" height="7.4" rx="2.2"/><rect x="3.4" y="13.2" width="7.4" height="7.4" rx="2.2"/><rect x="13.2" y="13.2" width="7.4" height="7.4" rx="2.2"/>',
+        // Murojaatlarim — Lucide ClipboardList (clipboard + ro'yxat)
+        'bookmark' => '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+        // Bildirishnomalar — Lucide Bell (zamonaviy qo'ng'iroq)
+        'bell'     => '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+        // Kontent boshqaruvi — Lucide LayoutDashboard
+        'folder'   => '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+        // Sozlamalar — Lucide Settings (tishli g'ildirak)
+        'settings' => '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+        // Animelar — Lucide Sparkles (yulduzchalar — sehrli)
+        'anime'    => '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/>',
+        // Multfilmlar — Lucide SmilePlus (kulgi yuz)
+        'smile'    => '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/>',
+        // Seriallar — retro TV
+        'tv'       => '<rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><path d="m17 2-5 5-5-5"/>',
+        // Dunyo / Bot — Lucide Globe
+        'globe'    => '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+        // Teg — Lucide Tag
+        'tag'      => '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+        // Qo'shish — Lucide Plus
+        'plus'     => '<path d="M5 12h14"/><path d="M12 5v14"/>',
+        // Foydalanuvchi — Lucide User
+        'user'     => '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        // Kataloglar — Lucide LayoutGrid
+        'catalog'  => '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
     ];
     $inner = isset($icons[$name]) ? $icons[$name] : $icons['tag'];
     return '<svg class="ig-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . $inner . '</svg>';
@@ -885,13 +914,16 @@ window.addEventListener('DOMContentLoaded', function () {
 
     function igProfileCard(u) {
         var name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+        var handle = u.username ? ('@' + u.username) : '';
         var av = u.avatar
             ? '<img src="' + igEsc(u.avatar) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
             : '<span class="ig-sprof-ph">' + igEsc((u.first_name || '?').charAt(0).toUpperCase()) + '</span>';
+        // Bir xil ism bo'lsa ham @username ularni ajratib turadi. Username
+        // yo'q bo'lsa ism ikki marta chiqmasligi kerak.
         return '<a class="ig-sprof" href="profile.php?user_id=' + (parseInt(u.id, 10) || 0) + '">'
              + '<span class="ig-sprof-av">' + av + '</span>'
-             + '<span class="ig-sprof-info"><b>' + igEsc(u.username ? ('@' + u.username) : name) + '</b>'
-             + '<span>' + igEsc(name) + '</span></span>'
+             + '<span class="ig-sprof-info"><b>' + igEsc(handle || name || 'Foydalanuvchi') + '</b>'
+             + (handle && name ? '<span>' + igEsc(name) + '</span>' : '') + '</span>'
              + '</a>';
     }
 

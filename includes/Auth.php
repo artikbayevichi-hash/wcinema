@@ -390,8 +390,16 @@ class Auth {
         $candidate = $base;
         $n = 1;
         while (true) {
-            $row = $this->db->fetchOne("SELECT id FROM users WHERE username = ?", [$candidate]);
-            if (!$row || (int) $row['id'] === (int) $currentUserId) {
+            // Ism takrorlanishi mumkin, @username esa users + tg_names bo'ylab
+            // butunlay noyob bo'lishi shart (function_exists - mustaqil ishlatish
+            // holati uchun zaxira).
+            $taken = function_exists('username_taken')
+                ? username_taken($candidate, $currentUserId)
+                : (bool) $this->db->fetchOne(
+                    "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id <> ? LIMIT 1",
+                    [$candidate, (int) $currentUserId]
+                );
+            if (!$taken) {
                 return $candidate;
             }
             $n++;

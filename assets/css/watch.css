@@ -521,6 +521,14 @@
     background: none; border: 0;
     font-size: 13px; color: var(--muted); font-weight: 400;
 }
+/* Qidiruv kartochkalaridagi ID ko'rinishi bilan bir xil. */
+.watch-stat-id {
+    display: inline-flex; align-items: center;
+    padding: 1px 6px; border-radius: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: .3px;
+    color: var(--muted); background: var(--card-2);
+    border: 1px solid var(--line);
+}
 
 /* --- Kinomanba belgilari (★ reyting, yil, sifat) --------------------- */
 /* "Obuna" tugmasi o'rni. YouTube'da bu yerda kanalga obuna bo'ladi;

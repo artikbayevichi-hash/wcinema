@@ -715,6 +715,23 @@
     padding: 28px 0;
     display: flex; align-items: center; justify-content: center; gap: 8px;
 }
+/* Optimistik izoh (Telegram javobi kelguncha ko'rinadigan "siz yozdingiz" satri) */
+.reels-c-pending {
+    display: flex; align-items: flex-start; gap: 9px;
+    margin: 4px 0 10px; padding: 9px 11px;
+    border: 1px solid rgba(255,255,255,.16); border-radius: 12px;
+    background: rgba(255,255,255,.05);
+    font-size: 13px; line-height: 1.45; color: #fff;
+    opacity: .82;
+    animation: reels-c-pending-in .16s ease-out;
+}
+.reels-c-pending-dot {
+    flex: 0 0 auto; width: 7px; height: 7px; margin-top: 5px;
+    border-radius: 50%; background: #fff;
+    animation: reels-c-pending-pulse 1s ease-in-out infinite;
+}
+@keyframes reels-c-pending-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes reels-c-pending-pulse { 50% { opacity: .28; } }
 /* ------------------------------------------------ izoh kompozitori
  * Chat kompozitori bilan BIR XIL ko'rinishi uchun `.chat-composer` /
  * `.chat-tool` / `.chat-send` uslublari nusxalanadi:

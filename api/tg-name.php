@@ -38,9 +38,12 @@ if ($method === 'POST') {
         fail('Username noto\'g\'ri: 4-32 belgi, harf bilan boshlanadi (a-z, 0-9, _)');
     }
 
-    // Username boshqa akkauntga tegishli bo'lmasin.
-    $owner = $db->fetchOne('SELECT tg_id FROM tg_names WHERE username = ? AND tg_id <> ?', [$u, $tgId]);
-    if ($owner) {
+    // Username boshqa akkauntga tegishli bo'lmasin: users va tg_names
+    // jadvallarining IKKALASIDA ham tekshiramiz (ism bir xil bo'lsa bo'ladi).
+    $taken = function_exists('username_taken')
+        ? username_taken($u, 0, $tgId)
+        : (bool) $db->fetchOne('SELECT tg_id FROM tg_names WHERE LOWER(username) = LOWER(?) AND tg_id <> ?', [$u, $tgId]);
+    if ($taken) {
         fail('Bu username band. Boshqasini tanlang.');
     }
 

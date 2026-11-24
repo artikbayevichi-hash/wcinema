@@ -182,6 +182,51 @@ function esc($s) {
     return htmlspecialchars((string) ($s ?? ''), ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * Username butun sayt bo'ylab noyobmi?
+ *
+ * Ism/familiya bir xil bo'lishi mumkin - bu normal. @username esa
+ * `users.username` va `tg_names.username` (izoh/chatdagi @nom) jadvallarining
+ * IKKALASIDA ham takrorlanmasligi kerak. Registratsiya, profil tahriri va
+ * @username tanlash shu yagona funksiyadan foydalanadi.
+ *
+ * @param string $username      Tekshiriladigan nom (@ bilan kelsa ham bo'ladi)
+ * @param int    $exceptUserId  O'z foydalanuvchisi (o'z nomi band hisoblanmaydi)
+ * @param int    $exceptTgId    O'z Telegram ID si (tg_names uchun)
+ * @return bool  true = band
+ */
+function username_taken($username, $exceptUserId = 0, $exceptTgId = 0) {
+    $name = strtolower(ltrim(trim((string) $username), '@'));
+    if ($name === '') {
+        return false;
+    }
+    $db = Database::getInstance();
+    try {
+        if ($db->fetchOne(
+            'SELECT id FROM users WHERE LOWER(username) = ? AND id <> ? LIMIT 1',
+            [$name, (int) $exceptUserId]
+        )) {
+            return true;
+        }
+        if ((int) $exceptTgId <= 0 && (int) $exceptUserId > 0) {
+            $me = $db->fetchOne(
+                'SELECT telegram_user_id FROM users WHERE id = ?',
+                [(int) $exceptUserId]
+            );
+            if ($me && !empty($me['telegram_user_id'])) {
+                $exceptTgId = (int) $me['telegram_user_id'];
+            }
+        }
+        return (bool) $db->fetchOne(
+            'SELECT tg_id FROM tg_names WHERE LOWER(username) = ? AND tg_id <> ? LIMIT 1',
+            [$name, (int) $exceptTgId]
+        );
+    } catch (\Throwable $e) {
+        // Eski bazada tg_names jadvali yo'q bo'lsa, faqat users tekshiriladi.
+        return false;
+    }
+}
+
 function ok($data = []) {
     Auth::ok($data);
 }

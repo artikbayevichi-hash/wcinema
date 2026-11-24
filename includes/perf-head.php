@@ -186,7 +186,15 @@ window.__WCPF   = {};
     var rules = {
       prerender: [{
         source: 'document',
-        where: { selector_matches: 'a[href*="watch.php"]' },
+        where: {
+          selector_matches: [
+            'a[href*="watch.php"]',
+            // Reels karta ustida kursor turganda sahifani fonda ochamiz:
+            // HTML bilan birga birinchi 10 ta reel ham keladi (0-RTT),
+            // shuning uchun bosilganda video deyarli darhol boshlanadi.
+            'a[href*="reels.php"]'
+          ]
+        },
         eagerness: 'moderate'
       }]
     };

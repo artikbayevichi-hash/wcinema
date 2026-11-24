@@ -8,9 +8,13 @@ class TelegramBot {
     private $lastError = null;
     private $curlTimeout;
 
-    public function __construct($botToken = null) {
+    /**
+     * @param string|null $botToken     Bo'sh bo'lsa asosiy bot ishlatiladi.
+     * @param string|null $botUsername  Alohida bot uchun @username (ixtiyoriy).
+     */
+    public function __construct($botToken = null, $botUsername = null) {
         $this->botToken = $botToken ?: TELEGRAM_BOT_TOKEN;
-        $this->botUsername = TELEGRAM_BOT_USERNAME;
+        $this->botUsername = $botUsername ?: TELEGRAM_BOT_USERNAME;
         $base = defined('TG_BOT_API_BASE') && trim((string) TG_BOT_API_BASE) !== ''
             ? trim((string) TG_BOT_API_BASE) : 'https://api.telegram.org';
         $this->apiUrl = $base . "/bot" . $this->botToken;

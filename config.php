@@ -598,6 +598,17 @@ define('REELS_REQUIRE_APPROVAL', in_array($_reqAppr, ['1', 'true', 'yes', 'on'],
 // MUHIM: bot bu kanalda ADMIN bo'lishi va "Post Messages" huquqi bo'lishi shart.
 define('REELS_CHANNEL', trim((string) env_value('REELS_CHANNEL', '')));
 
+// Reelsga xizmat qiladigan ALOHIDA bot.
+//
+// Asosiy bot (TELEGRAM_BOT_TOKEN) butun saytga xizmat qiladi va har soatda
+// yuzlab so'rov yuboradi. Reels topic/izohlari uchun alohida bot ishlatilsa:
+//   - limitlar aralashmaydi (asosiy bot "429 Too Many Requests" olmaydi),
+//   - mavzular yangi bot nomidan ochiladi,
+//   - kanal (@wcinema_reels) bilan bir xil bot ishlaydi.
+// Bo'sh qoldirilsa eski xatti-harakat saqlanadi (asosiy bot ishlatiladi).
+define('REELS_BOT_TOKEN', trim((string) env_value('REELS_BOT_TOKEN', '')));
+define('REELS_BOT_USERNAME', trim((string) env_value('REELS_BOT_USERNAME', '')));
+
 // Reels yuklash uchun bot deep-link manzili bazasi.
 // Foydalanuvchi saytda "yuborish"ni bosgach Telegram botga start=reel_<token>
 // bilan o'tadi va videoni yuboradi.

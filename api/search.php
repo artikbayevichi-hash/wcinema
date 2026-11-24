@@ -5,7 +5,8 @@
 //   GET ?q=matn[&limit=N]
 //
 // Uch turdagi natijani bir yo'la qaytaradi:
-//   profiles - tizimga kirgan foydalanuvchilar (username / ism bo'yicha)
+//   profiles - foydalanuvchilar (ism, familiya, to'liq ism, @username; har xil
+//              registrda va ikki tartibda yozilganda ham topiladi)
 //   content  - kinolar / animelar / multfilmlar (nom va ID bo'yicha)
 //   reels    - reelslar (sarlavha / tavsif / bog'langan kino nomi bo'yicha)
 //
@@ -37,28 +38,49 @@ $compute = function () use ($q, $limit, $catalog, $userId) {
     // Kamida 2 harf. Faqat raqam bo'lsa (ID), 1 xonali ham izlanadi.
     if ($q !== '' && (mb_strlen($q) >= 2 || ctype_digit($q))) {
         $db = Database::getInstance();
-        $like = '%' . $q . '%';
+
+        // Registr farqi va "@" old qismi qidiruvga ta'sir qilmasin.
+        $bare = ltrim(trim($q), '@');
+        $lc   = function_exists('mb_strtolower') ? mb_strtolower($bare, 'UTF-8') : strtolower($bare);
+        $esc  = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $lc);
+        $like = '%' . $esc . '%';
 
         // ------------------------------------------------------------- profillar
-        // Username bo'yicha (aynan shu ustuvor), keyin ism bo'yicha.
-        $rows = $db->fetchAll(
-            "SELECT id, username, first_name, last_name, avatar, is_premium
-               FROM users
-              WHERE username IS NOT NULL AND username <> ''
-                AND (username LIKE ? OR first_name LIKE ? OR last_name LIKE ?)
-              ORDER BY (username LIKE ?) DESC, (username = ?) DESC, id DESC
-              LIMIT 8",
-            [$like, $like, $like, ltrim($q, '@') . '%', ltrim($q, '@')]
-        );
-        foreach ($rows as $u) {
-            $profiles[] = [
-                'id'         => (int) $u['id'],
-                'username'   => $u['username'],
-                'first_name' => $u['first_name'] ?: 'Foydalanuvchi',
-                'last_name'  => $u['last_name'] ?: '',
-                'avatar'     => $u['avatar'] ?: null,
-                'premium'    => (int) ($u['is_premium'] ?? 0),
-            ];
+        // Ism bir xil bo'lavergan holda ham hamma foydalanuvchilar topiladi;
+        // username istisnosiz noyob (users + tg_names). "Ali Vali" va
+        // "Vali Ali", "ALI", "@ali" kabi yozuvlar bir xil natija beradi.
+        if ($bare !== '') {
+            $rows = $db->fetchAll(
+                "SELECT u.id, u.username, u.first_name, u.last_name, u.avatar,
+                        u.is_premium, tn.username AS tg_username
+                   FROM users u
+                   LEFT JOIN tg_names tn
+                     ON tn.tg_id = CAST(u.telegram_user_id AS UNSIGNED)
+                  WHERE LOWER(u.username) LIKE ?
+                     OR LOWER(tn.username) LIKE ?
+                     OR LOWER(u.first_name) LIKE ?
+                     OR LOWER(u.last_name) LIKE ?
+                     OR LOWER(CONCAT(u.first_name, ' ', u.last_name)) LIKE ?
+                     OR LOWER(CONCAT(u.last_name, ' ', u.first_name)) LIKE ?
+                  ORDER BY
+                     (LOWER(u.username) = ?) DESC,
+                     (LOWER(tn.username) = ?) DESC,
+                     (LOWER(u.username) LIKE ?) DESC,
+                     (LOWER(CONCAT(u.first_name, ' ', u.last_name)) = ?) DESC,
+                     u.id DESC
+                  LIMIT 8",
+                [$like, $like, $like, $like, $like, $like, $lc, $lc, $esc . '%', $lc]
+            );
+            foreach ($rows as $u) {
+                $profiles[] = [
+                    'id'         => (int) $u['id'],
+                    'username'   => $u['username'] ?: ($u['tg_username'] ?: ''),
+                    'first_name' => $u['first_name'] ?: 'Foydalanuvchi',
+                    'last_name'  => $u['last_name'] ?: '',
+                    'avatar'     => $u['avatar'] ?: null,
+                    'premium'    => (int) ($u['is_premium'] ?? 0),
+                ];
+            }
         }
 
         // -------------------------------------------------------------- kontent

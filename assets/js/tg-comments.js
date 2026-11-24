@@ -15,6 +15,7 @@
 
   var CHAT     = (global.APP && global.APP.tgCommentsChat) || '';
   var CHAT_URL = (global.APP && global.APP.tgCommentsUrl) || '';
+  var BOT      = (global.APP && global.APP.tgCommentsBot) || '';
   var BASE     = (global.APP && global.APP.base) || '';
 
   // `lottie.min.js` (298 KB) manzili. `chat.php` da skript teg sifatida
@@ -241,7 +242,14 @@
           return true;
         }
         if (d && d.disabled) return false;
-        throw new Error((d && d.message) || 'Izohlar mavzusi ochilmadi');
+        var msg = (d && d.message) || 'Mavzu ochilmadi';
+        // Bot nomi foydalanuvchiga ko'rsatiladi: u botni guruhga admin
+        // qilishi yoki Topics yoqligini tekshirishi kerak bo'ladi.
+        if (BOT) {
+            var n = String(BOT).replace(/^@/, '');
+            if (msg.indexOf(n) < 0) msg += ' — @' + n + ' botni tekshiring';
+        }
+        throw new Error(msg);
       });
   }
 
@@ -1498,6 +1506,26 @@
     if (list) list.innerHTML = '<div class="reels-c-empty">' + html + '</div>';
   }
 
+  // Optimistik izoh: yuborish tugmasi bosilgan zahoti matn ko'rinadi,
+  // Telegram javobi kelgach reload() uni haqiqiy xabar bilan almashtiradi.
+  // Xato bo'lsa bubble o'chiriladi va hisoblagich orqaga qaytariladi.
+  function showPending(text) {
+    var list = listEl();
+    if (!list) return;
+    clearPending();
+    var node = global.document.createElement('div');
+    node.className = 'reels-c-pending';
+    node.innerHTML = '<span class="reels-c-pending-dot"></span><span>' + esc(text) + '</span>';
+    if (list.firstChild) list.insertBefore(node, list.firstChild);
+    else list.appendChild(node);
+  }
+  function clearPending() {
+    var list = listEl();
+    if (!list) return;
+    var old = list.querySelector('.reels-c-pending');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+  }
+
   function tgOpenBlock(msg) {
     var url = S.url || topicUrl(S.topicId);
     var link = url
@@ -1685,11 +1713,19 @@
     var payload = { peer: S.peer, message: c.text };
     if (c.entities) payload.entities = c.entities;
     S.expandRoot = S.replyTo || 0;
+    // Darhol fikr-mulohaza: tugma bosilganda izoh ko'rinadi, soni o'zgaradi.
+    var tid = S.topicId;
+    showPending(c.text);
+    bumpCount(tid, 1);
     return sendRaw(payload).then(function () {
       reportNotify('comment', c.text);
       clearReply();
-      bumpCount(S.topicId, 1);
       return reload();
+    }).catch(function (e) {
+      bumpCount(tid, -1);
+      throw e;
+    }).finally(function () {
+      clearPending();
     });
   }
 
