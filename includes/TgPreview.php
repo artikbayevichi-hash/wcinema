@@ -903,21 +903,25 @@ class TgPreview
         //   * limit 64 KB ning 2 darajali karralisi bo'lishi (65536, 131072,
         //     262144, ...) — 196608 kabi 3x karrali LIMIT_INVALID beradi;
         //   * fayl oxiriga yaqinlashganda katta limit ham LIMIT_INVALID beradi.
-        // Eng barqaror va kafolatli variant: doimo 65536 lik bloklar.
-        $block = 65536;
+        //
+        // 64 KB da 19 MB = ~290 so'rov -> sekin tarmoqda 3+ daqiqa. 256 KB
+        // bilan boshlaymiz (4 barobar kam so'rov). Agar DC katta limitni
+        // rad etsa yoki qisqa javob qaytarsa — FAQAT o'sha bo'lak uchun
+        // 65536 ga tushib, xuddi shu ofsetdan davom etamiz.
+        $block = 262144;
+        $minBlock = 65536;
         $fp = @fopen($dest, 'wb');
         if (!$fp) throw new \RuntimeException('Vaqtinchalik fayl ochilmadi');
         $written = 0;
-        $pos = $from;
         try {
             while ($written < $total) {
-                $aligned = $pos - ($pos % $block);
-                $skip = $pos - $aligned;
-                $take = min($block - $skip, $total - $written);
-                $off = $pos;
+                $pos = $from + $written;
                 $got = false;
                 $lastErr = '';
-                for ($try = 1; $try <= 5; $try++) {
+                for ($try = 1; $try <= 5 && !$got; $try++) {
+                    $aligned = $pos - ($pos % $block);
+                    $skip = $pos - $aligned;
+                    $take = min($block - $skip, $total - $written);
                     try {
                         $res = $mt->methodCallAsyncRead('upload.getFile', [
                             'location' => $loc,
@@ -927,24 +931,28 @@ class TgPreview
                             'floodWaitLimit' => 0,
                         ], $dc);
                         $bytes = substr((string) ($res['bytes'] ?? ''), $skip, $take);
-                        if (strlen($bytes) < $take) {
-                            throw new \RuntimeException('Qisqa bo\'lak: ' . strlen($bytes) . '/' . $take);
+                        $n = strlen($bytes);
+                        if ($n === 0) {
+                            throw new \RuntimeException('Bo\'lak bo\'sh qaytdi');
                         }
                         if (@fseek($fp, $written) !== 0) throw new \RuntimeException('fseek xato');
                         if (@fwrite($fp, $bytes) === false) throw new \RuntimeException('diskka yozib bo\'lmadi');
-                        $written += $take;
-                        $pos += $take;
+                        // Qisqa javob bo'lsa ham olingan baytlarni yozamiz;
+                        // keyingi aylanish aynan shu ofsetdan davom etadi.
+                        $written += $n;
                         $got = true;
                         self::workerLockTouch();
-                        break;
                     } catch (\Throwable $e) {
                         $lastErr = $e->getMessage();
+                        if ($block > $minBlock && $try >= 2) {
+                            $block = $minBlock;   // katta limit rad etildi
+                        }
                         if ($try >= 5) break;
                         sleep(min(10, 1 + $try));   // 2,3,4... s
                     }
                 }
                 if (!$got) {
-                    throw new \RuntimeException("Bo'lak {$off}: {$lastErr}");
+                    throw new \RuntimeException("Bo'lak {$pos}: {$lastErr}");
                 }
             }
         } finally {
