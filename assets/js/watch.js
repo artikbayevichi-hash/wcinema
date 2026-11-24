@@ -229,7 +229,11 @@
       // `warmTail`: katta filmlarda (1–4 GB) birinchi kadr MP4 `moov`
       // indeksini kutadi. Uni metama'lumot bilan BIR paytda boshlaymiz —
       // `episode.php` javobi kelguncha dum oynasi allaqachon yuklanmoqda.
-      global.TgStream.prefetch({ channel: channel, post: post, warmTail: true });
+      // Lekin bu QO'SHIMCHA trafik — saveData / 2G / 3G da qo'shmaymiz.
+      var cn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      var et = (cn && cn.effectiveType) || '';
+      var warmTail = !(cn && (cn.saveData || /^(slow-)?2g$|^3g$/.test(et)));
+      global.TgStream.prefetch({ channel: channel, post: post, warmTail: warmTail });
     } catch (err) { /* jim: oldindan yuklash ixtiyoriy qulaylik */ }
   }
 
