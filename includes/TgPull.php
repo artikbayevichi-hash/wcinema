@@ -101,6 +101,16 @@ class TgPull {
         // IPv6 ba'zan ishlamaydi -> DC ulanishi 5+ port/IP bo'ylab qayta
         // urinadi va 60 s timeout'ga urilib, bo'lak yuklanishi bekor bo'ladi.
         $settings->getConnection()->setIpv6(false);
+        // `setIpv6(false)` faqat AFZALLIK: MadelineProto IPv4 rad etilsa yana
+        // IPv6/combo portlarga o'tadi (DataCenter::connectToDc ichida).
+        // Bu tarmoqda IPv6 va 88-port butunlay ishlamaydi -> sessiya 60 s
+        // timeout'ga urilib, barcha preview'lar yiqiladi. bindTo faqat
+        // IPv4 ni qoldiradi (DataCenter $onlyIPv6 tekshiruvi).
+        $settings->getConnection()->setBindTo('0.0.0.0');
+        // DoH (mozilla.cloudflare-dns.com -> 1.1.1.1) bu muhitda vaqti-vaqti
+        // bilan ishlamaydi: AMP "Failed to parse address 1.1.1.1" qaytaradi.
+        // Tizim DNS'i yetarli; DC IP'lar config'dan olinadi.
+        $settings->getConnection()->setUseDoH(false);
         $settings->getConnection()->setTimeout(300);
         $settings->getFiles()->setDownloadParallelChunks(6);
         $settings->getFiles()->setUploadParallelChunks(6);
@@ -400,6 +410,11 @@ class TgPull {
         $settings->getAppInfo()->setApiId(TG_API_ID)->setApiHash(TG_API_HASH);
         // Windows tezligi uchun keraksiz yuklamalarni o'chiramiz
         $settings->getPeer()->setFullFetch(false)->setCacheAllPeersOnStartup(false);
+        // Faqat IPv4: bu muhitda IPv6/88-port ishlamaydi -> DC ulanishi
+        // bir necha muvaffaqiyatsiz urinishdan keyin bekor bo'ladi.
+        $settings->getConnection()->setIpv6(false)->setBindTo('0.0.0.0')
+            ->setUseDoH(false);
+        $settings->getConnection()->setTimeout(300);
 
         if (!is_dir($this->sessionDir)) {
             @mkdir($this->sessionDir, 0777, true);
