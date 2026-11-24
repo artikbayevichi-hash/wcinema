@@ -2382,6 +2382,11 @@
         var ii = SBoot.indexInfo(String(docId), Number(size));
         if (ii && ii.moov && ii.moov.inHead === true) return;
       }
+      // Katta (1–4 GB) filmlarda `moov` oxirida va 8 MB gacha bo'ladi.
+      // Faqat dum oynasini olish kamlik qiladi — SW ga ANIQ koordinatani
+      // ham yuboramiz: u qo'shimcha 1.2 s bosh bayt qidirishni va noto'g'ri
+      // ofsetdan 8 MB ni ikkinchi marta tortishni oldini oladi.
+      pushIndexHint(Number(size), String(docId));
       var msg = { type: 'warmtail', size: Number(size), doc: String(docId) };
       var ctl = swCtl();
       if (ctl) { ctl.postMessage(msg); return; }
@@ -5639,6 +5644,10 @@
     // Keyingi qismning birinchi ~1 MB ini joriy video o'ynayotganda
     // SW disk keshiga oldindan yozadi -> qism bosilganda darhol ochiladi.
     warmNext: warmNext,
+    // Joriy video uchun MP4 `moov` indeksini ILDARO oldindan olish.
+    // Katta (1–4 GB) filmlarda birinchi kadr aynan shu dum bo'lagini
+    // kutadi — shuning uchun uni player mount bo'lishidan oldin boshlaymiz.
+    warmTail: warmTail,
     cancelPrefetch: cancelPrefetch,
     // Sahifadan chiqishda: oqim + prefetch + SW kanalini to'xtatish.
     release: release,

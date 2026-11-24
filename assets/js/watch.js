@@ -226,8 +226,31 @@
 
     if (!global.TgStream || typeof global.TgStream.prefetch !== 'function') return;
     try {
-      global.TgStream.prefetch({ channel: channel, post: post });
+      // `warmTail`: katta filmlarda (1–4 GB) birinchi kadr MP4 `moov`
+      // indeksini kutadi. Uni metama'lumot bilan BIR paytda boshlaymiz —
+      // `episode.php` javobi kelguncha dum oynasi allaqachon yuklanmoqda.
+      global.TgStream.prefetch({ channel: channel, post: post, warmTail: true });
     } catch (err) { /* jim: oldindan yuklash ixtiyoriy qulaylik */ }
+  }
+
+  /**
+   * Joriy video uchun MP4 indeksini IMKON QADAR ERTA boshlaydi.
+   * `TgStream.connect()` ham buni qiladi, lekin u player mount bo'lgach
+   * ishga tushadi. SQL bootstrap'dagi doc id + hajm tayyor bo'lgani uchun
+   * uni sahifa ochilishidayoq / qism almashganda darhol yuboramiz.
+   */
+  function warmCurrentIndex() {
+    try {
+      var SB = global.WCStreamBoot;
+      var TS = global.TgStream;
+      if (!SB || typeof SB.docMeta !== 'function') return;
+      if (!TS || typeof TS.warmTail !== 'function') return;
+      var e = curEp();
+      if (!e || !e.tg_channel || !e.tg_post) return;
+      var d = SB.docMeta(e.tg_channel + '/' + Number(e.tg_post));
+      if (!d || !d.id || !(Number(d.size) > 0)) return;
+      TS.warmTail(Number(d.size), String(d.id));
+    } catch (err) { /* jim: faqat tezlashtirish */ }
   }
 
   /** Keyingi qismni, so'ng oldingi qismni zaxira sifatida tayyorlaydi. */
@@ -2880,6 +2903,9 @@
     W.tgEmbed = d.tgEmbed || null;
     // Yangi qismning SQL bootstrap'i kelsa (api/episode.php), uni faollashtiramiz.
     if (d.boot && typeof d.boot === 'object') global.__WCBOOT = d.boot;
+    // Yangi qismning `moov` indeksini darhol yuklashni boshlaymiz — kino
+    // fayllarida birinchi kadr shu dum bo'lagiga bog'liq.
+    warmCurrentIndex();
     global.__WC_CDN_FAILED = false;
     seedEmbedFromBoot();
     applyBootPlayback();
@@ -3088,6 +3114,8 @@
     // SQL keshidan kelgan ma'lumotlar: qo'shimcha API so'rovlarining oldini oladi.
     seedEmbedFromBoot();
     applyBootPlayback();
+    // Joriy videoning MP4 indeksini player mount bo'lishidan OLDIN boshlaymiz.
+    warmCurrentIndex();
 
     renderHead();
     renderSide();
