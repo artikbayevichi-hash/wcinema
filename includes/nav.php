@@ -1500,3 +1500,8 @@ window.addEventListener('DOMContentLoaded', function () {
         tirik turadi. Ikki marta yuklanishning oldini `tg-persist.php` ichidagi
         DOMContentLoaded tekshiruvi oladi (asosiy sahifalarda TgStream bor). */ ?>
 <?php require __DIR__ . '/tg-persist.php'; ?>
+<?php /* App Shell / PJAX router — faqat SPA sahifalarida (barcha ichki
+        sahifalar). `$WC_SPA` sahifa tomonidan nav'dan OLDIN o'rnatiladi. */ ?>
+<?php if (!empty($WC_SPA)): ?>
+<script src="assets/js/app-shell.js?v=<?php echo @filemtime(__DIR__ . '/../assets/js/app-shell.js') ?: 1; ?>"></script>
+<?php endif; ?>

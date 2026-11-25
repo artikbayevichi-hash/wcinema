@@ -152,7 +152,10 @@ if (is_array($initialFeed) && !empty($initialFeed['items'])) {
 <body class="reels-body ig-shell">
 
 <!-- Instagram uslubidagi navigatsiya (reels uchun: desktop yon panel / mobil pastki panel) -->
-<?php $NAV_ACTIVE = 'reels'; require __DIR__ . '/includes/nav.php'; ?>
+<?php $NAV_ACTIVE = 'reels'; $WC_SPA = true; require __DIR__ . '/includes/nav.php'; ?>
+
+<div id="wc-page" data-wc-page="reels">
+<script>if (window.WCApp) window.WCApp.beginPage();</script>
 
 <header class="reels-top">
     <a class="reels-back" href="index.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
@@ -400,5 +403,6 @@ if (is_array($initialFeed) && !empty($initialFeed['items'])) {
         wcWarmUp();
     }
 </script>
+</div>
 </body>
 </html>

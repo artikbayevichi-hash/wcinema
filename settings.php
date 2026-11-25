@@ -45,7 +45,7 @@ try {
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/settings.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/settings.css') ?: 1; ?>">
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
-    <style>
+    <style data-wc-style="1">
         /* Faqat oq/qora palitrasi; mavjud CSS o'zgaruvchilaridan foydalanamiz. */
         .st-sec[id] { scroll-margin-top: 76px; }
         .st-sec:target > .st-sec-head { color: var(--text); }
@@ -79,7 +79,10 @@ try {
 </head>
 <body class="st-body ig-shell">
 
-<?php $NAV_ACTIVE = 'profile'; require __DIR__ . '/includes/nav.php'; ?>
+<?php $NAV_ACTIVE = 'profile'; $WC_SPA = true; require __DIR__ . '/includes/nav.php'; ?>
+
+<div id="wc-page" data-wc-page="settings">
+<script>if (window.WCApp) window.WCApp.beginPage();</script>
 
 <header class="st-top">
     <a class="st-back" href="profile.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
@@ -509,6 +512,6 @@ try {
       }).catch(function () {});
 })();
 </script>
-
+</div>
 </body>
 </html>

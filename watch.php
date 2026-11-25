@@ -456,7 +456,7 @@ $NAV_ACTIVE = 'home';
     /* Pleyer siyosati (config.php: HLS_MODE). Telegram — asosiy yo'l, HLS —
        zaxira. Bu qiymatlar watch.js `raceHlsTelegram()` da o'qiladi. */
     ?>
-    <script>window.__WC_HLS_MODE = <?php echo json_encode(HLS_MODE); ?>;
+    <script data-wc-config="1">window.__WC_HLS_MODE = <?php echo json_encode(HLS_MODE); ?>;
             window.__WC_HLS_FALLBACK_MS = <?php echo (int) HLS_FALLBACK_MS; ?>;</script>
     <?php
     // HLS_MODE=off bo'lsa hls.js umuman kerak emas — 415 KB yuklanmaydi.
@@ -465,12 +465,15 @@ $NAV_ACTIVE = 'home';
         $__hlsUrl = 'assets/vendor/hls.min.js?v=' . $__hlsV;
         ?>
         <link rel="preload" as="script" fetchpriority="low" href="<?php echo htmlspecialchars($__hlsUrl, ENT_QUOTES); ?>">
-        <script>window.__WC_HLS_URL = <?php echo json_encode($__hlsUrl); ?>;</script>
+        <script data-wc-config="1">window.__WC_HLS_URL = <?php echo json_encode($__hlsUrl); ?>;</script>
     <?php } ?>
 </head>
 <body class="ig-shell watch-body">
 
-<?php require __DIR__ . '/includes/nav.php'; ?>
+<?php $WC_SPA = true; require __DIR__ . '/includes/nav.php'; ?>
+
+<div id="wc-page" data-wc-page="watch">
+<script>if (window.WCApp) window.WCApp.beginPage();</script>
 
 <?php if (!$item): ?>
     <main class="ig-page watch-page">
@@ -932,3 +935,6 @@ $NAV_ACTIVE = 'home';
 <script src="assets/js/tv-watch.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tv-watch.js') ?: 1; ?>"></script>
 <?php /* Ambient light (YouTube kengaytmasi kabi). Standart holati o'chiq. */ ?>
 <script src="assets/js/watch-ambient.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/watch-ambient.js') ?: 1; ?>"></script>
+</div>
+</body>
+</html>

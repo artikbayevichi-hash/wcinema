@@ -50,6 +50,20 @@ $__tgStreamSrc = $__tgBase . '/assets/js/tg-stream.js?v=' . $__tgStreamV;
     document.head.appendChild(s);
   }
 
+  // `TgStream.init()` doimiy (sahifadan uzoqroq yashaydigan) taymerlar va
+  // listenerlar ochadi. App Shell scope'i ularni sahifa bilan birga
+  // o'chirmasligi uchun `WCApp.untracked()` ichida chaqiramiz.
+  function initStream() {
+    try {
+      if (!window.TgStream) return;
+      if (window.WCApp && window.WCApp.untracked) {
+        window.WCApp.untracked(function () { window.TgStream.init(); });
+      } else {
+        window.TgStream.init();
+      }
+    } catch (e) {}
+  }
+
   function ready() {
     // `tg-mtproto.js` -> `window.TgFast` (tez MTProto klienti). `tg-stream.js`
     // uni CHAQIRUV VAQTIDA o'qiydi, shuning uchun ketma-ketlik muhim emas —
@@ -58,19 +72,15 @@ $__tgStreamSrc = $__tgBase . '/assets/js/tg-stream.js?v=' . $__tgStreamV;
     // (ijro etilmaydi) -> TgFast yo'q -> tez yo'l ishlamaydi. Shuni ham
     // to'g'rilaymiz: ikkalasi bor bo'lsagina hech narsa yuklamaymiz.
     if (window.TgStream && window.TgFast) {
-      try { window.TgStream.init(); } catch (e) {}
+      initStream();
       return;
     }
     if (window.TgStream) {
-      load(proto, function () {
-        try { window.TgStream.init(); } catch (e) {}
-      });
+      load(proto, initStream);
       return;
     }
     load(proto, function () {
-      load(stream, function () {
-        try { window.TgStream && window.TgStream.init(); } catch (e) {}
-      });
+      load(stream, initStream);
     });
   }
 

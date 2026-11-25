@@ -100,7 +100,7 @@ if (class_exists('SiteSettings')) {
     ];
 }
 ?>
-<script>window.__WCSITECFG = <?php echo json_encode($__siteCfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;</script>
+<script data-wc-config="1">window.__WCSITECFG = <?php echo json_encode($__siteCfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;</script>
 <?php
 // Admin panel → Sozlamalar dagi e'lon (agar bo'lsa). `defer` — render'ni
 // bloklamaydi, e'lon bo'lmasa skript hech narsa qilmaydi.
@@ -138,9 +138,9 @@ $__bundleV = max(
 $__mtprotoV  = @filemtime(__DIR__ . '/../assets/js/tg-mtproto.js') ?: 1;
 $__mtworkerV = @filemtime(__DIR__ . '/../assets/js/tg-mtproto-worker.js') ?: 1;
 ?>
-<script>window.__WCMTPROTOV = <?php echo (int) $__mtprotoV; ?>;
+<script data-wc-config="1">window.__WCMTPROTOV = <?php echo (int) $__mtprotoV; ?>;
 window.__WCMTWORKERV = <?php echo (int) $__mtworkerV; ?>;</script>
-<script>window.__WCBUNDLEV = <?php echo (int) $__bundleV; ?>;</script>
+<script data-wc-config="1">window.__WCBUNDLEV = <?php echo (int) $__bundleV; ?>;</script>
 <script>
 (function () {
   try {
@@ -170,7 +170,7 @@ $__perfUrl = $__base . '/api/perf.php';
 $__perfV   = @filemtime(__DIR__ . '/../assets/js/tg-perf.js') ?: 1;
 $__pfV     = @filemtime(__DIR__ . '/../assets/js/tg-prefetch.js') ?: 1;
 ?>
-<script>
+<script data-wc-config="1">
 window.__WCPERF = { url: <?php echo json_encode($__perfUrl); ?> };
 window.__WCPF   = {};
 </script>

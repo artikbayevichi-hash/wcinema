@@ -1698,6 +1698,10 @@
     window.addEventListener('pagehide', releaseAll);
     window.addEventListener('beforeunload', releaseAll);
     document.addEventListener('click', (e) => {
+        // App Shell o'zi `TgStream.release()` ni chaqiradi (pauseMedia).
+        // Bu yerda takroriy release prefetch'ni bekor qilib, SPA o'tishini
+        // sekinlashtirardi.
+        if (window.WCApp && window.WCApp.isEnabled && window.WCApp.isEnabled()) return;
         const a = e.target.closest && e.target.closest('a[href]');
         if (!a) return;
         if (a.target === '_blank' || a.hasAttribute('download')) return;

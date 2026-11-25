@@ -4,10 +4,9 @@ Bu hujjat `Telegram video va rasmlar tezligi` hisobotidagi har bir mexanizmning
 **hozirgi holatini** kod bilan bog'laydi. Maqsad: "nima bor", "nima ataylab
 o'chirilgan" va "nimani va'da qilish mumkin emas"ni bir joyda saqlash.
 
-> Oxirgi tekshiruv: 2026-11-21. Testlar: `.work/tools/` (12 ta suite) +
-> deterministik A/B: `.work/tools/ab-local.mjs`.
-> Oxirgi sessiya-qulfi tuzatishi hali commit qilinmagan (oldingi o'zgarishlar
-> `1aeb5d7` da yuborilgan).
+> Oxirgi tekshiruv: 2026-11-25. Testlar: `.work/tools/` (8 ta asosiy suite,
+> 688 PASS) + deterministik A/B: `.work/tools/ab-local.mjs`.
+> MTProto Worker va App Shell o'zgarishlari `dd444e4` hamda keyingi commit'da.
 
 ---
 
@@ -365,7 +364,8 @@ fake `TgFast` bilan).
 
 ## 9. App Shell (PJAX) router
 
-`index.php` / `watch.php` / `reels.php` orasida yurishda hujjat endi QAYTA
+Barcha ichki sahifalar (`index`, `watch`, `reels`, `profile`, `settings`,
+`history`, `saved`, `watch-later`, `chat`) orasida yurishda hujjat endi QAYTA
 YUKLANMAYDI: faqat `#wc-page` bloki almashadi (`assets/js/app-shell.js`).
 Shu tufayli MTProto Dedicated Worker, issiq WebSocket va Service Worker
 kesh zanjiri uzilmaydi.
@@ -374,8 +374,14 @@ kesh zanjiri uzilmaydi.
   `<div id="wc-page" data-wc-page="...">` ichida, `WCApp.beginPage()`
   darhol ichkarida (sahifa skriptlaridan oldin).
 - `PERSIST_RE` dagi kutubxonalar (`tg-stream`, `tg-mtproto`, `player`,
-  `wc-lib` ...) bir marta yuklanadi; `app.js` / `watch.js` / `reels.js` /
-  `tg-comments.js` har o'tishda yangi `<script>` bilan qayta ishga tushadi.
+  `wc-lib`, `lottie.min` ...) bir marta yuklanadi; `app.js` / `watch.js` /
+  `reels.js` / `tg-comments.js` / `profile.js` / `settings.js` /
+  `wc-list.js` / `tg-chat.js` har o'tishda yangi `<script>` bilan qayta
+  ishga tushadi.
+- `data-wc-config` li head skriptlari qayta bajariladi (`__WC_HLS_*`,
+  `__WCSITECFG`, `__WCMTPROTOV`, `__WCPERF`), `data-wc-style` li inline
+  `<style>`lar sahifa bilan almashadi, JSON ma'lumot skriptlari saqlanadi;
+  eski `data-wc-list` kabi atributlar tozalanadi.
 - `Scope` sahifa listener/taymer/observerlarini yig'adi va keyingi
   o'tishda tozalaydi. Nav darajasidagi skriptlar (`tv-mode`, `badge-poll`,
   `notifications`, `tg-persist`) `DOMContentLoaded` capture bosqichida
@@ -391,6 +397,7 @@ kesh zanjiri uzilmaydi.
 
 Batafsil: [`docs/app-shell.md`](app-shell.md).
 
-Test: `node .work/tools/app-shell.test.mjs` -- 106 PASS (`vm` + minimal DOM,
-tarmoqsiz). `Scope` tozalashi, `untracked()`, capture tartibi, marshrutlar,
-`PERSIST_RE` va sahifa shartnomasi tekshiriladi.
+Test: `node .work/tools/app-shell.test.mjs` -- 170 PASS (`vm` + minimal DOM,
+tarmoqsiz). `Scope` tozalashi, `untracked()`, capture tartibi, 9 ta marshrut,
+`PERSIST_RE`, sahifa shartnomasi, head config va inline style sinxronizatsiyasi
+tekshiriladi.

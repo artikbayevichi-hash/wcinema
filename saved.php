@@ -73,7 +73,7 @@ if (!is_string($serverJson)) { $serverJson = '[]'; }
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/style.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
-    <style>
+    <style data-wc-style="1">
     /* YouTube uslubidagi ro'yxat — faqat oq/qora palette. CSS fayliga tegmaymiz. */
     .wcl-wrap { max-width: 980px; margin: 0 auto; padding: 4px 4px 24px; }
     .wcl-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:2px 0 12px; }
@@ -160,7 +160,10 @@ if (!is_string($serverJson)) { $serverJson = '[]'; }
 </head>
 <body class="ig-shell" data-wc-list="saved">
 
-<?php $NAV_ACTIVE = 'saved'; require __DIR__ . '/includes/nav.php'; ?>
+<?php $NAV_ACTIVE = 'saved'; $WC_SPA = true; require __DIR__ . '/includes/nav.php'; ?>
+
+<div id="wc-page" data-wc-page="saved">
+<script>if (window.WCApp) window.WCApp.beginPage();</script>
 
 <main class="wcl-wrap">
     <div class="wcl-head">
@@ -187,5 +190,6 @@ if (!is_string($serverJson)) { $serverJson = '[]'; }
 <script id="wcServerData" type="application/json"><?php echo $serverJson; ?></script>
 <script src="assets/js/wc-lib.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-lib.js') ?: 1; ?>"></script>
 <script src="assets/js/wc-list.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/wc-list.js') ?: 1; ?>"></script>
+</div>
 </body>
 </html>

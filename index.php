@@ -123,7 +123,10 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
 
 <!-- YouTube uslubidagi navigatsiya: desktop tepa panel + yon guide,
      mobil tepa panel + yozuvli pastki tablar -->
-<?php $NAV_ACTIVE = 'home'; require __DIR__ . '/includes/nav.php'; ?>
+<?php $NAV_ACTIVE = 'home'; $WC_SPA = true; require __DIR__ . '/includes/nav.php'; ?>
+
+<div id="wc-page" data-wc-page="home">
+<script>if (window.WCApp) window.WCApp.beginPage();</script>
 
 <!-- YouTube uslubidagi kategoriya chiplari: app.js renderCategories() to'ldiradi. -->
 <div class="yt-chips-bar">
@@ -281,5 +284,6 @@ $pageImage = $pageImage && preg_match('#^https?://#i', $pageImage)
         if (window.TgStream && window.TgStream.warm) window.TgStream.warm();
     });
 </script>
+</div>
 </body>
 </html>

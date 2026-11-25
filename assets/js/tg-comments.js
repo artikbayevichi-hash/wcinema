@@ -13,6 +13,13 @@
 (function (global) {
   'use strict';
 
+  // App Shell: modul qayta ishga tushirilganda oldingi nusxaning
+  // BroadcastChannel'i yopiladi (aks holda har navigatsiyada bittadan
+  // kanal ochilib qolardi).
+  try {
+    if (global.TGComments && global.TGComments.dispose) global.TGComments.dispose();
+  } catch (e) {}
+
   var CHAT     = (global.APP && global.APP.tgCommentsChat) || '';
   var CHAT_URL = (global.APP && global.APP.tgCommentsUrl) || '';
   var BOT      = (global.APP && global.APP.tgCommentsBot) || '';
@@ -1621,6 +1628,17 @@
     if (!S.live || document.hidden || liveTimer) return;
     liveTimer = setInterval(liveTick, LIVE_MS);
     liveTick();
+  }
+  /** App Shell unmount / modul qayta ishga tushishi uchun tozalash. */
+  function dispose() {
+    try { stopLive(); } catch (e) {}
+    try {
+      if (liveChan) {
+        liveChan.onmessage = null;
+        liveChan.close();
+        liveChan = null;
+      }
+    } catch (e) { liveChan = null; }
   }
   document.addEventListener('visibilitychange', function () {
     if (!S.live) return;
@@ -3462,6 +3480,7 @@
     // Izohlar soni - reels yon paneldagi raqam uchun (oyna ochilmasdan).
     commentCount: commentCount,
     count: function () { return S.count; },
+    dispose: dispose,
     _state: S
   };
 

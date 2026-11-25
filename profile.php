@@ -50,7 +50,10 @@ $meId       = $user ? (int) $user['id'] : null;
 <body class="profile-body ig-shell">
 
 <!-- Navigatsiya -->
-<?php $NAV_ACTIVE = 'profile'; require __DIR__ . '/includes/nav.php'; ?>
+<?php $NAV_ACTIVE = 'profile'; $WC_SPA = true; require __DIR__ . '/includes/nav.php'; ?>
+
+<div id="wc-page" data-wc-page="profile">
+<script>if (window.WCApp) window.WCApp.beginPage();</script>
 
 <!-- ================================================= Yuqori panel -->
 <header class="pf-top">
@@ -222,12 +225,13 @@ $meId       = $user ? (int) $user['id'] : null;
             apiHash: <?php echo json_encode((string) TG_API_HASH); ?>
         }
     };
-    const PROFILE_VIEW_ID = <?php echo json_encode($viewUserId); ?>;
-    const PROFILE_ME_ID   = <?php echo json_encode($meId); ?>;
-    const SITE_NAME       = <?php echo json_encode(SITE_NAME); ?>;
-    const APP_BOT         = <?php echo json_encode((string) TELEGRAM_BOT_USERNAME); ?>;
+    window.PROFILE_VIEW_ID = <?php echo json_encode($viewUserId); ?>;
+    window.PROFILE_ME_ID   = <?php echo json_encode($meId); ?>;
+    window.SITE_NAME       = <?php echo json_encode(SITE_NAME); ?>;
+    window.APP_BOT         = <?php echo json_encode((string) TELEGRAM_BOT_USERNAME); ?>;
 </script>
 <script src="assets/js/tg-stream.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/tg-stream.js') ?: 1; ?>"></script>
 <script src="assets/js/profile.js?v=<?php echo @filemtime(__DIR__ . '/assets/js/profile.js') ?: 1; ?>"></script>
+</div>
 </body>
 </html>

@@ -3142,25 +3142,37 @@
     onVideoReady(initComposerAvatar);
 
     // Qism almashtirilganda skroll yuqoriga qaytadi.
-    global.addEventListener('popstate', function () {
+    function onWatchPop() {
       var m = /[?&]e=(\d+)/.exec(location.search);
       var id = m ? Number(m[1]) : 0;
-      if (id && id !== Number(S.selectedId)) {
-        // `pushState` bilan o'zgartirganimiz uchun `switchEpisode` ham
-        // `pushState` qilardi - bu yerda faqat `replace` qilamiz.
-        S.switching = true;
-        // Orqaga/qayta ham faqat qismni almashtiradi — sahifa qayta chizilmaydi.
-        api('/api/episode.php?id=' + encodeURIComponent(D.id) + '&episode=' + id)
-          .then(function (d) {
-            applyEpisodeData(d, id);
-            return null;
-          })
-          .catch(function () {})
-          .finally(function () { S.switching = false; });
-      } else {
-        location.reload();
+      if (!id) {
+        // `e` yo'q: App Shell bo'lsa router sahifani o'zi qayta chizadi.
+        if (!(global.WCApp && global.WCApp.isEnabled && global.WCApp.isEnabled())) {
+          location.reload();
+        }
+        return;
       }
+      if (id === Number(S.selectedId)) return;
+      // `pushState` bilan o'zgartirganimiz uchun `switchEpisode` ham
+      // `pushState` qilardi - bu yerda faqat `replace` qilamiz.
+      S.switching = true;
+      // Orqaga/qayta ham faqat qismni almashtiradi — sahifa qayta chizilmaydi.
+      api('/api/episode.php?id=' + encodeURIComponent(D.id) + '&episode=' + id)
+        .then(function (d) {
+          applyEpisodeData(d, id);
+          return null;
+        })
+        .catch(function () {})
+        .finally(function () { S.switching = false; });
+    }
+
+    global.addEventListener('popstate', function () {
+      // App Shell navigatsiyani o'zi boshqaradi; u qism o'zgarganini
+      // `wc:watchpop` orqali yuboradi.
+      if (global.WCApp && global.WCApp.isEnabled && global.WCApp.isEnabled()) return;
+      onWatchPop();
     });
+    document.addEventListener('wc:watchpop', onWatchPop);
   }
 
   if (document.readyState === 'loading') {

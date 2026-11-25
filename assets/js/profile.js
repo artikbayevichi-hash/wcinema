@@ -6,6 +6,17 @@
 // yuklanadi, scroll pastda bo'lganda keyingi qism (offset) keladi.
 // ============================================================================
 
+(function (global) {
+'use strict';
+
+// App Shell soft-nav'da bu skript YANGI <script> sifatida qayta ishga tushadi.
+// PHP configlari `window.*` dan o'qiydi — global `const` qayta deklaratsiya
+// xatosi (SyntaxError) bermasligi uchun.
+const PROFILE_VIEW_ID = Number(global.PROFILE_VIEW_ID || 0);
+const PROFILE_ME_ID   = Number(global.PROFILE_ME_ID || 0);
+const SITE_NAME       = global.SITE_NAME || 'W CINEMA';
+const APP_BOT         = global.APP_BOT || '';
+
 const API_BASE   = 'api/profile.php';
 const PAGE_SIZE  = 30;
 
@@ -1303,3 +1314,4 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 initFollowList();
 initProfileExtras();
 loadProfile();
+})(window);

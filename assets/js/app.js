@@ -1493,11 +1493,18 @@
      * O'CHIRILMAGAN - u hali ham ishlaydi va `index.php?c=..` eski
      * havolalari uchun saqlanadi (pastda `replace` bilan yo'naltiriladi).
      */
-    function goWatch(contentId, episodeId) {
+    function goWatch(contentId, episodeId, replace) {
         previewStop();
         const e = parseInt(episodeId, 10) || 0;
-        location.href = base + '/watch.php?c=' + encodeURIComponent(contentId)
+        const url = base + '/watch.php?c=' + encodeURIComponent(contentId)
             + (e ? '&e=' + e : '');
+        // App Shell bo'lsa hujjat qayta yuklanmaydi: MTProto worker tirik qoladi.
+        if (window.WCApp && window.WCApp.isEnabled && window.WCApp.isEnabled()) {
+            window.WCApp.navigate(url, { replace: !!replace });
+            return;
+        }
+        if (replace) location.replace(url);
+        else location.href = url;
     }
 
     // ---------------------------------------------------------------- hodisalar
@@ -1608,7 +1615,7 @@
     }
 
     // ---------------------------------------------------------------- start
-    document.addEventListener('DOMContentLoaded', () => {
+    function start() {
         // URL filtrlari: index.php?cat=kino yoki index.php?q=qidiruv
         try {
             const uq = new URLSearchParams(location.search);
@@ -1629,7 +1636,15 @@
             // Eski chuqur havola (`index.php?c=..&e=..`) endi video
             // sahifasini ochadi. `replace` - orqaga bosilganda foydalanuvchi
             // shu katalog sahifasiga qaytadi (modal emas).
-            goWatch(APP.contentId, APP.episodeId || 0);
+            goWatch(APP.contentId, APP.episodeId || 0, true);
         }
-    });
+    }
+
+    // App Shell (PJAX) sahifani qayta ishga tushirganda `DOMContentLoaded`
+    // allaqachon bo'lib o'tgan bo'ladi — shuning uchun darhol boshlaymiz.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start);
+    } else {
+        start();
+    }
 })();

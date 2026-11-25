@@ -33,7 +33,10 @@ $NAV_ACTIVE = 'chat';
 </head>
 <body class="ig-shell chat-body">
 
-<?php require __DIR__ . '/includes/nav.php'; ?>
+<?php $WC_SPA = true; require __DIR__ . '/includes/nav.php'; ?>
+
+<div id="wc-page" data-wc-page="chat">
+<script>if (window.WCApp) window.WCApp.beginPage();</script>
 
 <main class="ig-page chat-page">
 
@@ -138,5 +141,6 @@ $NAV_ACTIVE = 'chat';
         }
     }
 </script>
+</div>
 </body>
 </html>
