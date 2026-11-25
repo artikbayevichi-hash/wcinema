@@ -194,6 +194,254 @@
   //   video baytlari sayt serveridan O'TMAYDI.
   var fastClientPromise = null;
 
+  // ============================== MTPROTO — DEDICATED WEB WORKER (1-bosqich)
+  //
+  // MUAMMO: `tg-mtproto.js` AES-256-IGE/CTR + SHA-256 ni JS'da bajaradi.
+  // 512 KB–1 MB bo'lakni ochish asosiy oqimda bir necha o'n millisekundni
+  // egallaydi: scroll, hover-preview va animatsiyalar shu payt "qotadi".
+  //
+  // YECHIM: klientni Dedicated Worker'ga ko'chiramiz. Bu Service Worker
+  // EMAS — SW'ni brauzer bo'sh turganda o'chirib yuboradi (WebSocket
+  // uziladi), Dedicated Worker esa sahifa yopilmaguncha yashaydi.
+  //
+  // XAVFSIZLIK / MOSLIK:
+  //   • auth_key faqat `postMessage` bilan worker'ga uzatiladi;
+  //   • worker yaratilmasa yoki `importScripts` yiqilsa — eski (main thread)
+  //     yo'l ishlayveradi: `fastClient()` avtomatik qaytadi;
+  //   • `localStorage.wc_mtproto_worker = '0'` — worker'ni butunlay o'chiradi;
+  //   • worker ishlab turgan paytda GramJS bilan bir xil auth_key ustida
+  //     ikkinchi ulanish OCHILMAYDI (`isOpen`/`AUTH_KEY_DUPLICATED` qoidalari
+  //     avvalgidek saqlanadi).
+  var FAST_WORKER_FLAG = 'wc_mtproto_worker';
+
+  function workerFastEnabled() {
+    try {
+      if (typeof global.Worker !== 'function') return false;
+    } catch (e) { return false; }
+    try {
+      if (global.localStorage && localStorage.getItem(FAST_WORKER_FLAG) === '0') return false;
+    } catch (e) { /* localStorage yopiq — worker'dan foydalanish mumkin */ }
+    return true;
+  }
+
+  // Worker va import qilinadigan `tg-mtproto.js` uchun versiya.
+  //
+  // `.htaccess` JS fayllarni `immutable` bilan keshlaydi; versiyasiz
+  // `importScripts('tg-mtproto.js')` eski nusxani olib qolishi mumkin.
+  // `__WCMTPROTOV` / `__WCMTWORKERV` — `includes/perf-head.php` dan keladi.
+  function fastWorkerUrl() {
+    var pv = Number(global.__WCMTPROTOV) || 0;
+    var wv = Number(global.__WCMTWORKERV) || pv || 0;
+    var q = [];
+    if (wv) q.push('v=' + wv);
+    if (pv) q.push('p=' + pv);
+    var rel = '/assets/js/tg-mtproto-worker.js' + (q.length ? '?' + q.join('&') : '');
+    var b = base();
+    if (b) return String(b).replace(/\/+$/, '') + rel;
+    // `window.APP.base` ba'zi sahifalarda (masalan admin/nav orqali yuklangan
+    // sahifalarda) bo'lmasligi mumkin. Bunday holda sahifa manziliga nisbatan
+    // yechamiz — subkatalogdagi o'rnatishda ham to'g'ri yo'l chiqadi.
+    try {
+      return new URL('assets/js/tg-mtproto-worker.js' + (q.length ? '?' + q.join('&') : ''),
+        document.baseURI).href;
+    } catch (e) {
+      return rel;
+    }
+  }
+
+  /**
+   * `tg-mtproto.js` klientini worker ichida ishga tushirib, unga o'xshash
+   * interfeys qaytaradi. Metodlar `Promise` qaytaradi — `tg-stream.js` ning
+   * qolgan qismi buni allaqachon kutadi.
+   */
+  function createFastWorkerClient(opts) {
+    var worker = new global.Worker(fastWorkerUrl());
+    var pending = new Map();
+    var nextId = 0;
+    var closed = false;
+    var fatal = null;
+    var everOk = false;
+    var everOpen = false;
+    var openDc = Object.create(null);
+    var haveKeys = Object.create(null);
+    var direct = null;
+
+    var session = null;
+    try { session = global.TgFast.parseSession(opts.session); } catch (e) { session = null; }
+
+    try {
+      if (opts.dcKeys) {
+        Object.keys(opts.dcKeys).forEach(function (k) { haveKeys[Number(k)] = 1; });
+      }
+      if (session && session.dcId) haveKeys[Number(session.dcId)] = 1;
+    } catch (e) { /* jim */ }
+
+    var proxy = {
+      __worker: true,
+      session: session || { dcId: 0 },
+      dcId: Number(session && session.dcId) || 0,
+      keyId: 0
+    };
+
+    function killWorker() {
+      if (!worker) return;
+      try { worker.onmessage = null; worker.onerror = null; } catch (e) {}
+      try { worker.terminate(); } catch (e) {}
+      worker = null;
+    }
+
+    function failAll(err) {
+      pending.forEach(function (p) { p.reject(err); });
+      pending.clear();
+    }
+
+    /**
+     * Worker butunlay ishlamay qolsa — main thread'dagi to'g'ridan-to'g'ri
+     * klientga o'tamiz. Bu FAQAT hali birorta muvaffaqiyatli so'rov
+     * bo'lmagan holatda xavfsiz: aks holda Telegram eski socketni yopishini
+     * kutmasdan ikkinchi ulanish `AUTH_KEY_DUPLICATED` berishi mumkin.
+     */
+    function switchToDirect() {
+      if (direct) return true;
+      try { direct = global.TgFast.createClient(opts); } catch (e) { direct = null; }
+      if (!direct) return false;
+
+      proxy.__worker = false;   // endi asosiy oqimdagi klient
+      proxy.session = direct.session || proxy.session;
+      proxy.dcId = Number(direct.dcId) || proxy.dcId;
+      proxy.keyId = direct.keyId;
+      proxy.warm = function (dc) { return direct.warm(dc); };
+      proxy.getFile = function (loc, off, limit) { return direct.getFile(loc, off, limit); };
+      proxy.readRange = function (loc, off, len, o) { return direct.readRange(loc, off, len, o); };
+      proxy.keepAlive = function (o) { return direct.keepAlive(o); };
+      proxy.setDcKey = function (dc, k) { return direct.setDcKey(dc, k); };
+      proxy.dropDcKey = function (dc) { return direct.dropDcKey(dc); };
+      proxy.hasDcKey = function (dc) { return direct.hasDcKey(dc); };
+      proxy.isOpen = function (dc) { return direct.isOpen(dc); };
+      proxy.close = function () { return direct.close(); };
+      return true;
+    }
+
+    function onFatal(err) {
+      if (fatal) return;
+      fatal = err;
+      killWorker();
+      failAll(err);
+      // Faqat worker HECH QANDAY socket ochmagan bo'lsa to'g'ridan-to'g'ri
+      // klientga o'tamiz. Socket ochilgan bo'lsa ikkinchi ulanish
+      // `AUTH_KEY_DUPLICATED` berishi mumkin — u holda oddiy `S.fastBroken`
+      // -> GramJS yo'li ishlaydi (u avval socketni yopadi).
+      if (!everOk && !everOpen) switchToDirect();
+    }
+
+    function call(method, args) {
+      if (closed) return Promise.reject(new Error('MTProto klient yopilgan'));
+      if (fatal) return Promise.reject(fatal);
+      var id = ++nextId;
+      return new Promise(function (resolve, reject) {
+        pending.set(id, { resolve: resolve, reject: reject });
+        try {
+          worker.postMessage({ type: 'call', id: id, method: method, args: args || {} });
+        } catch (e) {
+          pending.delete(id);
+          reject(e);
+        }
+      });
+    }
+
+    worker.onmessage = function (ev) {
+      var d = ev.data || {};
+
+      if (d.type === 'ready') {
+        if (d.dcId) {
+          proxy.dcId = Number(d.dcId) || proxy.dcId;
+          if (proxy.session) proxy.session.dcId = proxy.dcId;
+          haveKeys[proxy.dcId] = 1;
+        }
+        if (d.keyId) proxy.keyId = d.keyId;
+        return;
+      }
+
+      if (d.type === 'open') {
+        everOpen = true;
+        openDc[Number(d.dc)] = 1;
+        return;
+      }
+
+      if (d.type === 'fatal') {
+        onFatal(new Error(d.error || 'MTProto worker xatosi'));
+        return;
+      }
+
+      if (d.type === 'done' || d.type === 'fail') {
+        var p = pending.get(d.id);
+        if (!p) return;
+        pending.delete(d.id);
+        if (d.type === 'fail') {
+          var err = new Error(d.error || 'MTProto xatosi');
+          err.errorMessage = d.error || err.message;
+          p.reject(err);
+        } else {
+          everOk = true;
+          p.resolve(d.result);
+        }
+      }
+    };
+
+    worker.onerror = function (ev) {
+      try { if (ev && ev.preventDefault) ev.preventDefault(); } catch (e) {}
+      onFatal(new Error('MTProto worker ishlamadi'));
+    };
+
+    proxy.warm = function (dc) {
+      var n = Number(dc) || proxy.dcId;
+      return call('warm', { dc: dc || 0 }).then(function (r) {
+        // `warmDcList()` `isOpen()` ni SINXRON chaqiradi — javob kelishi
+        // bilan darhol belgilaymiz, aks holda GramJS o'sha DC'da ikkinchi
+        // ulanish ochib `AUTH_KEY_DUPLICATED` olishi mumkin edi.
+        if (n > 0) { everOpen = true; openDc[n] = 1; }
+        return r;
+      });
+    };
+    proxy.getFile = function (loc, off, limit) {
+      return call('getFile', { loc: loc, off: off, limit: limit });
+    };
+    proxy.readRange = function (loc, off, len, o) {
+      return call('readRange', { loc: loc, off: off, length: len, opts: o || {} });
+    };
+    proxy.keepAlive = function (o) {
+      return call('keepAlive', { timeout: (o && o.timeout) || 8000 });
+    };
+    proxy.setDcKey = function (dc, k) {
+      var n = Number(dc);
+      if (n > 0) haveKeys[n] = 1;
+      // Chaqiruvchi natijani kutmaydi (`S.fast.setDcKey(...)`) — xato
+      // "unhandled rejection" bo'lib konsolni to'ldirmasligi uchun yutamiz.
+      return call('setDcKey', { dc: dc, key: k }).catch(function () { return false; });
+    };
+    proxy.dropDcKey = function (dc) {
+      try { delete haveKeys[Number(dc)]; } catch (e) {}
+      return call('dropDcKey', { dc: dc }).catch(function () { return false; });
+    };
+    proxy.hasDcKey = function (dc) { return !!haveKeys[Number(dc)]; };
+    proxy.isOpen = function (dc) { return !!openDc[Number(dc)]; };
+    proxy.close = function () {
+      if (closed) return;
+      closed = true;
+      try { worker.postMessage({ type: 'close' }); } catch (e) {}
+      killWorker();
+      failAll(new Error('MTProto klient yopilgan'));
+    };
+
+    try {
+      worker.postMessage({ type: 'init', opts: opts });
+    } catch (e) {
+      onFatal(e);
+    }
+
+    return proxy;
+  }
+
   // Ulanish faqat sahifa ochiq bo'lganda tirik. Tab yashirinsa (almashish)
   // UZILMAYDI — fon video oqimi davom etishi kerak. Faqat `pagehide` da
   // o'chirilib, `pageshow` da yana yoqiladi: bunda yashirin tab'da ping
@@ -209,7 +457,7 @@
         if (!saved) return null;
         var a = apiCfg();
         if (!a.id) return null;
-        return global.TgFast.createClient({
+        var opts = {
           apiId: a.id,
           apiHash: a.hash,
           session: saved,
@@ -219,7 +467,14 @@
           deviceModel: 'W CINEMA Web',
           systemVersion: '1.0',
           appVersion: '1.0'
-        });
+        };
+        // 1-BOSQICH: imkon bo'lsa — alohida Worker. Worker yaratilmasa
+        // (CSP, eski brauzer) — main thread'dagi eski yo'l ishlayveradi.
+        if (workerFastEnabled()) {
+          try { return createFastWorkerClient(opts); }
+          catch (e) { /* pastga — to'g'ridan-to'g'ri klient */ }
+        }
+        return global.TgFast.createClient(opts);
       } catch (e) {
         return null;
       }
@@ -5725,7 +5980,14 @@
       // Saytga kirish/chiqish ulanish holati (tekshirish uchun).
       ulanish: function () {
         var c = null; try { c = swCtl(); } catch (e) {}
-        return { active: siteActive, fast: !!S.fast, sw: !!c, chan: !!S.chan };
+        return {
+          active: siteActive,
+          fast: !!S.fast,
+          // `true` — MTProto alohida Dedicated Worker'da (asosiy oqim bo'sh).
+          worker: !!(S.fast && S.fast.__worker),
+          sw: !!c,
+          chan: !!S.chan
+        };
       }
     }
   };

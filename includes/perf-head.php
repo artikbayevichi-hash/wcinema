@@ -128,6 +128,18 @@ $__bundleV = max(
     (int) (@filemtime(__DIR__ . '/../assets/js/tg-client.bundle.js.gz') ?: 1)
 );
 ?>
+<?php
+// MTProto Worker versiyalari.
+//
+// `tg-mtproto-worker.js` ichida `importScripts('tg-mtproto.js?v=...')`
+// ishlatiladi. `.htaccess` JS'ni `immutable` bilan keshlaydi, shuning uchun
+// versiyasiz import eski nusxani olib qolishi mumkin edi. Ikkala faylning
+// `filemtime` qiymati shu yerda bir marta hisoblanadi.
+$__mtprotoV  = @filemtime(__DIR__ . '/../assets/js/tg-mtproto.js') ?: 1;
+$__mtworkerV = @filemtime(__DIR__ . '/../assets/js/tg-mtproto-worker.js') ?: 1;
+?>
+<script>window.__WCMTPROTOV = <?php echo (int) $__mtprotoV; ?>;
+window.__WCMTWORKERV = <?php echo (int) $__mtworkerV; ?>;</script>
 <script>window.__WCBUNDLEV = <?php echo (int) $__bundleV; ?>;</script>
 <script>
 (function () {

@@ -17,6 +17,7 @@ o'chirilgan" va "nimani va'da qilish mumkin emas"ni bir joyda saqlash.
 |---|---|---|---|
 | To'g'ridan-to'g'ri MTProto (PHP vositachisiz) | ✅ bor | `assets/js/tg-mtproto.js`, `assets/js/tg-stream.js` | Eng katta yutuq |
 | Issiq WebSocket + keepalive | ✅ bor | `tg-mtproto.js` (pool, `wc_media`) | 300–600 ms handshake yo'q |
+| MTProto — Dedicated Worker | bor | `assets/js/tg-mtproto-worker.js`, `tg-stream.js` | Kripto asosiy oqimdan chiqadi — UI qotmaydi |
 | 4 lane / 512 KB / 1 MB blok | ✅ bor | `tg-stream.js` (`readRange`, 4 lanes) | Butun yuklashda shartli |
 | `precise` flag | ✅ bor | `tg-mtproto.js` → `buildGetFile()` flags = 1 | Seek'da ortiqcha bayt yo'q |
 | `cdn_supported` / `upload.getCdnFile` | ⛔ **ataylab o'chirilgan** | `buildGetFile()` izohi | Brauzerda ≈ 0 yoki minus |
@@ -335,3 +336,61 @@ izohlar olinadi, aks holda `api/*..php` dagi `/*` haqiqiy kodni "izoh" deb
 yutib yuborardi.
 
 Barcha suite'lar yashil: **Node 128 PASS, PHP 102 PASS, 0 FAIL**.
+
+---
+
+## 8. MTProto Dedicated Worker
+
+MTProto klienti (`assets/js/tg-mtproto.js`) endi **Dedicated Worker** ichida
+ishlaydi: AES-256-IGE/CTR, SHA-256 va WebSocket oqimi asosiy oqimni band
+qilmaydi. Bu Service Worker emas — brauzer SW'ni ~30 s bo'sh turganda
+o'chiradi, Dedicated Worker esa sahifa yopilmaguncha yashaydi.
+
+- `assets/js/tg-mtproto-worker.js` — `importScripts('tg-mtproto.js?v=…')`
+  + `init/call/close` protokoli; `Uint8Array` transferable uzatiladi.
+- `assets/js/tg-stream.js` — `createFastWorkerClient()` proxy'si; Worker
+  yaratilmasa yoki yiqilsa — main thread'dagi eski klientga qaytadi.
+- `includes/perf-head.php` — `__WCMTPROTOV` / `__WCMTWORKERV` versiyalari
+  (immutable kesh uchun).
+- O'chirish: `localStorage.setItem('wc_mtproto_worker','0')`.
+- Tekshirish: `TgStream.boshqarish.ulanish().worker` — `true` bo'lsa
+  kripto worker'da.
+
+Batafsil: [`docs/worker-mtproto.md`](worker-mtproto.md).
+
+Test: `node .work/tools/tg-mtproto-worker.test.mjs` — 42 PASS (tarmoqsiz,
+fake `TgFast` bilan).
+
+---
+
+## 9. App Shell (PJAX) router
+
+`index.php` / `watch.php` / `reels.php` orasida yurishda hujjat endi QAYTA
+YUKLANMAYDI: faqat `#wc-page` bloki almashadi (`assets/js/app-shell.js`).
+Shu tufayli MTProto Dedicated Worker, issiq WebSocket va Service Worker
+kesh zanjiri uzilmaydi.
+
+- Sahifa shartnomasi: `$WC_SPA = true;` nav'dan oldin, mazmun
+  `<div id="wc-page" data-wc-page="...">` ichida, `WCApp.beginPage()`
+  darhol ichkarida (sahifa skriptlaridan oldin).
+- `PERSIST_RE` dagi kutubxonalar (`tg-stream`, `tg-mtproto`, `player`,
+  `wc-lib` ...) bir marta yuklanadi; `app.js` / `watch.js` / `reels.js` /
+  `tg-comments.js` har o'tishda yangi `<script>` bilan qayta ishga tushadi.
+- `Scope` sahifa listener/taymer/observerlarini yig'adi va keyingi
+  o'tishda tozalaydi. Nav darajasidagi skriptlar (`tv-mode`, `badge-poll`,
+  `notifications`, `tg-persist`) `DOMContentLoaded` capture bosqichida
+  scope'siz ishlaydi -- ularning keep-alive taymerlari o'chmaydi.
+- `WCApp.untracked(fn)` -- doimiy funksiyalar uchun (masalan
+  `TgStream.init()`); `tg-persist.php` shundan foydalanadi.
+- Xato/redirect/timeout bo'lsa -- `location.href` orqali to'liq yuklash
+  (xavfsiz zaxira). Foydalanuvchi "o'lik" sahifada qolmaydi.
+- `watch.php?c=..&e=..` da faqat `e` o'zgarsa, router `wc:watchpop`
+  yuboradi va `watch.js` qismni joyida almashtiradi (sahifa qayta
+  chizilmaydi).
+- O'chirish: `localStorage.setItem('wc_spa','0')` + reload.
+
+Batafsil: [`docs/app-shell.md`](app-shell.md).
+
+Test: `node .work/tools/app-shell.test.mjs` -- 106 PASS (`vm` + minimal DOM,
+tarmoqsiz). `Scope` tozalashi, `untracked()`, capture tartibi, marshrutlar,
+`PERSIST_RE` va sahifa shartnomasi tekshiriladi.
