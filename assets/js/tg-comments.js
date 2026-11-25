@@ -1092,14 +1092,32 @@
     var key = cacheKey(d);
     var hit = cacheGet(key);
     if (hit) { node.src = hit; afterLoaded(node); return Promise.resolve(hit); }
-    return getClient().then(function (client) {
-      return readAll(client, job.loc, job.dcId, job.size);
-    }).then(function (buf) {
-      if (!buf || !buf.length) throw new Error('bo‘sh fayl');
-      var url = blobUrl(buf, mime);
-      cachePut(key, url);
-      node.src = url; afterLoaded(node);
-      return url;
+
+    // Kichik stiker/GIF/rasmlar IndexedDB'da ham saqlanadi: sahifa yangilansa
+    // ham qayta Telegram'dan so'ralmaydi. Video/ovoz katta bo'lgani uchun
+    // faqat xotira keshida qoladi.
+    var pkey = persistentMediaKey(d);
+    var canPersist = !!pkey && (d.kind === 'sticker' || d.kind === 'gif' || d.kind === 'photo')
+      && job.size <= 3 * 1024 * 1024;
+    var fromDisk = canPersist ? idbBlobGet(pkey) : Promise.resolve(null);
+
+    return fromDisk.then(function (rec) {
+      if (rec && rec.blob) {
+        var cached = URL.createObjectURL(rec.blob);
+        cachePut(key, cached);
+        node.src = cached; afterLoaded(node);
+        return cached;
+      }
+      return getClient().then(function (client) {
+        return readAll(client, job.loc, job.dcId, job.size);
+      }).then(function (buf) {
+        if (!buf || !buf.length) throw new Error('bo‘sh fayl');
+        var url = blobUrl(buf, mime);
+        cachePut(key, url);
+        if (canPersist) idbBlobSet(pkey, buf, mime, CACHE_TTL);
+        node.src = url; afterLoaded(node);
+        return url;
+      });
     }).catch(function (e) {
       showFail(node, errMsg(e));
       try { console.warn('[tg-comments] media yuklanmadi:', d.kind, e); } catch (er) {}
@@ -2154,6 +2172,599 @@
     });
   }
 
+  /* ========================================================================
+   * IZOH KOMPOZITORI (Telegram uslubi)
+   * ------------------------------------------------------------------------
+   * PHP/shablonga tegmasdan turib kompozitorni qayta tartibga solamiz:
+   *   chap  -> 📎 (rasm/fayl)
+   *   o'rt  -> <textarea>
+   *   o'ng  -> 😊 (emoji/stiker/GIF) + 🎤/➤ (ovoz/yuborish)
+   * Barcha yangi stillar faqat shu fayldan `<style>` bilan in'ektsiya
+   * qilinadi (share-chat.js naqshi). Palette: faqat oq/qora.
+   * ======================================================================== */
+  var SVG_CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"'
+    + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M20.4 11.1 12 19.5a5 5 0 0 1-7.1-7.1l8.4-8.4a3.4 3.4 0 0 1 4.8 4.8l-8.3 8.3a1.8 1.8 0 0 1-2.5-2.5l7.6-7.6"/></svg>';
+  var SVG_SMILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"'
+    + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<circle cx="12" cy="12" r="9"/>'
+    + '<path d="M8.5 14.2c.9 1.2 2.1 1.8 3.5 1.8s2.6-.6 3.5-1.8"/>'
+    + '<path d="M9.2 9.4h.01M14.8 9.4h.01"/></svg>';
+
+  // Aqlli takliflar uchun so'z -> emoji lug'ati (uz / en / ru).
+  var EMOJI_HINTS = {
+    '👋': ['salom', 'assalom', 'hello', 'hi', 'privet', 'xayr', 'bye', 'yov'],
+    '🙏': ['rahmat', 'rajmat', 'thanks', 'thank', 'spasibo', 'minnatdor', 'ilov'],
+    '🔥': ['olov', 'fire', 'ogon', 'issiq', 'trend', 'qiz'],
+    '❤️': ['sevgi', 'sevaman', 'love', 'lyublyu', 'yurak', 'qalb', 'serdts'],
+    '😂': ['kul', 'kulgi', 'haha', 'lol', 'smex', 'kulgili', 'gulash'],
+    '😍': ['chiroyli', 'gozal', 'go‘zal', 'wow', 'milya', 'obra'],
+    '👍': ['yaxshi', 'good', 'horosho', 'ok', 'tasdiq', 'like', 'alright'],
+    '👎': ['yomon', 'bad', 'ploxo', 'dislike'],
+    '😊': ['tabassum', 'smile', 'ulib', 'kulimsira'],
+    '😎': ['super', 'krut', 'cool', 'qoyqoyi', 'zor'],
+    '🤔': ['oylash', 'o‘ylash', 'think', 'dumay', 'qiziq', 'nimaga'],
+    '😢': ['yigla', 'yig‘la', 'sad', 'grust', 'qaygu', 'qayg‘u', 'yosh'],
+    '😡': ['jahl', 'angry', 'gnev', 'serdit', 'gazab', 'g‘azab'],
+    '🤗': ['quchoq', 'hug', 'obniy', 'quchoqlash'],
+    '🎉': ['tabrik', 'congrats', 'bayram', 'fest', 'tugilgan', 'tug‘ilgan'],
+    '✅': ['tayyor', 'done', 'gotovo', 'bajarildi', 'tasdiqlandi'],
+    '💯': ['yuz', '100', 'exact', 'alohida'],
+    '👏': ['olqish', 'applause', 'bravo', 'molodets', 'afarin'],
+    '🤝': ['kelishuv', 'deal', 'dogovor', 'hamkor', 'yordam'],
+    '👀': ['qarab', 'qara', 'look', 'smotri', 'korish', 'ko‘rish'],
+    '🕐': ['vaqt', 'time', 'vremya', 'soat', 'kech'],
+    '💡': ['goya', 'g‘oya', 'idea', 'ideya', 'fikir', 'aqllash'],
+    '🎬': ['kino', 'film', 'movie', 'video', 'kinoteatr'],
+    '🍿': ['popkorn', 'popcorn', 'snack', 'kino'],
+    '😴': ['uxla', 'sleep', 'son', 'uyqu', 'tong'],
+    '🤯': ['mind', 'uma', 'vau', 'hayron', 'aqllash'],
+    '🫡': ['salute', 'salyut', 'hurmat', 'respect'],
+    '🤌': ['barmoq', 'finger', 'italyan'],
+    '💪': ['kuch', 'strong', 'silu', 'gym', 'jasorat'],
+    '🥰': ['mehr', 'lyubov', 'sevgi', 'love'],
+    '😁': ['glum', 'g‘alaba', 'galaba', 'kul'],
+    '🤣': ['kul', 'smex', 'lol', 'haha'],
+    '💬': ['xabar', 'message', 'soz', 'so‘z', 'chat', 'gap'],
+    '⭐': ['yulduz', 'star', 'zvezda', 'reyting'],
+    '📷': ['rasm', 'photo', 'foto', 'kamera', 'camera'],
+    '🎤': ['mikrofon', 'mic', 'voice', 'ovoz', 'qoshiq'],
+    '🎵': ['musiqa', 'music', 'muzika', 'qoshiq'],
+    '📱': ['telefon', 'phone', 'tel', 'mobil'],
+    '❓': ['savol', 'question', 'vopros', 'nima'],
+    '💰': ['pul', 'money', 'dengi', 'narx'],
+    '🍔': ['taom', 'food', 'eda', 'ovqat', 'yemoq'],
+    '☕': ['choy', 'coffee', 'kofe', 'qahva'],
+    '🌙': ['oy', 'moon', 'luna', 'kecha', 'tun'],
+    '☀️': ['quyosh', 'sun', 'solntse', 'kun'],
+    '🏠': ['uy', 'home', 'dom', 'ketish'],
+    '🚀': ['rocket', 'raketa', 'start', 'tezkor'],
+    '🐶': ['it', 'dog', 'sobaqa', 'kuchuk'],
+    '🐱': ['mushuk', 'cat', 'kot', 'koshka'],
+    '⚽': ['futbol', 'football', 'soccer', 'top'],
+    '🎁': ['sovga', 'sovg‘a', 'gift', 'podarok'],
+    '🤖': ['bot', 'robot', 'avtomat']
+  };
+
+  // Picker ichidagi "kayfiyat" bo'limlari.
+  var EMOJI_MOODS = {
+    happy: ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '🥳', '😎', '🤗', '😋', '😜'],
+    love: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '🥰', '😍', '😘', '🫂'],
+    sad: ['😔', '😪', '😴', '😢', '😭', '😰', '😥', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '💀', '🤡'],
+    food: ['🍏', '🍎', '🍌', '🍉', '🍇', '🍓', '🍒', '🍑', '🥭', '🍍', '🍔', '🍗', '🍕', '🍣', '🍜', '🍚', '🍳', '🥞', '🍰', '🎂', '🍿', '🍩', '🍪', '☕', '🍵', '🍺'],
+    work: ['💻', '⌨️', '🖥️', '📱', '📷', '📞', '📧', '📊', '📈', '📁', '📝', '✏️', '🔍', '💡', '🔧', '⚙️', '💼', '📌', '📎', '🗓️', '⏰', '🎯'],
+    nature: ['🌵', '🌲', '🌳', '🌴', '🌱', '🍀', '🌹', '🌸', '🌻', '🌈', '⭐', '🌟', '☀️', '🌙', '☁️', '❄️', '🔥', '💧', '🐶', '🐱', '🦊', '🐼', '🦁', '🐸'],
+    fun: ['🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🎸', '🎯', '🎮', '🎲', '🎪', '🎭', '🎨', '🎡', '🎢', '🚀', '⚽', '🏀', '🎱', '🛹', '🏋️', '🧘']
+  };
+  var MOOD_LABELS = {
+    recent: 'So‘nggi', frequent: 'Ko‘p ishlatilgan', happy: 'Kayfiyat',
+    love: 'Sevgi', sad: 'Qayg‘u', food: 'Taom', work: 'Ish',
+    nature: 'Tabiat', fun: 'Zavq', all: 'Hammasi'
+  };
+
+  // ------------------------------------------------------ IndexedDB keshi
+  // Faqat emoji/stiker META ma'lumotlari saqlanadi (session/token yo'q).
+  var IDB_NAME = 'wc_tg_comments_cache_v1';
+  var IDB_STORE = 'kv';
+  var IDB_BLOB_STORE = 'blob';
+  var CACHE_TTL = 12 * 60 * 60 * 1000;   // 12 soat
+  var idbPromise = null;
+  var recentStickerDocs = [];
+  var recentLoadTried = false;
+  var usageList = [];
+  var emojiView = { mood: 'recent', q: '' };
+
+  function idb() {
+    if (!global.indexedDB) return Promise.resolve(null);
+    if (idbPromise) return idbPromise;
+    idbPromise = new Promise(function (resolve) {
+      try {
+        var rq = indexedDB.open(IDB_NAME, 2);
+        rq.onupgradeneeded = function () {
+          var db = rq.result;
+          if (db && !db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+          if (db && !db.objectStoreNames.contains(IDB_BLOB_STORE)) db.createObjectStore(IDB_BLOB_STORE);
+        };
+        rq.onsuccess = function () { resolve(rq.result || null); };
+        rq.onerror = function () { resolve(null); };
+        rq.onblocked = function () { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+    return idbPromise;
+  }
+
+  // Eslatma: yuqoridagi `cacheGet/cachePut` — xotiradagi blob URL keshi.
+  // Bu yerdagilar IndexedDB uchun, shuning uchun nomlari farqlanadi.
+  function idbGet(key) {
+    return idb().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (resolve) {
+        try {
+          var rq = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+          rq.onsuccess = function () {
+            var rec = rq.result;
+            if (!rec || typeof rec !== 'object' || !('v' in rec)) { resolve(null); return; }
+            if (Number(rec.ttl) > 0 && (Date.now() - Number(rec.t || 0)) > Number(rec.ttl)) { resolve(null); return; }
+            resolve(rec.v);
+          };
+          rq.onerror = function () { resolve(null); };
+        } catch (e) { resolve(null); }
+      });
+    });
+  }
+
+  function idbSet(key, value, ttl) {
+    return idb().then(function (db) {
+      if (!db) return;
+      try {
+        db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE)
+          .put({ v: value, t: Date.now(), ttl: Number(ttl) || 0 }, key);
+      } catch (e) { /* kesh ixtiyoriy */ }
+    });
+  }
+
+  function persistentMediaKey(d) {
+    var k = cacheKey(d);
+    if (!k) return '';
+    return 'media:' + k + ':' + (docMime(d) || '');
+  }
+
+  function idbBlobGet(key) {
+    return idb().then(function (db) {
+      if (!db || !key) return null;
+      return new Promise(function (resolve) {
+        try {
+          var rq = db.transaction(IDB_BLOB_STORE, 'readonly').objectStore(IDB_BLOB_STORE).get(key);
+          rq.onsuccess = function () {
+            var rec = rq.result;
+            if (!rec || typeof rec !== 'object' || !rec.blob) { resolve(null); return; }
+            if (Number(rec.ttl) > 0 && (Date.now() - Number(rec.t || 0)) > Number(rec.ttl)) { resolve(null); return; }
+            resolve(rec);
+          };
+          rq.onerror = function () { resolve(null); };
+        } catch (e) { resolve(null); }
+      });
+    });
+  }
+
+  function idbBlobSet(key, buf, mime, ttl) {
+    if (!key || !buf || !buf.length) return Promise.resolve();
+    return idb().then(function (db) {
+      if (!db) return;
+      try {
+        var blob = new Blob([buf instanceof Uint8Array ? buf : new Uint8Array(buf)],
+          { type: mime || 'application/octet-stream' });
+        db.transaction(IDB_BLOB_STORE, 'readwrite').objectStore(IDB_BLOB_STORE)
+          .put({ blob: blob, mime: mime || '', t: Date.now(), ttl: Number(ttl) || 0 }, key);
+      } catch (e) { /* kesh ixtiyoriy */ }
+    });
+  }
+
+  function ownerKey() {
+    return String(meId() || 'anon').replace(/[^a-zA-Z0-9_-]/g, '');
+  }
+  function kUsage()    { return 'usage:' + ownerKey(); }
+  function kSets()     { return 'stickerSets:' + ownerKey(); }
+  function kRecent()   { return 'recentStickers:' + ownerKey(); }
+
+  function rememberUsage(type, key) {
+    var list = Array.isArray(usageList) ? usageList.slice() : [];
+    list = list.filter(function (x) { return !(x && x.t === type && x.k === key); });
+    list.unshift({ t: type, k: String(key), at: Date.now() });
+    usageList = list.slice(0, 60);
+    return idbSet(kUsage(), usageList, 30 * 24 * 60 * 60 * 1000);
+  }
+  function usageRank(type, key) {
+    for (var i = 0; i < usageList.length; i++) {
+      if (usageList[i] && usageList[i].t === type && usageList[i].k === key) return usageList.length - i;
+    }
+    return 0;
+  }
+
+  function stickerAlt(d) {
+    var alts = [];
+    ((d && d.attributes) || []).forEach(function (a) {
+      if (a && a.className === 'DocumentAttributeSticker' && a.alt) alts.push(String(a.alt));
+    });
+    return alts.join('');
+  }
+  function minifyStickerDocs(docs) {
+    return (docs || []).slice(0, 80).map(function (d) {
+      return { id: String(d.id || ''), alt: stickerAlt(d), mime: d.mimeType || '' };
+    }).filter(function (x) { return x.id; });
+  }
+  function minifySets(sets) {
+    // `accessHash` stiker to'plamini qayta ochish uchun kerak (maxfiy emas).
+    return (sets || []).slice(0, 200).map(function (s) {
+      return {
+        id: s.id || '',
+        accessHash: s.accessHash || s.access_hash || '',
+        title: s.title || 'Set'
+      };
+    }).filter(function (x) { return x.id; });
+  }
+
+  function norm(s) {
+    return String(s == null ? '' : s).toLowerCase()
+      .replace(/[‘’`]/g, "'").replace(/'/g, '').trim();
+  }
+
+  function emojiCatalog() {
+    var map = {};
+    var secs = (global.TgEmoji && global.TgEmoji.sections && global.TgEmoji.sections()) || [];
+    secs.forEach(function (g) {
+      (g.list || []).forEach(function (em) { if (!map[em]) map[em] = g.name || ''; });
+    });
+    function add(list) {
+      (list || []).forEach(function (em) { if (!map[em]) map[em] = ''; });
+    }
+    Object.keys(EMOJI_HINTS).forEach(add);
+    Object.keys(EMOJI_MOODS).forEach(function (k) { add(EMOJI_MOODS[k]); });
+    return Object.keys(map).map(function (em) { return { em: em, group: map[em] || '' }; });
+  }
+
+  function emojiMatch(item, q) {
+    var s = norm(q);
+    if (!s) return true;
+    if (item.em === q) return true;
+    if (norm(item.group).indexOf(s) >= 0) return true;
+    var hints = EMOJI_HINTS[item.em] || [];
+    for (var i = 0; i < hints.length; i++) {
+      var h = norm(hints[i]);
+      if (h && (h.indexOf(s) >= 0 || (h.length >= 5 && s.indexOf(h) >= 0))) return true;
+    }
+    return false;
+  }
+
+  // -------------------------------------------------- stillar (JS ichida)
+  var CSS_ID = 'wcTgCommentsComposerCss';
+  function injectComposerCss() {
+    if (document.getElementById(CSS_ID)) return;
+    var st = document.createElement('style');
+    st.id = CSS_ID;
+    st.type = 'text/css';
+    st.textContent = [
+      '.wc-c-form.reels-comments-form{position:relative;display:flex;align-items:flex-end;gap:4px}',
+      '.wc-c-form #cAttachBtn{order:0}',
+      '.wc-c-form .reels-comments-input{order:1;flex:1 1 auto;min-width:0;background:#000;color:#fff;border-color:#262626}',
+      '.wc-c-form .reels-comments-input:focus{border-color:#555}',
+      '.wc-c-form #cEmojiBtn{order:2;width:40px;height:40px;flex:0 0 auto;border:1px solid #262626;border-radius:50%;background:#000;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none}',
+      '.wc-c-form #cEmojiBtn:hover{background:#0e0e0e;border-color:#454545}',
+      '.wc-c-form #commentSend{order:3}',
+      '.wc-c-form #cOpenTg{order:4;margin-left:0}',
+      '.wc-c-form #cAttachBtn svg,.wc-c-form #cEmojiBtn svg{width:22px;height:22px}',
+      '.wc-c-form #commentSend[data-mode="send"]{background:#fff;color:#000}',
+      '.wc-c-form #commentSend[data-mode="mic"],.wc-c-form #commentSend[data-mode="attach"]{background:#000;color:#fff;border:1px solid #262626}',
+      '.wc-c-suggest{position:absolute;left:6px;right:6px;bottom:calc(100% + 6px);z-index:7;display:flex;align-items:center;gap:4px;padding:5px 6px;background:#0e0e0e;border:1px solid #262626;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.55)}',
+      '.wc-c-suggest[hidden]{display:none}',
+      '.wc-c-sug-label{flex:0 0 auto;padding:0 4px;color:#8a8a8a;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}',
+      '.wc-c-sug-items{display:flex;align-items:center;gap:4px;min-width:0;overflow-x:auto;scrollbar-width:none}',
+      '.wc-c-sug-items::-webkit-scrollbar{display:none}',
+      '.wc-c-sug-chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 9px;border:1px solid #262626;border-radius:15px;background:#000;color:#fff;cursor:pointer;font:inherit;font-size:12px;white-space:nowrap}',
+      '.wc-c-sug-chip:hover{background:#181818;border-color:#444}',
+      '.wc-c-sug-emo{font-size:17px;line-height:1}',
+      '.wc-c-sug-lbl{color:#aaa;font-size:11px}',
+      '.wc-c-suggest #cFmtBtn{width:auto;height:26px;padding:0 8px;margin:0;border:1px solid #262626;border-radius:8px;background:#000;color:#fff;font-size:0}',
+      '.wc-c-suggest #cFmtBtn::after{content:"Aa";font-size:11px;font-weight:800;letter-spacing:.02em}',
+      '.wc-c-suggest #cFmtBtn svg{display:none}',
+      '#cPicker.reels-c-picker{background:#0e0e0e;border-color:#262626}',
+      '#cPicker .reels-c-picker-tab.on{background:#fff!important;color:#000!important}',
+      '.wc-c-search{padding:8px 10px 4px}',
+      '.wc-c-search input{width:100%;box-sizing:border-box;height:36px;padding:0 14px;border:1px solid #262626;border-radius:18px;background:#000;color:#fff;font:inherit;font-size:13px;outline:none}',
+      '.wc-c-search input:focus{border-color:#555}',
+      '.wc-c-moods{display:flex;align-items:center;gap:4px;padding:6px 8px;overflow-x:auto;border-bottom:1px solid #262626;scrollbar-width:none}',
+      '.wc-c-moods::-webkit-scrollbar{display:none}',
+      '.wc-c-mood{flex:0 0 auto;height:26px;padding:0 10px;border:1px solid #262626;border-radius:13px;background:#000;color:#aaa;cursor:pointer;font:inherit;font-size:11.5px;white-space:nowrap}',
+      '.wc-c-mood:hover{color:#fff;border-color:#444}',
+      '.wc-c-mood.on{background:#fff;color:#000;border-color:#fff}',
+      '#cPicker .wc-c-emoji-body{display:block;max-height:none;flex:1 1 auto;min-height:0;padding-bottom:8px}',
+      '#cPicker .wc-c-emoji-cap{color:#8a8a8a}',
+      '#cPicker .wc-c-emoji-grid{grid-template-columns:repeat(auto-fill,minmax(42px,1fr))}'
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+
+  // ----------------------------------------------------------- kompozitor
+  function prepareComposer() {
+    var form = el('commentForm');
+    var input = el('commentInput');
+    var send = el('commentSend');
+    if (!form || !input || !send) return;
+    injectComposerCss();
+    form.classList.add('wc-c-form');
+
+    var attach = el('cAttachBtn');
+    if (attach) {
+      attach.innerHTML = SVG_CLIP;                 // 📎 chap tomonda
+      attach.setAttribute('aria-label', 'Stiker, GIF, rasm');
+      attach.setAttribute('title', 'Biriktirish');
+    }
+
+    var eb = el('cEmojiBtn');
+    if (!eb) {
+      eb = document.createElement('button');
+      eb.type = 'button';
+      eb.id = 'cEmojiBtn';
+      eb.className = 'reels-c-tool wc-c-emoji-btn';
+      eb.setAttribute('aria-label', 'Emoji, stiker, GIF');
+      eb.setAttribute('title', 'Emoji');
+      eb.innerHTML = SVG_SMILE;
+      form.insertBefore(eb, send);                 // 😊 o'ng tomonda, ➤ oldida
+    }
+    if (!eb.__wcBound) {
+      eb.__wcBound = true;
+      eb.addEventListener('click', function (e) {
+        e.preventDefault();
+        openPanel('emoji');
+      });
+    }
+
+    var bar = el('cSuggest');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'wc-c-suggest';
+      bar.id = 'cSuggest';
+      bar.hidden = true;
+      var lbl = document.createElement('span');
+      lbl.className = 'wc-c-sug-label';
+      lbl.textContent = 'Taklif';
+      var items = document.createElement('div');
+      items.className = 'wc-c-sug-items';
+      items.id = 'cSuggestItems';
+      bar.appendChild(lbl);
+      bar.appendChild(items);
+      form.insertBefore(bar, form.firstChild);
+    }
+    // "Aa" formatlash tugmasi endi shu kontekst menyuda (kichik chip).
+    // ID o'zgarmaydi, shuning uchun TgFormat.mountFmtMenu uni topishda davom etadi.
+    var fmt = el('cFmtBtn');
+    if (fmt && fmt.parentNode !== bar) bar.appendChild(fmt);
+    initSmartSuggest();
+  }
+
+  // ------------------------------------------------------- aqlli takliflar
+  var EMOTICON_RULES = [
+    { re: /:-?\)|=\)/, em: '😊' },
+    { re: /:-?d|=d/i, em: '😂' },
+    { re: /:-?\(/, em: '😢' },
+    { re: /<3/, em: '❤️' },
+    { re: /:-?p/i, em: '😜' },
+    { re: /;\)/, em: '😉' }
+  ];
+
+  function matchEmojis(text) {
+    var t = norm(text);
+    var tokens = t.split(/[^a-z0-9\u0400-\u04ff]+/).filter(function (x) { return x.length >= 3; });
+    var out = [];
+    EMOTICON_RULES.forEach(function (r) { if (r.re.test(String(text || ''))) out.push(r.em); });
+    Object.keys(EMOJI_HINTS).forEach(function (em) {
+      var hints = EMOJI_HINTS[em] || [];
+      for (var i = 0; i < hints.length; i++) {
+        var h = norm(hints[i]);
+        if (!h || h.length < 3) continue;
+        if (tokens.indexOf(h) >= 0 || (h.length >= 5 && t.indexOf(h) >= 0)) { out.push(em); return; }
+      }
+    });
+    return out.filter(function (em, i) { return out.indexOf(em) === i; })
+      .sort(function (a, b) { return usageRank('emoji', b) - usageRank('emoji', a); });
+  }
+
+  function hintLabel(em) {
+    var h = EMOJI_HINTS[em];
+    return (h && h[0]) || 'emoji';
+  }
+
+  function renderSuggest(items) {
+    var bar = el('cSuggest');
+    var host = el('cSuggestItems');
+    if (!bar || !host) return;
+    if (!items || !items.length) { bar.hidden = true; host.innerHTML = ''; return; }
+    bar.hidden = false;
+    host.innerHTML = items.map(function (it) {
+      var attr = it.stickerKey
+        ? ' data-sticker="' + esc(it.stickerKey) + '"'
+        : ' data-emoji="' + esc(it.emoji) + '"';
+      var face = it.emoji || '⭐';
+      return '<button type="button" class="wc-c-sug-chip"' + attr + '>'
+        + '<span class="wc-c-sug-emo">' + face + '</span>'
+        + '<span class="wc-c-sug-lbl">' + esc(it.label || '') + '</span></button>';
+    }).join('');
+  }
+
+  function updateSuggestions() {
+    var inp = el('commentInput');
+    if (!inp || !el('cSuggest')) return;
+    var text = String(inp.value || '');
+    if (!text.trim()) {
+      var rec = ((global.TgEmoji && global.TgEmoji.recent && global.TgEmoji.recent()) || []).slice(0, 5);
+      var lbl = 'so‘nggi';
+      if (!rec.length) {
+        var freq = emojiSection('Ko‘p ishlatilgan');
+        rec = ((freq && freq.list) || []).slice(0, 5);
+        lbl = 'tez-tez';
+      }
+      renderSuggest(rec.map(function (em) { return { emoji: em, label: lbl }; }));
+      return;
+    }
+    var ems = matchEmojis(text);
+    if (!ems.length) { renderSuggest([]); return; }
+    // Stiker taklifi uchun meta bir marta yuklanadi (keyin IndexedDBdan o'qiymiz).
+    if (!recentStickerDocs.length && !recentLoadTried) {
+      recentLoadTried = true;
+      loadRecentStickers().then(function () {
+        if (el('commentInput') && el('commentInput').value === text) updateSuggestions();
+      }).catch(function () {});
+    }
+    renderSuggest(ems.slice(0, 5).map(function (em) {
+      return { emoji: em, label: hintLabel(em) };
+    }));
+    // Stiker taklifi: oxirgi ishlatilgan stikerlarning emoji belgisi (alt) bo'yicha.
+    idbGet(kRecent()).then(function (meta) {
+      if (!Array.isArray(meta) || !meta.length) return;
+      var hit = null;
+      for (var i = 0; i < meta.length && !hit; i++) {
+        var alt = String((meta[i] && meta[i].alt) || '');
+        for (var j = 0; j < ems.length; j++) {
+          if (alt.indexOf(ems[j]) >= 0) { hit = meta[i]; break; }
+        }
+      }
+      var host = el('cSuggestItems');
+      if (!hit || !host || el('commentInput').value !== text) return;
+      if (host.querySelector('[data-sticker]')) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wc-c-sug-chip';
+      b.setAttribute('data-sticker', hit.id);
+      b.innerHTML = '<span class="wc-c-sug-emo">' + esc(hit.alt || '⭐') + '</span>'
+        + '<span class="wc-c-sug-lbl">stiker</span>';
+      host.insertBefore(b, host.firstChild);
+    }).catch(function () {});
+  }
+
+  function findStickerByKey(key) {
+    for (var i = 0; i < recentStickerDocs.length; i++) {
+      if (String(recentStickerDocs[i].id) === String(key)) return recentStickerDocs[i];
+    }
+    return null;
+  }
+
+  function sendSuggestedSticker(key) {
+    function go(doc) {
+      S.expandRoot = S.replyTo || 0;
+      renderSuggest([]);
+      rememberUsage('sticker', key);
+      sendStickerDoc(doc).catch(function (e) { toast('Xatolik: ' + esc(errMsg(e))); });
+    }
+    var doc = findStickerByKey(key);
+    if (doc) { go(doc); return; }
+    // Keshda faqat meta bor bo'lsa, to'liq hujjatni Telegram'dan olamiz.
+    loadRecentStickers().then(function (docs) {
+      for (var i = 0; i < docs.length; i++) {
+        if (String(docs[i].id) === String(key)) { go(docs[i]); return; }
+      }
+      toast('Stiker topilmadi');
+      renderSuggest([]);
+    }).catch(function () { toast('Stiker yuborilmadi'); });
+  }
+
+  function onSuggestClick(e) {
+    var t = e.target;
+    var chip = t && t.closest && t.closest('[data-emoji],[data-sticker]');
+    if (!chip) return;
+    e.preventDefault();
+    var em = chip.getAttribute('data-emoji');
+    if (em) {
+      if (global.TgEmoji && global.TgEmoji.pushRecent) global.TgEmoji.pushRecent(em);
+      rememberUsage('emoji', em);
+      insertAt(em);                      // input event -> takliflar yangilanadi
+      return;
+    }
+    var key = chip.getAttribute('data-sticker');
+    if (key) sendSuggestedSticker(key);
+  }
+
+  function initSmartSuggest() {
+    var inp = el('commentInput');
+    var bar = el('cSuggest');
+    if (!inp || !bar || bar.__wcBound) return;
+    bar.__wcBound = true;
+    idbGet(kUsage()).then(function (l) { usageList = Array.isArray(l) ? l : []; }).catch(function () {});
+    inp.addEventListener('input', updateSuggestions);
+    inp.addEventListener('focus', updateSuggestions);
+    inp.addEventListener('blur', function () {
+      global.setTimeout(function () {
+        if (!bar.contains(document.activeElement)) renderSuggest([]);
+      }, 140);
+    });
+    // Chip ustiga bosganda textarea fokusini yo'qotmaymiz.
+    bar.addEventListener('mousedown', function (e) {
+      if (e.target && e.target.closest && e.target.closest('button')) e.preventDefault();
+    });
+    bar.addEventListener('click', onSuggestClick);
+  }
+
+  // -------------------------------------------------------- yangi 😊 picker
+  function moodButtons() {
+    return Object.keys(MOOD_LABELS).map(function (k) {
+      return '<button type="button" class="wc-c-mood' + (k === 'recent' ? ' on' : '') + '"'
+        + ' data-mood="' + k + '">' + esc(MOOD_LABELS[k]) + '</button>';
+    }).join('');
+  }
+
+  function emojiSection(name) {
+    var secs = (global.TgEmoji && global.TgEmoji.sections && global.TgEmoji.sections()) || [];
+    for (var i = 0; i < secs.length; i++) {
+      if (secs[i] && secs[i].name === name) return secs[i];
+    }
+    return null;
+  }
+
+  function renderEmojiView() {
+    var b = pickerBody();
+    if (!b) return;
+    var q = emojiView.q || '';
+    var list;
+    if (q.trim()) {
+      list = emojiCatalog().filter(function (x) { return emojiMatch(x, q); })
+        .map(function (x) { return x.em; });
+    } else if (emojiView.mood === 'recent') {
+      list = ((global.TgEmoji && global.TgEmoji.recent && global.TgEmoji.recent()) || []).slice();
+      if (!list.length) {
+        var freq = emojiSection('Ko‘p ishlatilgan');
+        list = ((freq && freq.list) || []).slice(0, 30);
+      }
+    } else if (emojiView.mood === 'frequent') {
+      var f = emojiSection('Ko‘p ishlatilgan');
+      list = ((f && f.list) || []).slice();
+    } else if (emojiView.mood === 'all') {
+      list = emojiCatalog().map(function (x) { return x.em; });
+    } else {
+      list = (EMOJI_MOODS[emojiView.mood] || []).slice();
+    }
+    list = list.filter(function (em, i) { return list.indexOf(em) === i; });
+    list.sort(function (a, b) { return usageRank('emoji', b) - usageRank('emoji', a); });
+
+    b.innerHTML = '<div class="reels-c-emoji-cap">'
+      + (q.trim() ? 'Natijalar' : (MOOD_LABELS[emojiView.mood] || 'Emoji'))
+      + '</div>'
+      + (list.length
+          ? '<div class="reels-c-emoji-grid">' + list.map(function (em) {
+              return '<button type="button" class="reels-c-emoji-btn" data-e="' + esc(em) + '">' + em + '</button>';
+            }).join('') + '</div>'
+          : '<div class="reels-c-empty">Topilmadi</div>');
+
+    b.onclick = function (e) {
+      var btn = e.target && e.target.closest && e.target.closest('[data-e]');
+      if (!btn) return;
+      var em = btn.getAttribute('data-e');
+      if (!em) return;
+      if (global.TgEmoji && global.TgEmoji.pushRecent) global.TgEmoji.pushRecent(em);
+      rememberUsage('emoji', em);
+      insertAt(em);
+      if (emojiView.mood === 'recent' && !emojiView.q) renderEmojiView();
+    };
+  }
+
   // ============================================================ TOOLS / PICKER
   var uiReady = false;
   var stickerSets = null;
@@ -2165,6 +2776,11 @@
   function initUI() {
     if (uiReady) return;
     uiReady = true;
+
+    // Kompozitorni Telegram uslubiga keltiramiz (📎 | textarea | 😊 + ➤).
+    // `cFmtBtn` shu yerda kichik "Aa" chipga ko'chiriladi — mountFmtMenu
+    // keyin chaqiriladi, shuning uchun formatlash ishlashda davom etadi.
+    prepareComposer();
 
     // Chat kabi: kompozitorda BITTA "biriktirish" tugmasi bor. U panelni
     // ochadi, panel ichida esa Stiker / GIF / Rasm / @ tablari.
@@ -2257,6 +2873,8 @@
     if (p) p.innerHTML = '';
     var ab = el('cAttachBtn');
     if (ab) ab.setAttribute('aria-expanded', 'false');
+    var eb = el('cEmojiBtn');
+    if (eb) eb.setAttribute('aria-expanded', 'false');
   }
 
   /**
@@ -2270,7 +2888,9 @@
     if (box.getAttribute('data-mode') === mode && !box.hidden) { closePicker(); return; }
     S.pickerMode = mode;
     var ab = el('cAttachBtn');
-    if (ab) ab.setAttribute('aria-expanded', 'true');
+    if (ab) ab.setAttribute('aria-expanded', mode !== 'emoji' ? 'true' : 'false');
+    var eb = el('cEmojiBtn');
+    if (eb) eb.setAttribute('aria-expanded', mode === 'emoji' ? 'true' : 'false');
     if (mode === 'sticker')  { toggleSticker();  return; }
     if (mode === 'emoji')    { toggleEmoji();    return; }
     if (mode === 'gif')      { toggleGif();      return; }
@@ -2337,56 +2957,42 @@
     if (!p) return;
     p.classList.remove('is-sticker');
     p.innerHTML =
-      '<div class="reels-c-picker-head">'
-      +   '<div class="reels-c-emoji" id="cEmojiBox"></div>'
-      + '</div>';
-    var host = el('cEmojiBox');
-    if (!host) return;
-    var secs = (global.TgEmoji && global.TgEmoji.sections()) || [];
-    if (!secs.length) {
-      host.innerHTML = '<div class="reels-c-empty">Emoji yuklanmadi</div>';
-      return;
-    }
-    host.innerHTML = secs.map(function (g, gi) {
-      // "So'nggi" guruhi qayta chizilishi kerak bo'lganda barqaror kalit
-      // kerak - shuning uchun nom emas, indeks ishlatiladi.
-      var key = g.name === 'So‘nggi' ? 'recent' : 'g' + gi;
-      return '<div class="reels-c-emoji-sec" data-sec="' + key + '">'
-        + (g.icon ? '<div class="reels-c-emoji-cap">' + esc(g.icon) + ' ' + esc(g.name) + '</div>' : '')
-        + '<div class="reels-c-emoji-grid">'
-        +   g.list.map(function (em) {
-              return '<button type="button" class="reels-c-emoji-btn" data-e="' + esc(em) + '">' + em + '</button>';
-            }).join('')
-        + '</div></div>';
-    }).join('');
-    // Tanlangan emoji maydonga qo'yiladi. Panel ochiq qoladi.
-    host.addEventListener('click', function (e) {
-      var b = e.target.closest && e.target.closest('[data-e]');
-      if (!b) return;
-      var em = b.getAttribute('data-e') || '';
-      if (!em) return;
-      if (global.TgEmoji && global.TgEmoji.pushRecent) global.TgEmoji.pushRecent(em);
-      insertAt(em);
-      syncRecentEmoji();
-    });
-  }
+        '<div class="wc-c-search">'
+      +   '<input id="cEmojiSearch" type="text" autocomplete="off" spellcheck="false"'
+      +     ' placeholder="Emoji qidirish (masalan: rahmat)…" aria-label="Emoji qidirish">'
+      + '</div>'
+      + '<div class="wc-c-moods">' + moodButtons() + '</div>'
+      + '<div class="reels-c-picker-body wc-c-emoji-body" id="cPickerBody"></div>';
 
-  /** Emojidan keyin "So'nggi" bo'limini yangilaydi (944 ta emoji qayta
-   *  chizilmasligi uchun faqat o'sha bo'limni chizamyiz). */
-  function syncRecentEmoji() {
-    var host = el('cEmojiBox');
-    if (!host || !global.TgEmoji || !global.TgEmoji.recent) return;
-    var sec = host.querySelector('[data-sec="recent"]');
-    var list = global.TgEmoji.recent();
-    if (!list || !list.length) {
-      if (sec) sec.remove();
-      return;
+    emojiView.mood = 'recent';
+    emojiView.q = '';
+
+    var moods = p.querySelector('.wc-c-moods');
+    if (moods) moods.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-mood]');
+      if (!b) return;
+      emojiView.mood = b.getAttribute('data-mood') || 'recent';
+      emojiView.q = '';
+      var sinp = el('cEmojiSearch');
+      if (sinp) sinp.value = '';
+      Array.prototype.forEach.call(moods.querySelectorAll('[data-mood]'), function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      renderEmojiView();
+    });
+
+    var sinp = el('cEmojiSearch');
+    if (sinp) {
+      sinp.addEventListener('input', function () {
+        emojiView.q = sinp.value || '';
+        renderEmojiView();
+      });
+      sinp.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
+      });
+      try { sinp.focus(); } catch (e2) {}
     }
-    var grid = sec ? sec.querySelector('.reels-c-emoji-grid') : null;
-    if (!grid) return;
-    grid.innerHTML = list.map(function (em) {
-      return '<button type="button" class="reels-c-emoji-btn" data-e="' + esc(em) + '">' + em + '</button>';
-    }).join('');
+    renderEmojiView();
   }
 
   // ---------------------------------------------------------- stiker tanlash
@@ -2420,7 +3026,15 @@
     if (stickerSets) return Promise.resolve(stickerSets);
     return loadStickerCollections().then(function (sets) {
       stickerSets = sets;
+      // To'liq Document obyektlari keshlanmaydi: `fileReference` eskiradi.
+      // To'plamlar ro'yxati (id/accessHash/nom) esa oflayn qidiruv uchun.
+      idbSet(kSets(), minifySets(sets), CACHE_TTL);
       return sets;
+    }).catch(function () {
+      return idbGet(kSets()).then(function (cached) {
+        stickerSets = Array.isArray(cached) ? cached : [];
+        return stickerSets;
+      });
     });
   }
 
@@ -2429,7 +3043,12 @@
     return getClient().then(function (c) {
       return c.invoke(new Api.messages.GetRecentStickers({ hash: 0 }));
     }).then(function (res) {
-      return (res.stickers || []).filter(function (d) { return d && d.className === 'Document'; });
+      var docs = (res.stickers || []).filter(function (d) { return d && d.className === 'Document'; });
+      recentStickerDocs = docs;
+      // Aqlli taklif faqat emoji belgisi (alt) + ID bilan ishlaydi; katta
+      // Document obyektlarini IndexedDB'ga yozmaymiz.
+      idbSet(kRecent(), minifyStickerDocs(docs), CACHE_TTL);
+      return docs;
     }).catch(function () { return []; });
   }
 

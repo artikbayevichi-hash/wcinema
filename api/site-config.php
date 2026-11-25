@@ -17,4 +17,9 @@ ok([
     'notice_link' => (string) $s['notice_link'],
     'banner_url'  => (string) $s['banner_url'],
     'maintenance' => (int) $s['maintenance'] === 1,
+    'donate' => [
+        'card'     => (string) $s['donate_card'],
+        'holder'   => (string) $s['donate_holder'],
+        'telegram' => (string) $s['donate_telegram'],
+    ],
 ]);

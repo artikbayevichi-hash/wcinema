@@ -1228,16 +1228,18 @@ html.tv .ig-ico { width: 30px; height: 30px; }
 .donate-kicker { color: #ffffff; font-size: 11px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; }
 .donate-panel h2 { margin-top: 8px; color: #ffffff; font-size: 23px; line-height: 1.25; }
 .donate-description { max-width: 340px; margin: 10px auto 20px; color: #ffffff; font-size: 14px; line-height: 1.6; }
-.donate-status { display: flex; gap: 11px; align-items: flex-start; padding: 14px; border: 1px solid rgba(255, 255, 255, .19); border-radius: 15px; background: rgba(255, 255, 255, .07); text-align: left; }
-.donate-status-dot { flex: 0 0 9px; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: #ffffff; box-shadow: 0 0 12px rgba(255, 255, 255, .35); }
-.donate-status strong { display: block; color: #ffffff; font-size: 13px; }
-.donate-status p { margin-top: 4px; color: #ffffff; font-size: 12px; line-height: 1.5; }
+.donate-method { padding: 14px; border: 1px solid rgba(255, 255, 255, .19); border-radius: 15px; background: rgba(255, 255, 255, .07); text-align: left; }
+.donate-method > strong { display: block; margin-bottom: 9px; color: #ffffff; font-size: 13px; }
+.donate-copy { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid #ffffff; border-radius: 11px; background: transparent; color: #ffffff; font-family: inherit; font-size: 15px; font-weight: 600; letter-spacing: .4px; cursor: pointer; }
+.donate-copy:hover { background: #ffffff; color: #000000; }
+.donate-copy-label { font-size: 11px; font-weight: 700; letter-spacing: .2px; text-transform: uppercase; opacity: .85; }
+.donate-method-note { margin-top: 7px; color: #ffffff; font-size: 11.5px; line-height: 1.5; opacity: .8; }
+.donate-primary { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 46px; margin-top: 12px; border: 0; border-radius: 12px; background: #ffffff; color: #000000; font-family: inherit; font-size: 13px; font-weight: 700; text-decoration: none; }
+.donate-primary:hover { filter: brightness(.9); }
+.donate-copy:focus-visible, .donate-primary:focus-visible, .donate-x:focus-visible, .donate-dismiss:focus-visible, .donate-nav-trigger:focus-visible, .donate-mobar-trigger:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
 .donate-privacy { margin: 14px 0 16px; color: #ffffff; font-size: 11.5px; line-height: 1.45; }
-.donate-disabled, .donate-dismiss { width: 100%; min-height: 44px; border-radius: 12px; font: inherit; font-size: 13px; font-weight: 700; }
-.donate-disabled { border: 1px solid #ffffff; background: #2d2d2d; color: #ffffff; cursor: not-allowed; }
-.donate-dismiss { margin-top: 9px; border: 0; background: transparent; color: #ffffff; cursor: pointer; }
+.donate-dismiss { width: 100%; min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: #ffffff; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .donate-dismiss:hover { background: rgba(255,255,255,.05); }
-.donate-x:focus-visible, .donate-dismiss:focus-visible, .donate-nav-trigger:focus-visible, .donate-mobar-trigger:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
 body.donate-open { overflow: hidden; }
 @media (max-width: 560px) {
     :root {
@@ -1340,4 +1342,70 @@ button.ig-set-row {
     .feedback-dialog { align-items: flex-end; padding: 8px; }
     .feedback-panel { width: 100%; max-height: 92vh; padding: 26px 18px 18px; border-radius: 20px 20px 14px 14px; }
     .feedback-foot { flex-wrap: wrap; }
+}
+
+/* ============================================================================
+   MOSLASHUV: 320–480px telefonlar, planshet, yonbosh ekran, klaviatura.
+   Faqat joylashuv/o'lcham — ranglar o'zgarmaydi (oq + qora).
+   ============================================================================ */
+
+/* Kichik ekranli telefonlar (iPhone SE, eski Samsung/Xiaomi): 320–360px */
+@media (max-width: 360px) {
+    :root {
+        --ig-tabbar-h: 52px;
+        --wc-donate-right: 10px;
+        --wc-donate-bottom: calc(var(--ig-tabbar-h) + 10px);
+    }
+    .ig-mobar-actions { gap: 0; }
+    .ig-mobar-btn { min-width: 32px; padding-inline: 4px; }
+    .ig-tabbar a { font-size: 10px; letter-spacing: -.2px; }
+    .ig-tabbar a .ig-svg { width: 21px; height: 21px; }
+    .ig-search-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .sv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .donate-fab { padding-inline: 12px; font-size: 13px; }
+}
+
+/* Katta telefonlar (Pro Max / Ultra): 430px+ */
+@media (min-width: 430px) and (max-width: 599px) {
+    .ig-tabbar a { min-height: 48px; font-size: 12px; }
+    .ig-mobar-btn { min-height: 44px; }
+    .ig-search-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Planshet va bukiladigan ekranlar: 600–999px */
+@media (min-width: 600px) and (max-width: 999px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); }
+    .ig-search-cards { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+    .ig-tabbar a { min-height: 48px; }
+}
+
+/* Barmoq bilan bosish maydonlari (kamida 44×44) */
+@media (pointer: coarse) and (max-width: 999px) {
+    .ig-tabbar a, .ig-mobar-btn { min-width: 44px; min-height: 44px; }
+    .reels-mute { width: 44px; height: 44px; right: 10px; }
+    .reels-speed { min-height: 44px; }
+}
+
+/* Yonbosh (landscape): player va oqim kesilmasligi uchun */
+@media (orientation: landscape) and (max-height: 500px) {
+    :root { --ig-mobar-h: 42px; --ig-tabbar-h: 42px; }
+    .ig-mobar, .ig-tabbar { height: 42px; }
+    .reels-slide, .reels-track, .reels-body { height: 100dvh; }
+    .reels-meta { bottom: 8px; }
+    .reels-side { bottom: 8px; gap: 8px; }
+    .reels-progress { bottom: 10px; }
+    .watch-player, .player-wrap, .player-shell { max-height: calc(100dvh - 58px); }
+    .donate-fab { padding: 0 12px; font-size: 12px; height: 38px; }
+}
+
+/* Klaviatura ochilganda: pastki panel yashirinadi, faol kompozitor
+   klaviatura ustiga suriladi (`--kb-shift` ni tv-mode.js hisoblaydi). */
+html.kb-open .ig-tabbar,
+html.kb-open .ig-mobar { display: none !important; }
+html.kb-open body.ig-shell { padding-bottom: var(--kb, 0px); }
+html.kb-open form#commentForm,
+html.kb-open .reels-comments,
+html.kb-open .chat-composer {
+    transform: translateY(calc(-1 * var(--kb-shift, 0px)));
+    transition: transform .12s ease-out;
 }

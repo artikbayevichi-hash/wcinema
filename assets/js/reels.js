@@ -103,7 +103,10 @@
         seen: new Set(),     // ko'rish uchun hisobga olingan reel idlar
         mountStartedAt: 0,   // aktiv mount boshlangan vaqt (prefetch darvozasi)
         viewerId: 0,         // joriy foydalanuvchining DB id'si (serverdan)
-        slideEls: []
+        slideEls: [],
+        ready: new Set(),    // tayyor bo'lgan slaydlar (predictive prefetch)
+        prefetchHint: 0,     // surish yo'nalishi: +1 pastga, -1 tepaga
+        prefetchQueued: new Set() // bir slayd/yo'nalish uchun bir marta
     };
 
     function itemById(id) {
@@ -178,10 +181,11 @@
             // turmasligi uchun (Telegram videolari uchun esa `tg-stream.js`
             // konteynerning o'ziga fon qo'yadi).
             const pst = pb.poster ? ` poster="${esc(pb.poster)}"` : '';
+            // Native controls o'rniga pastki qismdagi oq-qora progress bari
+            // ishlatiladi (ikki bar paydo bo'lmasligi uchun `controls` yo'q).
+            // Bitta bosish/ikki bosish/us hlab turish `bindGestures` da.
             media = `<video src="${esc(pb.url)}" ${start}${pst}
-                             playsinline loop preload="metadata"
-                             ${pb.seek ? 'controls' : ''}
-                             ontouchstart="tapPlay(this, event)"></video>`;
+                             playsinline loop preload="metadata"></video>`;
         } else if (pb.type === 'image') {
             media = imageHTML(r, pb);
         } else if (pb.type === 'embed') {
@@ -207,15 +211,23 @@
                 ? '<div class="reels-status rejected">❌ Rad etilgan</div>' : '');
 
         // Ovoz tugmasi faqat boshqarish mumkin bo'lgan oqimda (embed'da yo'q)
-        const muteBtn = (pb.type === 'file' || pb.type === 'direct'
-                        || pb.type === 'hls' || pb.type === 'telegram')
+        const seekable = (pb.type === 'file' || pb.type === 'direct'
+                         || pb.type === 'hls' || pb.type === 'telegram');
+        const muteBtn = seekable
             ? `<button class="reels-mute" type="button" aria-label="Ovoz">${ICON.volumeOff}</button>`
             : '';
+        const progressHTML = seekable ? `
+            <div class="reels-progress">
+                <div class="reels-prog-track" data-prog="${r.id}"><div class="reels-prog-fill"></div></div>
+                <button class="reels-speed" type="button" aria-label="Tezlik">1×</button>
+            </div>` : '';
 
         return `
             <div class="reels-slide" data-id="${r.id}" data-index="${index}">
                 ${statusBadge}
                 <div class="reels-media">${media}</div>
+                ${progressHTML}
+                <div class="reels-gesture-hint" aria-hidden="true"></div>
                 ${muteBtn}
                 ${metaHTML(r)}
                 ${railHTML(r)}
@@ -345,6 +357,9 @@
             state.items = [];
             state.offset = 0;
             state.seen.clear();
+            state.ready.clear();
+            state.prefetchQueued.clear();
+            state.prefetchHint = 0;
             state.slideEls = [];
             pauseAll();
             track.innerHTML = '<div class="reels-loading"><span class="spinner"></span></div>';
@@ -484,7 +499,9 @@
             deep:    box.dataset.deep || '',
             poster:  box.dataset.poster || '',
             onReady: function () {
-                schedulePrefetch(i);
+                state.ready.add(i);
+                schedulePrefetch(i, state.prefetchHint || 1);
+                state.prefetchHint = 0;
                 attachVideo(i);
             }
         });
@@ -607,39 +624,60 @@
     // ochilganda ham kerak bo'ladigan narsa. Shuning uchun keyingi reelga
     // o'tganda findDoc + probe qayta ishlamaydi, shu zahoti ochiladi.
     //
-    // DIQQAT: bu FAQAT joriy video o'ynab boshlagan paytdagi onReady da
-    // chaqiriladi. Undan oldin (slayd almashuv paytida) chaqirilsa, u
-    // aktiv video bilan BIR Telegram klientda parallel upload.getFile
-    // yuborib, global tgCap ni pasaytiradi - oqim "cho'q" qoladi va video
-    // umuman ochilmaydi.
-    function schedulePrefetch(i) {
-        if (i !== state.active) return;
-        const took = Date.now() - (state.mountStartedAt || Date.now());
-        if (took > 20000) return;
-        if (!window.TgStream) return;
-
-        const next = state.slideEls[i + 1];
-        if (!next) return;
+    // DIQQAT: prefetch faqat joriy video onReady bo'lgach boshlanadi. Undan
+    // oldin chaqirilsa, aktiv oqim bilan bir klientda parallel upload.getFile
+    // yuborib, global tgCap ni pasaytiradi. Surish paytida yo'nalish faqat
+    // `prefetchHint` ga yoziladi va onReady da ishlatiladi.
+    function prefetchSlide(k, warmBytes) {
+        const next = state.slideEls[k];
+        if (!next || !window.TgStream) return Promise.resolve(false);
         const box = next.querySelector('.reels-tg');
-        if (!box || box.dataset.mounted === '1') return;
+        if (!box || box.dataset.mounted === '1') return Promise.resolve(false);
         const ch = box.dataset.channel || '';
         const post = Number(box.dataset.post) || 0;
-        if (!ch || !post) return;
-
+        if (!ch || !post || typeof window.TgStream.prefetch !== 'function') {
+            return Promise.resolve(false);
+        }
         const opts = {
             channel: ch,
             post: post,
             url: box.dataset.url || '',
-            deep: box.dataset.deep || ''
+            deep: box.dataset.deep || '',
+            warmBytes: warmBytes || 0
         };
+        try { return Promise.resolve(window.TgStream.prefetch(opts)).catch(() => false); }
+        catch (e) { return Promise.resolve(false); }
+    }
 
-        // Bitta chaqiruv: metama'lumot + ~2 MB bosh bayt. Birinchi kadr uchun
-        // yetarli, lekin joriy oqimni bo'g'ib qo'ymaydi (avvalgi 4 MB ortiqcha).
-        if (typeof window.TgStream.prefetch === 'function') {
-            try {
-                window.TgStream.prefetch(Object.assign({}, opts, { warmBytes: 2 * 1024 * 1024 }));
-            } catch (e) {}
-        }
+    function schedulePrefetch(i, dir) {
+        if (i !== state.active) return;
+        dir = Number(dir) === -1 ? -1 : 1;
+        const took = Date.now() - (state.mountStartedAt || Date.now());
+        if (took > 20000) return;
+
+        const qkey = i + ':' + dir;
+        if (state.prefetchQueued.has(qkey)) return;
+        state.prefetchQueued.add(qkey);
+
+        // Birinchi keyingi slayd: metama'lumot + ~2 MB bosh bayt.
+        // Ikkinchisi faqat birinchisi tugagach (prefetch ichida oldingisini
+        // bekor qiladigan cancelPrefetch bor) va kichikroq hajmda.
+        Promise.resolve(prefetchSlide(i + dir, 2 * 1024 * 1024)).then(function () {
+            setTimeout(function () {
+                if (state.active !== i) return;
+                if (Date.now() - (state.mountStartedAt || Date.now()) > 20000) return;
+                prefetchSlide(i + 2 * dir, 256 * 1024);
+            }, 180);
+        });
+    }
+
+    // Barmoq/g'ildirak harakati boshlanganda yo'nalishni oldindan olamiz.
+    // Agar joriy slayd tayyor bo'lsa — navbat darhol qo'yiladi, bo'lmasa
+    // yo'nalish onReady ga saqlanadi (joriy oqim buzilmaydi).
+    function hintPrefetch(dir) {
+        if (!dir || state.active < 0) return;
+        state.prefetchHint = dir;
+        if (state.ready.has(state.active)) schedulePrefetch(state.active, dir);
     }
 
     function playAt(i) {
@@ -648,6 +686,12 @@
         const v = el.querySelector('video');
         if (!v) { mountTg(i); return; }
         const pb = (state.items[i] || {}).playback || {};
+        // Uzoq slaydning dekoderi bo'shatilgan bo'lsa, qaytishda manbani
+        // tiklaymiz (poster va onloadedmetadata start saqlanib qoladi).
+        if (!v.getAttribute('src') && v.dataset.wcsrc) {
+            v.src = v.dataset.wcsrc;
+            v.load();
+        }
         if (pb.start > 0 && Math.abs(v.currentTime - pb.start) > 2) {
             v.currentTime = pb.start;
         }
@@ -655,10 +699,24 @@
     }
 
     function pauseAll(except) {
+        const hasExcept = typeof except === 'number';
         state.slideEls.forEach((el, i) => {
-            if (i === except) return;
+            if (hasExcept && i === except) return;
             const v = el.querySelector('video');
-            if (v && !v.paused) v.pause();
+            if (v) {
+                if (!v.paused) v.pause();
+                // Sliding window FAQAT oddiy <video> slaydlari uchun.
+                // Telegram (<video> ichida .reels-tg) quyi qatorada
+                // TgStream.stop() + innerHTML='' bilan to'liq tozalanadi —
+                // uning src'ini saqlab qolish mantage ham ega emas.
+                const isTg = !!(v.closest && v.closest('.reels-tg'));
+                const far = !hasExcept || Math.abs(i - except) > 2;
+                if (!isTg && far && v.getAttribute('src')) {
+                    v.dataset.wcsrc = v.getAttribute('src');
+                    v.removeAttribute('src');
+                    try { v.load(); } catch (e) {}
+                }
+            }
             const tg = el.querySelector('.reels-tg');
             if (tg && tg.dataset.mounted === '1' && window.TgStream) {
                 try { window.TgStream.stop(); } catch (e) {}
@@ -735,6 +793,44 @@
     }
 
     // ---------------------------------------------------------------- ovoz
+    function setProgress(el, v) {
+        const bar = el.querySelector('.reels-prog-track');
+        if (!bar || !v) return;
+        const d = Number(v.duration) || 0;
+        const cur = Number(v.currentTime) || 0;
+        const pct = d > 0 ? Math.min(100, Math.max(0, cur / d * 100)) : 0;
+        bar.style.setProperty('--p', pct.toFixed(2) + '%');
+        bar.setAttribute('aria-valuenow', String(Math.round(pct)));
+    }
+
+    // Tezlik faqat KO'RINADIGAN slaydga qo'llanadi; oqim qayta mount
+    // bo'lganda ham saqlanadi (localStorage), lekin serverga yuborilmaydi.
+    const SPEEDS = [1, 1.5, 2];
+    let reelSpeed = 1;
+    try { reelSpeed = Number(localStorage.getItem('wc_reels_speed')) || 1; } catch (e) {}
+    function applySpeed(el) {
+        const v = el.querySelector('video');
+        if (v) { try { v.playbackRate = reelSpeed; } catch (e) {} }
+        const b = el.querySelector('.reels-speed');
+        if (b) b.textContent = reelSpeed + '×';
+    }
+    function cycleSpeed(el) {
+        const k = SPEEDS.indexOf(reelSpeed);
+        reelSpeed = SPEEDS[(k + 1) % SPEEDS.length] || 1;
+        try { localStorage.setItem('wc_reels_speed', String(reelSpeed)); } catch (e) {}
+        state.slideEls.forEach(x => applySpeed(x));
+        showHint(el, reelSpeed + '× tezlik');
+    }
+
+    function showHint(el, text) {
+        const h = el.querySelector('.reels-gesture-hint');
+        if (!h) return;
+        h.textContent = text;
+        h.classList.remove('show');
+        void h.offsetWidth;   // animatsiyani qayta ishga tushurish
+        h.classList.add('show');
+    }
+
     function attachVideo(i) {
         const el = state.slideEls[i];
         if (!el) return;
@@ -742,6 +838,12 @@
         if (!v || v.dataset.muteBound === '1') { syncMute(el); return; }
         v.dataset.muteBound = '1';
         v.addEventListener('volumechange', () => syncMute(el));
+        const upd = () => setProgress(el, v);
+        v.addEventListener('timeupdate', upd);
+        v.addEventListener('loadedmetadata', upd);
+        v.addEventListener('progress', upd);
+        upd();
+        applySpeed(el);
         syncMute(el);
     }
     function syncMute(el) {
@@ -755,6 +857,167 @@
     function syncAllMute() {
         const el = state.slideEls[state.active];
         if (el) syncMute(el);
+    }
+
+    // ---------------------------------------------------------------- layk
+    // Bitta manba: tugma va ikki bosish bir xil holatni ko'rsatadi.
+    function setLiked(r, el, liked, likes) {
+        r.liked = !!liked;
+        if (typeof likes === 'number') r.likes = likes;
+        const btn = el ? el.querySelector('#rLike_' + r.id) : null;
+        if (btn) {
+            btn.classList.toggle('on', r.liked);
+            btn.classList.remove('busy');
+        }
+        const n = el ? el.querySelector('#rLikeN_' + r.id) : null;
+        if (n) n.textContent = r.likes ? fmtViews(r.likes) : '';
+    }
+
+    const likeInFlight = new Set();
+    async function sendLike(r, el, optimistic) {
+        if (likeInFlight.has(r.id)) return;
+        if (!myTgId()) {
+            location.href = '1stlogin.php?next=' + encodeURIComponent(location.pathname + location.search);
+            return;
+        }
+        likeInFlight.add(r.id);
+        const prev = { liked: !!r.liked, likes: Number(r.likes) || 0 };
+        if (optimistic) {
+            setLiked(r, el, !prev.liked, prev.likes + (prev.liked ? -1 : 1));
+        } else {
+            const btn = el ? el.querySelector('#rLike_' + r.id) : null;
+            if (btn) btn.classList.add('busy');
+        }
+        try {
+            const d = await api('api/reels.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: withMe(new URLSearchParams({ id: r.id, action: 'like' }))
+            });
+            setLiked(r, el, d.liked, d.likes);
+        } catch (e) {
+            setLiked(r, el, prev.liked, prev.likes);   // optimistik holatni qaytaramiz
+            toast(e.message);
+        } finally {
+            likeInFlight.delete(r.id);
+        }
+    }
+
+    function burstHeart(el, clientX, clientY) {
+        if (!el) return;
+        const box = el.getBoundingClientRect();
+        const h = document.createElement('div');
+        h.className = 'reels-heart-burst';
+        h.innerHTML = ICON.heart;
+        h.style.left = (clientX - box.left - 36) + 'px';
+        h.style.top = (clientY - box.top - 36) + 'px';
+        el.appendChild(h);
+        h.addEventListener('animationend', () => h.remove(), { once: true });
+    }
+
+    // ---------------------------------------------------------------- gestlar
+    // Faqat video oqimi ustida ishlaydi; mount/prefetch/Telegram ulanishiga
+    // aralashmaydi. Boshqaruv elementlari (tugma, havola, karusel) chetlanadi.
+    function bindGestures(el) {
+        const media = el.querySelector('.reels-media');
+        if (!media || media.dataset.gestures === '1') return;
+        media.dataset.gestures = '1';
+
+        const ui = (t) => !!(t && t.closest && t.closest(
+            '.reels-mute, .reels-speed, .reels-prog-track, .reels-car-track, button, a'));
+
+        let lastTap = 0, tapTimer = null;
+        let holdTimer = null, holding = false, skipClick = false;
+        let holdWasPlaying = false, edge = false;
+
+        media.addEventListener('pointerdown', (e) => {
+            if (ui(e.target)) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            const box = media.getBoundingClientRect();
+            edge = (e.clientX - box.left) > box.width * 0.72;
+            holding = false;
+            skipClick = false;
+            holdTimer = setTimeout(() => {
+                holding = true;
+                const v = media.querySelector('video');
+                if (!v) return;
+                if (edge) {
+                    holdWasPlaying = true;
+                    v.dataset.holdRate = String(v.playbackRate || reelSpeed);
+                    try { v.playbackRate = 2; } catch (err) {}
+                    const b = el.querySelector('.reels-speed');
+                    if (b) b.textContent = '2×';
+                    showHint(el, '2× tezlik');
+                } else {
+                    holdWasPlaying = !v.paused;
+                    v.pause();
+                    showHint(el, 'Pauza');
+                }
+            }, 450);
+        });
+
+        function release() {
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            if (!holding) return;
+            holding = false;
+            skipClick = true;       // uzoq bosishdan keyin oddiy bosish hisoblanmasin
+            lastTap = 0;
+            const v = media.querySelector('video');
+            if (!v) return;
+            if (edge) {
+                const rate = Number(v.dataset.holdRate) || reelSpeed;
+                try { v.playbackRate = rate; } catch (err) {}
+                const b = el.querySelector('.reels-speed');
+                if (b) b.textContent = rate + '×';
+            } else if (holdWasPlaying) {
+                v.play().catch(() => {});
+            }
+        }
+        media.addEventListener('pointerup', release);
+        media.addEventListener('pointercancel', release);
+        media.addEventListener('pointerleave', release);
+
+        media.addEventListener('click', (e) => {
+            if (ui(e.target)) return;
+            if (skipClick) { skipClick = false; return; }
+            const now = Date.now();
+            if (now - lastTap < 300) {
+                if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; }
+                lastTap = 0;
+                const r = itemById(el.dataset.id);
+                if (!r) return;
+                burstHeart(el, e.clientX, e.clientY);
+                sendLike(r, el, true);   // xatoda optimistik holat qaytariladi
+                return;
+            }
+            lastTap = now;
+            tapTimer = setTimeout(() => {
+                tapTimer = null;
+                const v = media.querySelector('video');
+                if (!v) return;
+                if (v.paused) v.play().catch(() => {}); else v.pause();
+            }, 260);
+        });
+
+        // Pastki chiziq bo'ylab barmoq/sichqoncha bilan o'tkazish (scrub).
+        const bar = el.querySelector('.reels-prog-track');
+        if (bar) {
+            bar.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                const v = media.querySelector('video');
+                if (!v || !isFinite(v.duration) || v.duration <= 0) return;
+                const box = bar.getBoundingClientRect();
+                const f = Math.max(0, Math.min(1, (e.clientX - box.left) / (box.width || 1)));
+                try { v.currentTime = v.duration * f; } catch (err) { return; }
+                setProgress(el, v);
+            });
+            bar.setAttribute('role', 'slider');
+            bar.setAttribute('aria-valuemin', '0');
+            bar.setAttribute('aria-valuemax', '100');
+        }
+
+        const spd = el.querySelector('.reels-speed');
+        if (spd) spd.onclick = (e) => { e.stopPropagation(); cycleSpeed(el); };
     }
 
     // ================================================================ wiring
@@ -781,24 +1044,9 @@
         };
         syncMute(el);
 
-        // ---- like
+        // ---- like (tugma va ikki bosish bitta sendLike orqali)
         const like = el.querySelector('#rLike_' + id);
-        if (like) like.onclick = async () => {
-            if (!myTgId()) { location.href = '1stlogin.php?next=' + encodeURIComponent(location.pathname + location.search); return; }
-            like.classList.add('busy');
-            try {
-                const d = await api('api/reels.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: withMe(new URLSearchParams({ id: r.id, action: 'like' }))
-                });
-                r.liked = d.liked; r.likes = d.likes;
-                like.classList.toggle('on', d.liked);
-                const n = el.querySelector('#rLikeN_' + id);
-                if (n) n.textContent = d.likes ? fmtViews(d.likes) : '';
-            } catch (e) { toast(e.message); }
-            finally { like.classList.remove('busy'); }
-        };
+        if (like) like.onclick = (e) => { e.stopPropagation(); sendLike(r, el); };
 
         // ---- izohlar
         const cmt = el.querySelector('#rComment_' + id);
@@ -823,6 +1071,10 @@
         // ---- follow
         const fol = el.querySelector('#rFollow_' + id);
         if (fol) fol.onclick = () => toggleFollow(r, fol);
+
+        // ---- video ustidagi gestlar: bosish, ikki bosish, ushlab turish, scrub
+        bindGestures(el);
+        applySpeed(el);
 
         // ---- izoh (caption): 2 qatorga qisqartirilgan, "… batafsil" bilan
         const cap = el.querySelector('.reels-caption');
@@ -974,6 +1226,23 @@
             });
         }, { passive: true });
 
+        // Surish boshlanganda keyingi slayd yo'nalishini oldindan bilamiz.
+        // Bu faqatnavbat yaratadi; Telegram o'qishlari joriy video tayyor
+        // bo'lgungacha boshlanmaydi (asosiy oqimga zarar yo'q).
+        let touchY = 0;
+        track.addEventListener('touchstart', (e) => {
+            const t = e.touches && e.touches[0];
+            touchY = t ? t.clientY : 0;
+        }, { passive: true });
+        track.addEventListener('touchmove', (e) => {
+            const t = e.touches && e.touches[0];
+            if (!t || !touchY) return;
+            const dy = touchY - t.clientY;
+            if (Math.abs(dy) < 18) return;
+            hintPrefetch(dy > 0 ? 1 : -1);
+            touchY = t.clientY;
+        }, { passive: true });
+
         let carWheelAt = 0;   // galereyada g'ildirak bilan qadam tashlash uchun lock
         track.addEventListener('wheel', (e) => {
             // Rasm galereyasi (carousel) ustida g'ildirak aylantirilsa —
@@ -1065,6 +1334,7 @@
         const mine = state.viewerId && r.author.id === state.viewerId;
         const rows = [
             menuRow('save', 'bookmark', r.saved ? 'Saqlashdan olish' : 'Saqlash'),
+            menuRow('share', 'share', 'Suhbatga yuborish'),
             menuRow('copy', 'link', 'Havolani nusxalash'),
             menuRow('authors', 'trophy', 'Top Authors'),
             menuRow('notint', 'eyeoff', 'Menga yoqmadi'),
@@ -1109,6 +1379,8 @@
             const url = location.origin + location.pathname.replace(/[^/]*$/, '') + 'reels.php?reel=' + r.id;
             try { await navigator.clipboard.writeText(url); toast('Havola nusxalandi'); }
             catch (err) { prompt('Havola:', url); }
+        } else if (act === 'share') {
+            shareReel(r, state.slideEls[state.active] || null);
         } else if (act === 'save') {
             const el = state.slideEls[state.active];
             if (el) toggleSave(r, el);
@@ -1336,11 +1608,6 @@
             closeComments();
         }
     });
-
-    window.tapPlay = function (v, ev) {
-        if (ev && ev.target.closest('.reels-meta, .reels-side, .reels-mute')) return;
-        if (v.paused) { v.play(); } else { v.pause(); }
-    };
 
     // ================================================================ reyting
     async function openAuthors() {

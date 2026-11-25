@@ -22,6 +22,19 @@
 
 if (!isset($NAV_ACTIVE)) { $NAV_ACTIVE = ''; }
 
+// Donat oynasi: admin kiritgan karta/Telegram ma'lumotlari. Hech narsa
+// sozlanmagan bo'lsa ham asosiy bot bilan bog'lanish ishlayveradi —
+// "To'lov keyinroq" degan o'chiq tugma yo'q.
+if (!class_exists('SiteSettings')) { require_once __DIR__ . '/SiteSettings.php'; }
+$wcDonateSet   = SiteSettings::all();
+$wcDonateCard  = preg_replace('/\D/', '', (string) $wcDonateSet['donate_card']);
+$wcDonateName  = trim((string) $wcDonateSet['donate_holder']);
+$wcDonateTg    = ltrim(trim((string) $wcDonateSet['donate_telegram']), '@');
+if ($wcDonateTg === '' && defined('TELEGRAM_BOT_USERNAME')) {
+    $wcDonateTg = (string) TELEGRAM_BOT_USERNAME;
+}
+$wcDonateHref  = $wcDonateTg !== '' ? 'https://t.me/' . rawurlencode($wcDonateTg) : '#';
+
 // Ishtirokchi foydalanuvchi uchun havolalar
 $igIsAdmin  = $auth->isAdmin();
 // Admin panel sahifalarida admin KALITI bilan kirgan bo'lsa, Telegram (MTProto)
@@ -295,7 +308,7 @@ function wc_logo_img($alt = '', $attrs = '') {
             <?php echo ig_item('history.php', 'history', 'history', 'Tarix', $NAV_ACTIVE); ?>
             <?php echo ig_item('profile.php?tab=liked', 'liked', 'like', 'Yoqqanlar', $NAV_ACTIVE); ?>
             <?php echo ig_item('saved.php', 'saved', 'bookmark', 'Saqlanganlar', $NAV_ACTIVE); ?>
-            <?php echo ig_item('saved.php', 'later', 'later', 'Keyinroq ko‘rish', $NAV_ACTIVE); ?>
+            <?php echo ig_item('watch-later.php', 'later', 'later', 'Keyinroq ko‘rish', $NAV_ACTIVE); ?>
         </div>
 
         <!-- Bildirishnomalar -->
@@ -386,7 +399,8 @@ function wc_logo_img($alt = '', $attrs = '') {
     <span>Donat</span>
 </button>
 
-<!-- To'lov hisob/merchant ma'lumoti berilgach, shu oynaga rasmiy provider ulanadi. -->
+<!-- Donat: karta admin tomonidan kiritilsa nusxalanadi; Telegram havolasi
+     doimo ishlaydi. O'chiq tugma yo'q. -->
 <div class="donate-dialog" id="donateDialog" role="dialog" aria-modal="true"
      aria-labelledby="donateTitle" aria-describedby="donateDescription" hidden>
     <div class="donate-backdrop" data-donate-close></div>
@@ -396,20 +410,51 @@ function wc_logo_img($alt = '', $attrs = '') {
         <p class="donate-kicker">W CINEMA'ni qo'llab-quvvatlang</p>
         <h2 id="donateTitle">Donat loyihani rivojlantiradi</h2>
         <p class="donate-description" id="donateDescription">
-            Sayt sizga yoqsa, keyinroq donat orqali uning rivojiga hissa qo'shishingiz mumkin.
+            Sayt sizga yoqsa, bot orqali bog'lanib yoki karta bilan hissa qo'shishingiz mumkin.
         </p>
-        <div class="donate-status" role="status">
-            <span class="donate-status-dot" aria-hidden="true"></span>
-            <div>
-                <strong>To'lov hozircha ulanmagan</strong>
-                <p>Click yoki Payme rasmiy tarzda sozlangach, to'lov shu oynadan xavfsiz ochiladi.</p>
-            </div>
+        <?php if ($wcDonateCard !== ''): ?>
+        <div class="donate-method">
+            <strong>Karta orqali</strong>
+            <button class="donate-copy" type="button" data-donate-copy="<?php echo htmlspecialchars($wcDonateCard, ENT_QUOTES, 'UTF-8'); ?>">
+                <span><?php echo htmlspecialchars($wcDonateCard, ENT_QUOTES, 'UTF-8'); ?></span>
+                <span class="donate-copy-label">Nusxalash</span>
+            </button>
+            <?php if ($wcDonateName !== ''): ?>
+            <p class="donate-method-note">Karta egasi: <?php echo htmlspecialchars($wcDonateName, ENT_QUOTES, 'UTF-8'); ?></p>
+            <?php endif; ?>
+            <p class="donate-method-note">O'tkazmadan keyin botga xabar yuboring.</p>
         </div>
-        <p class="donate-privacy">Karta raqami bu saytda so'ralmaydi va saqlanmaydi.</p>
-        <button class="donate-disabled" type="button" disabled>To'lov usuli keyinroq qo'shiladi</button>
+        <?php endif; ?>
+        <a class="donate-primary" href="<?php echo htmlspecialchars($wcDonateHref, ENT_QUOTES, 'UTF-8'); ?>"
+           target="_blank" rel="noopener noreferrer">
+            Telegram orqali yordam yuborish
+            <span aria-hidden="true">&rarr;</span>
+        </a>
+        <p class="donate-privacy">Karta ma'lumotlari bu saytda so'ralmaydi va saqlanmaydi.</p>
         <button class="donate-dismiss" type="button" data-donate-close-button>Yopish</button>
     </section>
 </div>
+
+<!-- Qidiruv takliflari va profil belgilari. Faqat oq/#000 palitrasi;
+     yangi CSS fayli yaratilmaydi (qolgan uslublar mavjud .ig-* klasslarda). -->
+<style>
+.ig-search-suggest { max-height: 340px; overflow: auto; padding: 4px 12px 8px; border-bottom: 1px solid var(--line); }
+.ig-search-suggest[hidden] { display: none; }
+.ig-search-suggest .ig-sug-h { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); margin: 8px 2px 4px; }
+.ig-search-suggest .ig-sprof { padding: 6px; gap: 10px; }
+.ig-search-suggest .ig-sprof-av { width: 36px; height: 36px; }
+.ig-search-suggest .ig-sprof-info b { font-size: 13px; }
+.ig-sug-row { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; text-decoration: none; color: var(--text); }
+.ig-sug-row:hover { background: var(--card); }
+.ig-sug-row .ig-sres-thumb { display: block; width: 38px; height: 38px; aspect-ratio: auto; flex: 0 0 38px; border-radius: 8px; }
+.ig-sug-txt { display: flex; flex-direction: column; min-width: 0; }
+.ig-sug-row .ig-sres-title { margin: 0; font-size: 13px; font-weight: 600; }
+.ig-sug-row .ig-sres-sub { display: block; margin: 0; font-size: 11px; }
+.ig-sprof-badge { display: inline-flex; align-items: center; gap: 2px; margin-left: 5px; vertical-align: middle; color: var(--text); }
+.ig-sprof-badge svg { width: 13px; height: 13px; display: block; }
+.ig-sprof-follow { display: inline-block; width: max-content; max-width: 100%; margin-top: 3px; padding: 2px 7px; border: 1px solid var(--text); border-radius: 999px; font-size: 11px; line-height: 1.2; color: var(--text); }
+.ig-sprof-follow[hidden] { display: none; }
+</style>
 
 <!-- ============================== Qidiruv oynasi (alohida) ============================== -->
 <div class="ig-search" id="igSearch" role="dialog" aria-label="Saytdan qidirish" hidden>
@@ -419,13 +464,13 @@ function wc_logo_img($alt = '', $attrs = '') {
         <input id="igSearchInput" type="search" placeholder="Qidirish" autocomplete="off">
         <button class="ig-search-close" id="igSearchClose" type="button" aria-label="Yopish"><?php echo ig_svg('back'); ?></button>
     </div>
-    <div class="ig-search-chips" id="igSearchChips" role="toolbar" aria-label="Kategoriyalar">
-        <button type="button" class="ig-chip on" data-cat="">Barchasi</button>
-        <button type="button" class="ig-chip" data-cat="kino">Kino</button>
-        <button type="button" class="ig-chip" data-cat="film">Kinolar</button>
-        <button type="button" class="ig-chip" data-cat="anime">Animelar</button>
-        <button type="button" class="ig-chip" data-cat="multfilm">Multfilmlar</button>
+    <div class="ig-search-chips" id="igSearchChips" role="toolbar" aria-label="Natija turi">
+        <button type="button" class="ig-chip on" data-cat="">Hammasi</button>
+        <button type="button" class="ig-chip" data-cat="profiles">Profillar</button>
+        <button type="button" class="ig-chip" data-cat="reels">Reels</button>
+        <button type="button" class="ig-chip" data-cat="content">Kino</button>
     </div>
+    <div class="ig-search-suggest" id="igSearchSuggest" aria-label="Jonli takliflar" aria-live="polite" hidden></div>
     <div class="ig-search-body">
         <div class="ig-search-hint" id="igSearchHint">Qidirish uchun nom yozing</div>
         <div class="ig-search-recent" id="igSearchRecent" hidden></div>
@@ -497,9 +542,19 @@ function wc_logo_img($alt = '', $attrs = '') {
                     <span class="ig-set-txt">Joylash</span>
                     <span class="ig-set-arrow">&rsaquo;</span>
                 </a>
-                <a class="ig-set-row" href="settings.php">
+                <a class="ig-set-row" href="settings.php#privacy">
                     <span class="ig-set-ico"><?php echo ig_svg('settings'); ?></span>
                     <span class="ig-set-txt">Maxfiylik va bloklar</span>
+                    <span class="ig-set-arrow">&rsaquo;</span>
+                </a>
+                <a class="ig-set-row" href="settings.php#notifications">
+                    <span class="ig-set-ico"><?php echo ig_svg('bell'); ?></span>
+                    <span class="ig-set-txt">Bildirishnomalar</span>
+                    <span class="ig-set-arrow">&rsaquo;</span>
+                </a>
+                <a class="ig-set-row" href="settings.php#blocked">
+                    <span class="ig-set-ico"><?php echo ig_svg('close'); ?></span>
+                    <span class="ig-set-txt">Bloklanganlar</span>
                     <span class="ig-set-arrow">&rsaquo;</span>
                 </a>
             </div>
@@ -680,6 +735,8 @@ window.addEventListener('DOMContentLoaded', function () {
     }
     igSettingsBind(setBtn);
     igSettingsBind(setBtnM);
+    // settings.php da #privacy, #notifications, #blocked ankerlari bor —
+    // havolalar to'g'ridan-to'g'ri shu bo'limlarga o'tadi (qo'shimcha JS yo'q).
 
     // ---------------- YouTube uslubidagi menyu tugmasi ----------------
     // Hamburger chap paneldagi yozuvlarni ochadi. Hover/fokusda ochilish
@@ -790,22 +847,27 @@ window.addEventListener('DOMContentLoaded', function () {
     var searchRecent = document.getElementById('igSearchRecent');
     var searchHint = document.getElementById('igSearchHint');
     var searchX    = document.getElementById('igSearchClose');
+    var searchSuggest = document.getElementById('igSearchSuggest');
     var searchTimer = null;
+    var suggestTimer = null;
+    var suggestCtrl = null;          // jonli takliflar uchun alohida AbortController
     var igSearchKey = 'wc_recent_searches_v1';
     // So'rov navbatini saqlash uchun token obyekti — har bir oyna o'z
     // tokeniga ega (sekin javob keyingisini bekor qilmasligi uchun).
     var igTokenSearch = { n: 0 };
     var igTokenTv    = { n: 0 };
-    var igCatFilter  = '';
+    var igTokenSuggest = { n: 0 };   // takliflar FULL natijalarga yozmasligi uchun
+    var igTypeFilter = '';           // Hammasi / Profillar / Reels / Kino
     (function () {
         var box = document.getElementById('igSearchChips');
         if (!box) return;
         box.addEventListener('click', function (e) {
             var b = e.target.closest ? e.target.closest('[data-cat]') : null;
             if (!b) return;
-            igCatFilter = b.getAttribute('data-cat') || '';
+            igTypeFilter = b.getAttribute('data-cat') || '';
             var all = box.querySelectorAll('[data-cat]');
             for (var i = 0; i < all.length; i++) all[i].classList.toggle('on', all[i] === b);
+            igSuggestHide();
             igRunSearch();
         });
     })();
@@ -877,6 +939,7 @@ window.addEventListener('DOMContentLoaded', function () {
         if (igIsTv() && tvSearchBox) { igTvOpenSearch(); return; }
         if (!searchBox) return;
         igCatOpen(false);
+        igSuggestHide();
         searchBox.hidden = false;
         igRecentRender();
         // Kichik ochiladigan panel: sahifa skroli va boshqa tugmalar ishlayveradi.
@@ -884,6 +947,7 @@ window.addEventListener('DOMContentLoaded', function () {
     }
 
     function igCloseSearch() {
+        igSuggestHide();
         if (!searchBox) return;
         searchBox.hidden = true;
     }
@@ -918,12 +982,34 @@ window.addEventListener('DOMContentLoaded', function () {
         var av = u.avatar
             ? '<img src="' + igEsc(u.avatar) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
             : '<span class="ig-sprof-ph">' + igEsc((u.first_name || '?').charAt(0).toUpperCase()) + '</span>';
+
+        // Tasdiqlangan / Premium belgisi: faqat oq kontur (rangli UI yo'q).
+        // `premium` API'dan keladi; `verified` kelajakdagi maydon uchun
+        // xavfsiz qo'shimcha (yo'q bo'lsa hech narsa chiqmaydi).
+        var verified = !!(u.premium || u.verified);
+        var badge = verified
+            ? '<span class="ig-sprof-badge" title="' + (u.premium ? 'Premium · tasdiqlangan' : 'Tasdiqlangan') + '"'
+              + ' aria-label="' + (u.premium ? 'Premium · tasdiqlangan' : 'Tasdiqlangan') + '">'
+              + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+              + '<circle cx="12" cy="12" r="9"/><path d="m8.3 12.2 2.5 2.5 4.9-5.2"/></svg>'
+              + (u.premium
+                  ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.8 2.6 5.5 6 .9-4.3 4.2 1 5.9-5.3-2.8-5.3 2.8 1-5.9L3.4 9.2l6-.9z"/></svg>'
+                  : '')
+              + '</span>'
+            : '';
+        // "Kuzatilmoqda" yorlig'i: search API javobidagi `following` maydoni.
+        var followed = u.following === true || u.following === 1;
+        var followTag = followed
+            ? '<span class="ig-sprof-follow">Kuzatilmoqda</span>'
+            : '';
+
         // Bir xil ism bo'lsa ham @username ularni ajratib turadi. Username
         // yo'q bo'lsa ism ikki marta chiqmasligi kerak.
         return '<a class="ig-sprof" href="profile.php?user_id=' + (parseInt(u.id, 10) || 0) + '">'
              + '<span class="ig-sprof-av">' + av + '</span>'
-             + '<span class="ig-sprof-info"><b>' + igEsc(handle || name || 'Foydalanuvchi') + '</b>'
-             + (handle && name ? '<span>' + igEsc(name) + '</span>' : '') + '</span>'
+             + '<span class="ig-sprof-info"><b>' + igEsc(handle || name || 'Foydalanuvchi') + badge + '</b>'
+             + (handle && name ? '<span>' + igEsc(name) + '</span>' : '')
+             + followTag + '</span>'
              + '</a>';
     }
 
@@ -942,6 +1028,95 @@ window.addEventListener('DOMContentLoaded', function () {
     function igSection(title, html) {
         if (!html) return '';
         return '<div class="ig-sres-sec"><div class="ig-sres-sec-h">' + title + '</div>' + html + '</div>';
+    }
+
+    // ================================================================
+    //  JONLI TAKLIFLAR (faqat oddiy #igSearch oynasi; TV oynasiga tegmaydi)
+    //  · ~300 ms debounce;
+    //  · alohida token + AbortController — eski javob yangi natija ustiga
+    //    yozilmaydi, shuningdek eski so'rov bekor qilinadi;
+    //  · bitta /api/search.php so'rovi ishlatiladi (profil, kino, reels).
+    // ================================================================
+    function igSuggestHide() {
+        if (suggestCtrl) {
+            try { suggestCtrl.abort(); } catch (e) {}
+            suggestCtrl = null;
+        }
+        igTokenSuggest.n++;
+        if (searchSuggest) {
+            searchSuggest.hidden = true;
+            searchSuggest.innerHTML = '';
+        }
+    }
+
+    function igSuggestRow(kind, item) {
+        if (kind === 'profile') return igProfileCard(item);
+        var isReel = kind === 'reel';
+        var href = isReel
+            ? 'reels.php?reel=' + (parseInt(item.id, 10) || 0)
+            : 'watch.php?c=' + (parseInt(item.id, 10) || 0);
+        var thumb = item.poster
+            ? '<img src="' + igEsc(item.poster) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">'
+            : '';
+        var sub = isReel
+            ? (item.author_username ? '@' + item.author_username : (item.author_name || 'Reels'))
+            : (item.category || ('ID: ' + (parseInt(item.id, 10) || 0)));
+        return '<a class="ig-sug-row" href="' + href + '">'
+             + '<span class="ig-sres-thumb">' + thumb + '</span>'
+             + '<span class="ig-sug-txt"><span class="ig-sres-title">' + igEsc(item.title || 'Reels') + '</span>'
+             + '<span class="ig-sres-sub">' + igEsc(sub) + '</span></span></a>';
+    }
+
+    function igRunSuggest() {
+        if (!searchInp || !searchSuggest) return;
+        var q = searchInp.value.trim();
+        var seq = ++igTokenSuggest.n;
+        if (suggestCtrl) {
+            try { suggestCtrl.abort(); } catch (e) {}
+            suggestCtrl = null;
+        }
+        if (q.length < 2 && !/^\d+$/.test(q)) {
+            searchSuggest.hidden = true;
+            searchSuggest.innerHTML = '';
+            return;
+        }
+        var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+        suggestCtrl = ctrl;
+        var opts = {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        };
+        if (ctrl) opts.signal = ctrl.signal;
+        fetch(igSearchBase() + '/api/search.php?limit=12&q=' + encodeURIComponent(q), opts)
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                // Eski so'rov javobi kelsa — hech narsa o'zgartirmaymiz.
+                if (seq !== igTokenSuggest.n || ctrl !== suggestCtrl) return;
+                if (searchInp.value.trim() !== q) return;
+                var profiles = (d && d.profiles) || [];
+                var content  = (d && d.content) || [];
+                var reels    = (d && d.reels) || [];
+                var html = '';
+                if (profiles.length) {
+                    html += '<div class="ig-sug-h">Profillar</div>'
+                          + profiles.slice(0, 4).map(function (u) { return igSuggestRow('profile', u); }).join('');
+                }
+                if (content.length) {
+                    html += '<div class="ig-sug-h">Kinolar</div>'
+                          + content.slice(0, 4).map(function (c) { return igSuggestRow('content', c); }).join('');
+                }
+                if (reels.length) {
+                    html += '<div class="ig-sug-h">Reelslar</div>'
+                          + reels.slice(0, 3).map(function (r) { return igSuggestRow('reel', r); }).join('');
+                }
+                searchSuggest.innerHTML = html;
+                searchSuggest.hidden = !html;
+            })
+            .catch(function (e) {
+                if (e && e.name === 'AbortError') return;
+                if (seq !== igTokenSuggest.n) return;
+                searchSuggest.hidden = true;
+            });
     }
 
     /**
@@ -971,10 +1146,14 @@ window.addEventListener('DOMContentLoaded', function () {
             if (seq !== token.n) return;
             var profiles = (d && d.profiles) || [];
             var content  = (d && d.content) || [];
-            if (token === igTokenSearch && igCatFilter) {
-                content = content.filter(function (c) { return c.category_slug === igCatFilter; });
-            }
             var reels    = (d && d.reels) || [];
+            // Faqat asosiy oynada tur filtri ishlaydi; TV natijalari o'zgarishsiz.
+            // Barcha ma'lumotlar BITTA so'rovdan olingan — qo'shimcha so'rov yo'q.
+            if (token === igTokenSearch && igTypeFilter) {
+                if (igTypeFilter === 'profiles') { content = []; reels = []; }
+                else if (igTypeFilter === 'reels') { profiles = []; content = []; }
+                else if (igTypeFilter === 'content') { profiles = []; reels = []; }
+            }
             var html = '';
             if (profiles.length) {
                 html += igSection('Profillar', profiles.map(igProfileCard).join(''));
@@ -1006,6 +1185,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
     function igRunSearch() {
         if (!searchInp || !searchGrid) return;
+        igSuggestHide();
         igSearchInto(searchInp.value.trim(), searchGrid, searchHint, igTokenSearch);
     }
 
@@ -1236,12 +1416,29 @@ window.addEventListener('DOMContentLoaded', function () {
     });
 
     if (searchInp) {
+        // Yozish paytida FAQAT jonli takliflar (~300 ms). To'liq natijalar
+        // Enter yoki filtr tugmasi bosilganda chiziladi — ikki marta so'rov
+        // yuborilmaydi, eski natija ustiga yozilmaydi.
         searchInp.addEventListener('input', function () {
             clearTimeout(searchTimer);
-            searchTimer = setTimeout(igRunSearch, 300);
+            clearTimeout(suggestTimer);
+            suggestTimer = setTimeout(igRunSuggest, 300);
         });
         searchInp.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { clearTimeout(searchTimer); igRunSearch(); }
+            if (e.key === 'Enter') {
+                clearTimeout(suggestTimer);
+                clearTimeout(searchTimer);
+                igRunSearch();
+            }
+        });
+    }
+    if (searchSuggest) {
+        searchSuggest.addEventListener('click', function (e) {
+            if (e.target.closest && e.target.closest('a')) {
+                clearTimeout(suggestTimer);
+                igRecentSave(searchInp ? searchInp.value.trim() : '');
+                igSuggestHide();
+            }
         });
     }
     if (searchX) searchX.addEventListener('click', igCloseSearch);

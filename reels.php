@@ -65,6 +65,49 @@ if ($viewUid > 0) {
     // Shaxsiy bayroqlar (like/save) HTML ichiga kirdi — CDN keshlamasin.
     HttpCache::privateNoStore();
 }
+
+// ---------------------------------------------------------------------------
+// 0-RTT DOC META (Reels)
+// watch.php kabi: birinchi slaydlar uchun `id/access_hash/file_reference/dc`
+// HTML bilan birga keladi. Natijada birinchi reel ochilganda
+// `api/tg-doc.php` so'rovi (1 RTT) umuman yuborilmaydi. Faqat FOYDALANUVCHI
+// sessiyasida olingan (`source='gram'`) havolalar qabul qilinadi — bot havolasi
+// tomoshabbin akkauntida FILE_REFERENCE_INVALID beradi. API yo'li zaxira.
+// ---------------------------------------------------------------------------
+$__inlineDocMeta = [];
+if (is_array($initialFeed) && !empty($initialFeed['items'])) {
+    $__seenReelRef = [];
+    foreach (array_slice($initialFeed['items'], 0, 8) as $__ri) {
+        $pb = is_array($__ri['playback'] ?? null) ? $__ri['playback'] : [];
+        if (($pb['type'] ?? '') !== 'telegram') continue;
+        $ch = (string) ($pb['channel'] ?? '');
+        $po = (int) ($pb['post'] ?? 0);
+        if ($ch === '' || $po <= 0) continue;
+        // Kalit tg-stream.js dagi `String(channel) + '/' + post` bilan bir xil.
+        $kk = $ch . '/' . $po;
+        if (isset($__seenReelRef[$kk]) || count($__seenReelRef) >= 6) continue;
+        $__seenReelRef[$kk] = 1;
+        $m = TgMeta::get($ch, $po);
+        if (!$m || ($m['source'] ?? '') !== 'gram'
+            || empty($m['fr']) || empty($m['id'])) continue;
+        $t = (int) ($m['t'] ?? 0);
+        if ($t <= 0) $t = time();
+        $__inlineDocMeta[$kk] = [
+            't'      => $t * 1000,            // server SONIYA → brauzer MS
+            'id'     => (string) $m['id'],
+            'ah'     => (string) ($m['ah'] ?? ''),
+            'fr'     => (string) $m['fr'],
+            'dc'     => (int) ($m['dc'] ?? 0),
+            'size'   => (int) ($m['size'] ?? 0),
+            'mime'   => (string) ($m['mime'] ?? ''),
+            'fn'     => (string) ($m['fn'] ?? ''),
+            'w'      => (int) ($m['w'] ?? 0),
+            'h'      => (int) ($m['h'] ?? 0),
+            'dur'    => (int) ($m['dur'] ?? 0),
+            'source' => 'gram',
+        ];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="uz">
@@ -256,6 +299,9 @@ if ($viewUid > 0) {
     // stiker topilganda `ensureLottie()` orqali yuklaydi. Izohlarda `.tgs`
     // stiker bo'lsa, shu zahoti yuklanadi; bo'lmasa umuman yuklanmaydi.
     window.APP.tgLottie = <?php echo json_encode('assets/vendor/lottie.min.js?v=' . (@filemtime(__DIR__ . '/assets/vendor/lottie.min.js') ?: 1)); ?>;
+    // tg-stream.js uni O'ZI o'qiydi (seedInlineMeta) — faqat source='gram'.
+    // Kesh bo'lmasa eski api/tg-doc.php yo'li ishveradi.
+    window.__WCDOCMETA = <?php echo json_encode($__inlineDocMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
     window.REELS = {
         userId: <?php echo $userId ? (int) $userId : 'null'; ?>,
         userName: <?php echo json_encode($user['first_name'] ?? null); ?>,

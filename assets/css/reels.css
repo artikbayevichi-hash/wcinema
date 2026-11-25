@@ -98,6 +98,85 @@
     flex-direction: column;
 }
 
+/* Bosish/ikki bosish/ushlab turish brauzer zoom'iga aylanmasin. */
+.reels-media { touch-action: manipulation; }
+
+/* ---------------------------------------------------------------- Progress
+   Native controls o'rniga oq-qora chiziq. Telegram oqimida `duration`
+   noma'lum bo'lsa chiziq 0'da turadi, scrub xavfsiz tarzda o'tkazib yuboriladi. */
+.reels-progress {
+    position: absolute; z-index: 6;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+    width: var(--reel-w);
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 14px;
+    pointer-events: none;
+}
+.reels-progress > * { pointer-events: auto; }
+.reels-prog-track {
+    --p: 0%;
+    position: relative; flex: 1;
+    height: 3px; border-radius: 999px;
+    background: rgba(255, 255, 255, .24);
+    cursor: pointer; touch-action: none;
+}
+.reels-prog-track::after {
+    content: ''; position: absolute;
+    right: calc(-1 * var(--p)); top: 50%;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #fff; transform: translate(50%, -50%) scale(0);
+    transition: transform .12s;
+}
+.reels-prog-track:hover::after { transform: translate(50%, -50%) scale(1); }
+.reels-prog-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: var(--p); border-radius: inherit; background: #fff;
+}
+.reels-speed {
+    flex: 0 0 auto;
+    min-width: 36px; height: 28px;
+    border: 1px solid rgba(255, 255, 255, .22);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .55); color: #fff;
+    font-size: 11px; font-weight: 800;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.reels-speed:hover { background: rgba(0, 0, 0, .8); }
+
+/* Gestlarning vizual izi: 2×, pauza va ikki bosishdagi yurak. */
+.reels-gesture-hint {
+    position: absolute; z-index: 9;
+    left: 50%; top: 42%;
+    transform: translate(-50%, -50%);
+    padding: 8px 14px;
+    border: 1px solid #262626; border-radius: 999px;
+    background: rgba(0, 0, 0, .82); color: #fff;
+    font-size: 13px; font-weight: 700; white-space: nowrap;
+    opacity: 0; pointer-events: none;
+}
+.reels-gesture-hint.show { animation: reels-hint .75s ease-out forwards; }
+@keyframes reels-hint {
+    0%   { opacity: 0; transform: translate(-50%, -46%) scale(.9); }
+    22%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    75%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -62%) scale(1.04); }
+}
+.reels-heart-burst {
+    position: absolute; z-index: 10;
+    width: 72px; height: 72px;
+    color: #fff; pointer-events: none;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .65));
+    animation: reels-heart-pop .75s cubic-bezier(.2, 1.4, .4, 1) forwards;
+}
+.reels-heart-burst svg { width: 100%; height: 100%; fill: #fff; stroke: #fff; }
+@keyframes reels-heart-pop {
+    0%   { opacity: 0; transform: scale(.2) rotate(-12deg); }
+    35%  { opacity: 1; transform: scale(1.15) rotate(0); }
+    72%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.24) translateY(-24px); }
+}
+
 /* ---------------------------------------------------------------- Rasm post
    `pb.type === 'image'` — bitta rasm yoki galereya (carousel).
    Rasm butun maydonni egallaydi, nisbat saqlanib markazda ko'rinadi. */
@@ -1535,6 +1614,13 @@
 
 /* Telefonda: ro'yxat zichroq, sarlavha kichikroq, xavfsiz hudud hisobga olinadi */
 @media (max-width: 640px) {
+    /* Amallar ustuni (reels-side) bilan to'qnashmasligi uchun chiziq
+       chap tomonga toraytiriladi; pastki tabbar ustiga chiqmaydi. */
+    .reels-progress {
+        left: 12px; right: 78px; width: auto;
+        transform: none; padding: 0;
+        bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    }
     .reels-comments-list { padding: 10px 12px; gap: 12px; }
     .reels-c-row { padding: 4px 4px; margin: 0 -4px; }
     .reels-c-av { width: 34px; height: 34px; }

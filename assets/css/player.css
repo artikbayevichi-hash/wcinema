@@ -106,7 +106,20 @@
 .udp-time { color: rgba(255,255,255,.92); font-size: 13px; white-space: nowrap; }
 
 /* seek */
-.udp-seek-tooltip { position: absolute; bottom: 18px; transform: translateX(-50%); background: rgba(0,0,0,.7); color:#fff; padding: 2px 6px; border-radius: 4px; font-size: 11px; pointer-events: none; opacity: 0; white-space: nowrap; }
+.udp-seek-tooltip { position: absolute; bottom: 18px; transform: translateX(-50%); background: rgba(0,0,0,.7); color:#fff; padding: 2px 6px; border-radius: 4px; font-size: 11px; pointer-events: none; opacity: 0; white-space: nowrap; transition: opacity .12s ease; z-index: 3; }
+.udp-seek:hover .udp-seek-tooltip,
+.udp-seek.udp-dragging .udp-seek-tooltip { opacity: 1; }
+/* Scrub preview — poster bilan, qo'shimcha tarmoq so'rovi yo'q */
+.udp-seek-preview { position: absolute; bottom: 40px; transform: translateX(-50%); width: 132px; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity .12s ease, visibility .12s ease; z-index: 3; }
+.udp-seek:hover .udp-seek-preview,
+.udp-seek.udp-dragging .udp-seek-preview { opacity: 1; visibility: visible; }
+.udp-seek-preview-img { width: 100%; aspect-ratio: 16 / 9; border-radius: 8px; border: 1px solid rgba(255,255,255,.35); background: #000 center / auto 100% no-repeat; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.udp-seek-preview-time { margin-top: 4px; text-align: center; color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
+/* Double-tap seek belgisi */
+.udp-tap-ripple { position: absolute; z-index: 12; transform: translate(-50%, -50%); padding: 10px 16px; border-radius: 999px; background: rgba(0,0,0,.72); color: #fff; font-size: 15px; font-weight: 700; pointer-events: none; animation: udp-tap-out .6s ease-out forwards; white-space: nowrap; }
+.udp-tap-ripple.is-back { left: 26% !important; }
+.udp-tap-ripple.is-fwd  { left: 74% !important; }
+@keyframes udp-tap-out { from { opacity: 1; transform: translate(-50%, -50%) scale(.85); } to { opacity: 0; transform: translate(-50%, -60%) scale(1.15); } }
 .udp-seek-track { height: 3px; background: var(--player-track); border-radius: 99px; transition: height .12s ease; position: relative; }
 .udp-seek:hover .udp-seek-track { height: 5px; }
 .udp-seek-buffer { position: absolute; inset: 0; width: 0%; background: var(--player-buffer); border-radius: inherit; }

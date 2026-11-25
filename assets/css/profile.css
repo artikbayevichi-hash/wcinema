@@ -3,13 +3,13 @@
    ============================================================================ */
 
 :root {
-    --pf-bg:         #0b0b0b;
-    --pf-card:       #131313;
-    --pf-border:     #272727;
-    --pf-text:       #ffffff;
-    --pf-sub:        #ffffff;
-    --pf-blue:       #ffffff;
-    --pf-danger:     #ffffff;
+    --pf-bg:         #0e0e0e;
+    --pf-card:       #000;
+    --pf-border:     rgba(255, 255, 255, 0.14);
+    --pf-text:       #fff;
+    --pf-sub:        #fff;
+    --pf-blue:       #fff;
+    --pf-danger:     #fff;
     --pf-grid-gap:   3px;
 }
 
@@ -32,7 +32,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: rgba(11, 11, 11, 0.85);
+    background: #0e0e0e;
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--pf-border);
@@ -101,7 +101,7 @@
     border-radius: 50%;
     overflow: hidden;
     border: 2px solid rgba(255, 255, 255, 0.14);
-    background: linear-gradient(135deg, #2d2d2d, #1b1b1b);
+    background: linear-gradient(135deg, #0e0e0e, #000);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -188,13 +188,13 @@
 .pf-btn:hover { background: rgba(255, 255, 255, 0.1); }
 .pf-btn:active { transform: scale(.97); }
 .pf-btn.prim {
-    background: linear-gradient(180deg, #ffffff, var(--pf-blue));
+    background: linear-gradient(180deg, #fff, var(--pf-blue));
     border-color: transparent;
-    color: #000000;
+    color: #000;
     box-shadow: 0 4px 14px rgba(255, 255, 255, .32);
 }
 .pf-btn.prim:hover {
-    background: linear-gradient(180deg, #ffffff, #ffffff);
+    background: linear-gradient(180deg, #fff, #fff);
     box-shadow: 0 6px 18px rgba(255, 255, 255, .42);
 }
 /* "Kuzatilmoqda" - xabardan voz kechilgani, shaffofroq ko'rinadi. */
@@ -239,7 +239,7 @@
     border-radius: 50%;
     padding: 3px;
     display: block;
-    background: conic-gradient(#ffffff, #ffffff, #ffffff, #ffffff, #ffffff, #ffffff);
+    background: conic-gradient(#fff, #fff, #fff, #fff, #fff, #fff);
     margin-bottom: 6px;
 }
 .pf-hl-ring img {
@@ -254,7 +254,7 @@
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: #1d1d1d;
+    background: #000;
     border: 3px solid var(--pf-bg);
     display: flex;
     align-items: center;
@@ -278,7 +278,7 @@
     z-index: 30;
     display: flex;
     justify-content: center;
-    background: rgba(11, 11, 11, 0.9);
+    background: #0e0e0e;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--pf-border);
@@ -313,7 +313,7 @@
     position: relative;
     aspect-ratio: 1 / 1;
     overflow: hidden;
-    background: #191919;
+    background: #000;
 }
 .pf-cell-media img {
     width: 100%;
@@ -338,13 +338,21 @@
     right: 0;
     bottom: 0;
     padding: 18px 8px 7px;
-    background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+    isolation: isolate;
     font-size: 11px;
     font-weight: 600;
     color: #fff;
     display: flex;
     align-items: center;
     gap: 3px;
+}
+.pf-cell-meta::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: #000;
+    opacity: .62;
+    z-index: -1;
 }
 .pf-cell-meta i { opacity: 0.5; font-style: normal; margin: 0 2px; }
 .pf-badge {
@@ -354,12 +362,12 @@
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.65);
+    background: #000;
     font-size: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #ffffff;
+    color: #fff;
 }
 .pf-badge.bad { color: var(--pf-danger); }
 
@@ -391,7 +399,6 @@
     position: fixed;
     inset: 0;
     z-index: 60;
-    background: rgba(0, 0, 0, 0.72);
     display: flex;
     align-items: flex-end;
     justify-content: center;
@@ -399,13 +406,22 @@
     transition: opacity .16s;
     pointer-events: none;
 }
+.pf-modal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: #000;
+    opacity: .72;
+}
 .pf-modal.open { opacity: 1; pointer-events: auto; }
 .pf-modal-box {
+    position: relative;
+    z-index: 1;
     width: 100%;
     max-width: 560px;
     max-height: 88vh;
     overflow-y: auto;
-    background: #171717;
+    background: #000;
     border-radius: 18px 18px 0 0;
     padding: 20px 18px calc(24px + env(safe-area-inset-bottom));
     transform: translateY(30px);
@@ -429,7 +445,7 @@
     padding: 11px 13px;
     border-radius: 10px;
     border: 1px solid var(--pf-border);
-    background: #111111;
+    background: #000;
     color: var(--pf-text);
     font-size: 14px;
     font-family: inherit;
@@ -457,7 +473,7 @@
     flex: 0 0 64px;
     border-radius: 50%;
     overflow: hidden;
-    background: #111111;
+    background: #000;
     border: 1px solid var(--pf-border);
     display: flex;
     align-items: center;
@@ -489,17 +505,17 @@
     bottom: 24px;
     transform: translateX(-50%);
     z-index: 80;
-    background: #252525;
-    color: #ffffff;
+    background: #000;
+    color: #fff;
     border: 1px solid var(--pf-blue);
     border-radius: 12px;
     padding: 11px 18px;
     font-size: 14px;
     font-weight: 500;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 28px #000;
     max-width: 88vw;
 }
-.pf-toast.err { background: #1c1c1c; color: #ffffff; border-color: var(--pf-danger); }
+.pf-toast.err { background: #000; color: #fff; border-color: var(--pf-danger); }
 .pf-toast[hidden] { display: none; }
 
 /* ==========================================================================
@@ -533,7 +549,8 @@
     align-items: center;
     gap: 3px;
     padding: 2px 7px;
-    background: rgba(0, 0, 0, 0.62);
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 1px 10px #000;
     border-radius: 999px;
     font-size: 11px;
     line-height: 1.5;
@@ -555,7 +572,7 @@
     height: 20px;
     border: 2px solid rgba(255, 255, 255, 0.9);
     border-radius: 4px;
-    box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 0 0 2px #000;
     pointer-events: none;
 }
 
@@ -604,7 +621,7 @@
     border-radius: 999px;
     font-size: 11px;
     font-weight: 600;
-    color: #ffffff;
+    color: #fff;
 }
 .pf-private[hidden] { display: none; }
 
@@ -612,7 +629,7 @@
 .pf-locked {
     margin: 14px;
     padding: 30px 20px;
-    background: var(--pf-card, #131313);
+    background: var(--pf-card, #000);
     border: 1px solid var(--pf-border);
     border-radius: 16px;
     text-align: center;
@@ -732,11 +749,11 @@ body.pf-list-open { overflow: hidden; }
 .pf-li-btn:hover { background: rgba(255, 255, 255, .12); }
 .pf-li-btn:active { transform: scale(.96); }
 .pf-li-btn.prim {
-    background: linear-gradient(180deg, #ffffff, var(--pf-blue));
-    border-color: transparent; color: #000000;
+    background: linear-gradient(180deg, #fff, var(--pf-blue));
+    border-color: transparent; color: #000;
     box-shadow: 0 4px 14px rgba(255, 255, 255, .32);
 }
-.pf-li-btn.prim:hover { background: linear-gradient(180deg, #ffffff, #ffffff); }
+.pf-li-btn.prim:hover { background: linear-gradient(180deg, #fff, #fff); }
 .pf-li-btn.ghost { background: rgba(255, 255, 255, .05); }
 .pf-li-btn[disabled] { opacity: .55; cursor: default; }
 
@@ -761,3 +778,126 @@ body.pf-list-open { overflow: hidden; }
 /* Kuzatuvchilar/Kuzatilayotgan sanoqlari ko'p bo'lganda ham sig'ishi uchun */
 .pf-stats { flex-wrap: wrap; row-gap: 10px; }
 .pf-btn.prim.pf-following, .pf-li-btn.ghost { letter-spacing: 0; }
+
+/* =======================================================================
+   YANGI PROFIL TARTIBI (faqat oq/qora palitra)
+   ======================================================================= */
+
+/* Asosiy qator 3 ta ko'rsatkich; ko'rishlar/laiklar alohida blokda. */
+.pf-analytics {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    margin: -6px 0 14px;
+    padding: 0 2px;
+}
+.pf-analytics[hidden] { display: none; }
+.pf-analytics-i {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.72);
+    white-space: nowrap;
+}
+.pf-analytics-i b { color: #fff; font-weight: 700; margin-left: 4px; }
+
+/* Yorliqlar: ikonka + matn */
+.pf-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.pf-tab .ig-svg,
+.pf-tab .pf-tab-ico {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.pf-tab.active .ig-svg,
+.pf-tab.active .pf-tab-ico { fill: none; }
+
+/* Tugma ichidagi kichik SVG */
+.pf-btn-ico {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Boshqa profil: yuqori o'ngdagi ⋯ menyu */
+.pf-top-actions { position: relative; }
+.pf-more-btn { font-size: 22px; line-height: 1; }
+.pf-more-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 50;
+    min-width: 196px;
+    padding: 6px;
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 14px;
+    box-shadow: 0 12px 32px #000;
+}
+.pf-more-menu[hidden] { display: none; }
+.pf-more-menu button {
+    display: block;
+    width: 100%;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: none;
+    color: #fff;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+.pf-more-menu button:hover,
+.pf-more-menu button:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
+
+/* Profilni ulashish: havola + mahalliy SVG QR */
+.pf-share-box { max-width: 420px; }
+.pf-share-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-top: 4px;
+}
+.pf-share-qr {
+    width: 168px;
+    height: 168px;
+    padding: 10px;
+    background: #fff;
+    border-radius: 14px;
+}
+.pf-share-qr svg { width: 100%; height: 100%; display: block; }
+.pf-share-url {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    background: #000;
+    color: #fff;
+    font-size: 12.5px;
+    line-height: 1.45;
+    word-break: break-all;
+    text-align: center;
+}
+.pf-share-body .pf-btn { width: 100%; }
+
+@media (max-width: 560px) {
+    .pf-analytics { gap: 14px; margin-top: -2px; }
+    .pf-tab { min-width: 92px; gap: 5px; font-size: 12.5px; }
+    .pf-share-qr { width: 150px; height: 150px; }
+}

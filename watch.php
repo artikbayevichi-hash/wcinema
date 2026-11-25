@@ -517,6 +517,14 @@ $NAV_ACTIVE = 'home';
      esa IKKINCHI qatorda (YouTube'dagi kabi). "Obuna" tugmasi yo'q -
      uning o'rnida kino ma'lumoti (reyting + yil). -->
             <div class="watch-head">
+                <!-- Kino / anime / multfilm ID si har doim ko'rinib turadi.
+                     Qism tanlangan bo'lsa uning ID si ham qo'shiladi. -->
+                <div class="watch-id-row" title="Kontent identifikatori">
+                    <span class="watch-id-chip">ID&nbsp;<?php echo (int) ($item['id'] ?? 0); ?></span>
+                    <?php if (!empty($selected['id'])): ?>
+                        <span class="watch-id-chip">Qism&nbsp;ID&nbsp;<?php echo (int) $selected['id']; ?></span>
+                    <?php endif; ?>
+                </div>
                 <h1 class="watch-title" id="watchTitle"></h1>
                 <div class="watch-meta">
 

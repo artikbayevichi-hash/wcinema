@@ -29,7 +29,12 @@ $limit = inputInt('limit', 0);
 if ($limit <= 0) { $limit = 12; }
 $limit = min(30, max(1, $limit));
 
-$compute = function () use ($q, $limit, $catalog, $userId) {
+// Ko'ruvchi: PHP sessiyasi yoki imzolangan client cookie (MTProto brauzer).
+// `reelUserId()` — `clientUserId()` ning tarixiy aliasesi.
+$viewerId = $userId !== null ? (int) $userId : (int) clientUserId();
+if ($viewerId <= 0) { $viewerId = (int) reelUserId(); }
+
+$compute = function () use ($q, $limit, $catalog, $userId, $viewerId) {
     $profiles = [];
     $content  = [];
     $reels    = [];
@@ -38,6 +43,26 @@ $compute = function () use ($q, $limit, $catalog, $userId) {
     // Kamida 2 harf. Faqat raqam bo'lsa (ID), 1 xonali ham izlanadi.
     if ($q !== '' && (mb_strlen($q) >= 2 || ctype_digit($q))) {
         $db = Database::getInstance();
+
+        // ------------------------------------------------------------- bloklar
+        // Ikkala yo'nalish ham yashiriladi: siz bloklaganlar VA sizni
+        // bloklaganlar. `Blocks::hiddenIds()` aynan shu ikki tomonni qaytaradi.
+        // Jadval mavjud bo'lmasa / xatolik bo'lsa — qidiruv ishlayveradi
+        // (xavfsiz fallback), xato faqat logga yoziladi.
+        $hiddenIds = [];
+        if ($viewerId > 0) {
+            try {
+                $rows = (new Blocks($db))->hiddenIds($viewerId);
+                $hiddenIds = array_keys((array) $rows);
+            } catch (\Throwable $e) {
+                error_log('[search] bloklanganlar ro\'yxati o\'qilmadi: ' . $e->getMessage());
+            }
+        }
+        $hiddenIds = array_values(array_filter(
+            array_map('intval', $hiddenIds),
+            function ($x) { return $x > 0; }
+        ));
+        $hiddenIn = $hiddenIds ? implode(',', array_fill(0, count($hiddenIds), '?')) : '';
 
         // Registr farqi va "@" old qismi qidiruvga ta'sir qilmasin.
         $bare = ltrim(trim($q), '@');
@@ -50,27 +75,32 @@ $compute = function () use ($q, $limit, $catalog, $userId) {
         // username istisnosiz noyob (users + tg_names). "Ali Vali" va
         // "Vali Ali", "ALI", "@ali" kabi yozuvlar bir xil natija beradi.
         if ($bare !== '') {
-            $rows = $db->fetchAll(
-                "SELECT u.id, u.username, u.first_name, u.last_name, u.avatar,
+            $profileSql = "SELECT u.id, u.username, u.first_name, u.last_name, u.avatar,
                         u.is_premium, tn.username AS tg_username
                    FROM users u
                    LEFT JOIN tg_names tn
                      ON tn.tg_id = CAST(u.telegram_user_id AS UNSIGNED)
-                  WHERE LOWER(u.username) LIKE ?
+                  WHERE (LOWER(u.username) LIKE ?
                      OR LOWER(tn.username) LIKE ?
                      OR LOWER(u.first_name) LIKE ?
                      OR LOWER(u.last_name) LIKE ?
                      OR LOWER(CONCAT(u.first_name, ' ', u.last_name)) LIKE ?
-                     OR LOWER(CONCAT(u.last_name, ' ', u.first_name)) LIKE ?
+                     OR LOWER(CONCAT(u.last_name, ' ', u.first_name)) LIKE ?)";
+            $profileParams = [$like, $like, $like, $like, $like, $like];
+            if ($hiddenIn !== '') {
+                $profileSql .= ' AND u.id NOT IN (' . $hiddenIn . ')';
+                $profileParams = array_merge($profileParams, $hiddenIds);
+            }
+            $profileSql .= "
                   ORDER BY
                      (LOWER(u.username) = ?) DESC,
                      (LOWER(tn.username) = ?) DESC,
                      (LOWER(u.username) LIKE ?) DESC,
                      (LOWER(CONCAT(u.first_name, ' ', u.last_name)) = ?) DESC,
                      u.id DESC
-                  LIMIT 8",
-                [$like, $like, $like, $like, $like, $like, $lc, $lc, $esc . '%', $lc]
-            );
+                  LIMIT 8";
+            $profileParams = array_merge($profileParams, [$lc, $lc, $esc . '%', $lc]);
+            $rows = $db->fetchAll($profileSql, $profileParams);
             foreach ($rows as $u) {
                 $profiles[] = [
                     'id'         => (int) $u['id'],
@@ -79,7 +109,32 @@ $compute = function () use ($q, $limit, $catalog, $userId) {
                     'last_name'  => $u['last_name'] ?: '',
                     'avatar'     => $u['avatar'] ?: null,
                     'premium'    => (int) ($u['is_premium'] ?? 0),
+                    'following'  => false, // quyida bitta so'rovda to'ldiriladi
                 ];
+            }
+
+            // "Kuzatilmoqda" yorlig'i: api/profile.php dagi `following` bilan
+            // bir xil ma'no. Bitta so'rov; jadval/xato bo'lsa xavfsiz fallback.
+            if ($viewerId > 0 && $profiles) {
+                $pids = array_map(function ($p) { return (int) $p['id']; }, $profiles);
+                $followIn = implode(',', array_fill(0, count($pids), '?'));
+                try {
+                    $frows = $db->fetchAll(
+                        'SELECT following_id FROM user_follows
+                          WHERE follower_id = ? AND following_id IN (' . $followIn . ')',
+                        array_merge([$viewerId], $pids)
+                    );
+                    $followingIds = [];
+                    foreach ((array) $frows as $f) {
+                        $followingIds[(int) $f['following_id']] = true;
+                    }
+                    foreach ($profiles as &$p) {
+                        $p['following'] = isset($followingIds[$p['id']]);
+                    }
+                    unset($p);
+                } catch (\Throwable $e) {
+                    error_log('[search] kuzatuv holati o\'qilmadi: ' . $e->getMessage());
+                }
             }
         }
 
@@ -99,20 +154,23 @@ $compute = function () use ($q, $limit, $catalog, $userId) {
         }
 
         // --------------------------------------------------------------- reels
-        $rrows = $db->fetchAll(
-            "SELECT r.id, r.title, r.description, r.poster, r.kind,
-                    r.views_count, r.likes_count, r.user_id AS author_id,
-                    u.first_name AS author_name, u.username AS author_username,
-                    u.avatar AS author_avatar, c.title AS content_title
-               FROM reels r
-               LEFT JOIN users   u ON u.id = r.user_id
-               LEFT JOIN content c ON c.id = r.content_id
-              WHERE r.status = 1
-                AND (r.title LIKE ? OR r.description LIKE ? OR c.title LIKE ?)
-              ORDER BY r.id DESC
-              LIMIT " . (int) $limit,
-            [$like, $like, $like]
-        );
+        $reelSql = "SELECT r.id, r.title, r.description, r.poster, r.kind,
+                           r.views_count, r.likes_count, r.user_id AS author_id,
+                           u.first_name AS author_name, u.username AS author_username,
+                           u.avatar AS author_avatar, c.title AS content_title
+                      FROM reels r
+                      LEFT JOIN users   u ON u.id = r.user_id
+                      LEFT JOIN content c ON c.id = r.content_id
+                     WHERE r.status = 1
+                       AND (r.title LIKE ? OR r.description LIKE ? OR c.title LIKE ?)";
+        $reelParams = [$like, $like, $like];
+        // Bloklangan mualliflarning reelslari ham chiqmasin.
+        if ($hiddenIn !== '') {
+            $reelSql .= ' AND (r.user_id IS NULL OR r.user_id NOT IN (' . $hiddenIn . '))';
+            $reelParams = array_merge($reelParams, $hiddenIds);
+        }
+        $reelSql .= ' ORDER BY r.id DESC LIMIT ' . (int) $limit;
+        $rrows = $db->fetchAll($reelSql, $reelParams);
         foreach ($rrows as $r) {
             $reels[] = [
                 'id'              => (int) $r['id'],
@@ -145,7 +203,7 @@ $compute = function () use ($q, $limit, $catalog, $userId) {
 };
 
 // Bir xil qidiruvni minglab odam takrorlashi mumkin — 60 s kesh.
-$isAnon = $userId === null && clientUserId() === 0;
+$isAnon = $viewerId <= 0;
 if ($isAnon) {
     $out = HttpCache::json(HttpCache::key('search', [$q, $limit]), 60, 30, $compute);
 } else {

@@ -5,8 +5,8 @@
 // Oqim (Instagram uslubidagi bosqichli):
 //   1) Format + fayl  — Reels (9:16) / Rasm post (1:1) / Uzun video (16:9)
 //   2) Ko'rish         — preview va muqova (cover) kadrini tanlash
-//   3) Beschak         — sarlavha, izoh, film bilan bog'lash
-//   4) Yayinlash       — tasdiqlash + natija
+//   3) Tavsif          — sarlavha, izoh, film bilan bog'lash
+//   4) Joylashtirish   — tasdiqlash + natija
 //
 // TEZLIK: fayl 1-bosqichda tanlanganda darhol serverga YUKLANADI
 // (api/upload.php?stage=media → "staging"). Foydalanuvchi 2- va 3-bosqichda
@@ -34,8 +34,8 @@ $limits = [
 $steps = [
     1 => 'Format',
     2 => "Ko'rish",
-    3 => 'Beschak',
-    4 => 'Yayinlash',
+    3 => 'Tavsif',
+    4 => 'Joylashtirish',
 ];
 ?>
 <!DOCTYPE html>
@@ -50,6 +50,42 @@ $steps = [
     <link rel="stylesheet" href="assets/css/reels.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/reels.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/upload.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/upload.css') ?: 1; ?>">
     <link rel="stylesheet" href="assets/css/instagram.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/instagram.css') ?: 1; ?>">
+    <style>
+    /* Qoralama holati va taklif paneli — faqat oq/qora palette. */
+    .up-draft-note {
+        display:flex; align-items:flex-start; gap:8px;
+        margin:0 0 12px; padding:10px 12px;
+        border:1px solid var(--line); border-radius:10px;
+        background:var(--card); color:var(--muted);
+        font-size:12px; line-height:1.45;
+    }
+    .up-draft-note b { color:var(--text); font-weight:700; }
+    .up-draft-note[hidden] { display:none; }
+    .up-suggest {
+        position:relative; z-index:5;
+        margin:-6px 0 12px; padding:6px;
+        border:1px solid var(--line); border-radius:10px;
+        background:var(--card); max-height:196px; overflow:auto;
+    }
+    .up-suggest[hidden] { display:none; }
+    .up-suggest-hint { padding:4px 8px; font-size:11px; color:var(--muted); }
+    .up-suggest button {
+        display:flex; align-items:center; gap:9px; width:100%;
+        padding:7px 8px; border:0; border-radius:7px;
+        background:transparent; color:var(--text);
+        font:inherit; font-size:13px; text-align:left; cursor:pointer;
+    }
+    .up-suggest button:hover, .up-suggest button.is-on { background:var(--card-2); }
+    .up-suggest .us-tag { font-weight:700; color:var(--text); }
+    .up-suggest .us-sub { margin-left:auto; font-size:11px; color:var(--muted); }
+    .up-strip-controls { display:flex; gap:6px; position:absolute; left:6px; bottom:6px; }
+    .up-strip-move {
+        width:24px; height:24px; display:grid; place-items:center;
+        border:1px solid var(--line); border-radius:6px;
+        background:rgba(0,0,0,.72); color:#fff; font-size:13px; cursor:pointer;
+    }
+    .up-strip-move:disabled { opacity:.35; cursor:default; }
+    </style>
     <?php require __DIR__ . '/includes/tv-head.php'; ?>
     <!-- Telegram Web App &mdash; FAQAT Telegram ilovasi ichida kerak. -->
     <script>
@@ -69,7 +105,7 @@ $steps = [
 
 <header class="up-top">
     <a class="reels-back" href="reels.php" aria-label="Orqaga"><?php echo ig_svg('back'); ?></a>
-    <div class="up-title">Yangi reels</div>
+    <div class="up-title">Yangi kontent</div>
     <span style="width:34px"></span>
 </header>
 
@@ -97,6 +133,16 @@ $steps = [
     </div>
     <?php endforeach; ?>
 </nav>
+
+<!-- Qoralama: faqat matn/meta tiklanadi; fayl brauzerda saqlanmaydi. -->
+<div class="up-draft-note" id="upDraftNote" role="status">
+    <span aria-hidden="true">&#128196;</span>
+    <span id="upDraftText">
+        Qoralama avtomatik saqlanadi: <b>sarlavha, izoh va bog'langan film</b>
+        tiklanadi. <b>Fayl va muqova tiklanmaydi</b> — sahifa qayta ochilganda
+        ularni qayta tanlash kerak.
+    </span>
+</div>
 
 <form class="up-card up-steps-card" id="upForm" onsubmit="return false;">
 
@@ -149,9 +195,9 @@ $steps = [
         <div class="up-strip" id="upStrip"></div>
     </section>
 
-    <!-- ===================== 3) BESCHAK ===================== -->
+    <!-- ===================== 3) TAVSIF ===================== -->
     <section class="up-panel" data-panel="3" hidden>
-        <h2 class="up-panel-title">Beschak</h2>
+        <h2 class="up-panel-title">Tavsif</h2>
         <p class="up-panel-sub">Nima haqida? Sarlavha va izoh — ixtiyoriy, lekin tavsiya etamiz.</p>
 
         <label class="up-label" style="margin-top:0">
@@ -163,8 +209,13 @@ $steps = [
         <label class="up-label">
             Izoh <span style="color:var(--muted)">(ixtiyoriy)</span>
             <textarea id="upDesc" rows="3" maxlength="500"
-                      placeholder="Qisqa izoh&hellip;"></textarea>
+                      placeholder="Qisqa izoh&hellip; #kino yoki @foydalanuvchi yozing"></textarea>
         </label>
+        <!-- #teg / @mention takliflari (xavfsiz: faqat matn qo'yiladi). -->
+        <div class="up-suggest" id="upSuggest" role="listbox" aria-label="Takliflar" hidden></div>
+        <p class="up-note" style="margin:-4px 0 12px">
+            <b>#</b> yoki <b>@</b> yozganda takliflar chiqadi. Teglar oddiy matn sifatida qo'shiladi.
+        </p>
 
         <!-- ==================== Qaysi filmdan? (ixtiyoriy) ==================== -->
         <label class="up-label">
@@ -180,10 +231,10 @@ $steps = [
         </label>
     </section>
 
-    <!-- ===================== 4) YAYINLASH ===================== -->
+    <!-- ===================== 4) JOYLASHTIRISH ===================== -->
     <section class="up-panel" data-panel="4" hidden>
-        <h2 class="up-panel-title">Yayinlash</h2>
-        <p class="up-panel-sub">Tayyor! Boshlash uchun &laquo;Yayinlash&laquo; ni bosing.</p>
+        <h2 class="up-panel-title">Joylashtirish</h2>
+        <p class="up-panel-sub">Tayyor! Boshlash uchun &laquo;Joylashtirish&laquo; ni bosing.</p>
 
         <div class="up-review" id="upReview"></div>
 

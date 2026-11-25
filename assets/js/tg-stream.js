@@ -2944,7 +2944,18 @@
         return readOnceGram(offset, length, cap, ctx, loc, dc, skip, aligned, want, hid);
       });
     }
+    // Havola (loc) bo'sh bo'lib qolishi mumkin: `fastFallback()` mount'ni
+    // qayta ishga tushirganda S.loc vaqtincha tozalanadi yoki eski kesh
+    // o'chiriladi. Ilgari bunday holatda `l.id` o'qilib TypeError chiqar va
+    // video fallback yo'lida ham ochilmay qolardi.
+    function validLoc(l) {
+      return !!(l && l.id != null && l.accessHash != null);
+    }
+    function noLoc(e) {
+      return gramFallback(e || new Error('Telegram hujjat havolasi topilmadi'));
+    }
     function once(l) {
+      if (!validLoc(l)) throw new Error('Telegram hujjat havolasi topilmadi');
       var apiLoc = new S.T.Api.InputDocumentFileLocation({
         id: l.id,
         accessHash: l.accessHash,
@@ -2957,6 +2968,19 @@
         limit: want,
         precise: true
       }), dc);
+    }
+
+    // So'rov yuborishdan OLDIN havola borligini tekshiramiz. Bo'lmasa:
+    //   1) server/meta keshi orqali yangilashga urinamiz;
+    //   2) bo'lmasa — butun oqimni foydalanuvchi sessiyasi bilan qayta
+    //      ishga tushiramiz (findDoc yangi file_reference oladi).
+    if (!validLoc(loc)) {
+      return refreshDocLoc(S.mountOpts).then(function (ok) {
+        if (ok && validLoc(S.loc)) {
+          return readOnceGram(offset, length, cap, ctx, S.loc, dc, skip, aligned, want, hid);
+        }
+        return noLoc();
+      });
     }
 
     return once(loc).then(function (res) {
@@ -2982,7 +3006,8 @@
           // qayta ishga tushiramiz (`findDoc` yangi havola oladi).
           return gramFallback(e);
         }
-        var nl = (S.loc && S.loc.id != null) ? S.loc : loc;
+        var nl = validLoc(S.loc) ? S.loc : loc;
+        if (!validLoc(nl)) return noLoc(e);
         return once(nl).then(function (res2) {
           var b2 = res2.bytes || res2;
           var u2 = b2 instanceof Uint8Array ? b2 : new Uint8Array(b2);

@@ -232,6 +232,17 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         seekWrap.appendChild(seekTrack);
         var seekTooltip = el('div', 'udp-seek-tooltip', '0:00');
         seekWrap.appendChild(seekTooltip);
+        // Scrub preview: qo'shimcha so'rov yo'q — poster (CSS --wposter) ishlatiladi.
+        var seekPreview = el('div', 'udp-seek-preview');
+        var seekPreviewImg = el('div', 'udp-seek-preview-img');
+        var seekPreviewTime = el('div', 'udp-seek-preview-time', '0:00');
+        seekPreview.appendChild(seekPreviewImg);
+        seekPreview.appendChild(seekPreviewTime);
+        seekWrap.appendChild(seekPreview);
+        try {
+            var pm = getComputedStyle(root).getPropertyValue('--wposter').trim();
+            if (pm) seekPreviewImg.style.backgroundImage = pm;
+        } catch (e) {}
         row2.appendChild(seekWrap);
 
         var timeRemaining = el('span', 'udp-time udp-time-remaining', '-00:00');
@@ -564,8 +575,13 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             var rect = seekTrack.getBoundingClientRect();
             var ratio = (ev.clientX - rect.left) / rect.width;
             ratio = Math.max(0, Math.min(1, ratio));
-            seekTooltip.textContent = fmtTime(ratio * (video.duration || 0));
+            var label = fmtTime(ratio * (video.duration || 0));
+            seekTooltip.textContent = label;
             seekTooltip.style.left = (ratio * rect.width) + 'px';
+            seekPreviewTime.textContent = label;
+            seekPreviewImg.style.backgroundPosition = (ratio * 100) + '% 50%';
+            var px = ratio * rect.width;
+            seekPreview.style.left = Math.max(60, Math.min(rect.width - 60, px)) + 'px';
         }
 
         seekWrap.addEventListener('pointerdown', function (ev) {
@@ -642,12 +658,40 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             openMenu('quality', false, qualityBtn);
         });
 
+        // Ikki marta tez bosish (double-tap) — chapga -10s, o'ngga +10s.
+        // Oddiy bosish 240 ms kutadi: ikkinchi bosish kelsa, pauza/ijro
+        // bekor qilinadi (aks holda videoni tasodifan to'xtatib qo'yardi).
+        var lastTapAt = 0, lastTapX = 0, tapTimer = null;
+        function tapRipple(dir, x, y) {
+            var rect = root.getBoundingClientRect();
+            var r = el('div', 'udp-tap-ripple ' + (dir < 0 ? 'is-back' : 'is-fwd'),
+                (dir < 0 ? '\u25c0\u25c0 10s' : '10s \u25b6\u25b6'));
+            r.style.left = Math.max(40, Math.min(rect.width - 40, x - rect.left)) + 'px';
+            r.style.top = Math.max(40, Math.min(rect.height - 40, y - rect.top)) + 'px';
+            root.appendChild(r);
+            setTimeout(function () { if (r.parentNode) r.parentNode.removeChild(r); }, 620);
+        }
         video.addEventListener('click', function (ev) {
-            if (ev.target === video && !video.dragging) togglePlay();
+            if (ev.target !== video || video.dragging) return;
+            var now = Date.now();
+            if (now - lastTapAt < 320 && Math.abs(ev.clientX - lastTapX) < 70) {
+                if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; }
+                var rect = video.getBoundingClientRect();
+                var dir = (ev.clientX - rect.left) < rect.width / 2 ? -10 : 10;
+                seekDelta(dir);
+                tapRipple(dir, ev.clientX, ev.clientY);
+                lastTapAt = 0;
+                return;
+            }
+            lastTapAt = now;
+            lastTapX = ev.clientX;
+            if (tapTimer) clearTimeout(tapTimer);
+            tapTimer = setTimeout(function () { tapTimer = null; togglePlay(); }, 240);
         });
         video.addEventListener('dblclick', function (ev) {
+            // Brauzerning ikki bosishdagi tanlovini oldini oladi; fullscreen
+            // faqat tugma bilan (pult/klaviatura papkasi saqlangan).
             ev.preventDefault();
-            toggleFullscreen();
         });
 
         video.addEventListener('play', function () {

@@ -443,6 +443,14 @@
    Kanal bloki va harakatlar bitta qatorda yonma-yon turadi, lekin
    ICHKI qatorda vertikal markazlashgan — xuddi shunday YouTube'da. */
 .watch-head { margin: 14px 0 0; }
+/* ID yorlig'i — kino/anime/multfilm va tanlangan qism identifikatori. */
+.watch-id-row { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 6px; }
+.watch-id-chip {
+    display:inline-flex; align-items:center;
+    padding:3px 8px; border:1px solid var(--line); border-radius:999px;
+    background:var(--card); color:var(--muted);
+    font:700 11px/1.2 inherit; letter-spacing:.02em;
+}
 .watch-title {
     font-size: 21px; font-weight: 800; line-height: 1.25;
     margin: 0 0 10px; color: var(--text);

@@ -768,6 +768,11 @@
                 + '<div class="field"><label>E’lon havolasi</label><input name="notice_link" maxlength="500" value="' + esc(s.notice_link) + '" placeholder="watch.php?c=1"></div>'
                 + '<div class="field"><label>Banner rasm URL</label><input name="banner_url" maxlength="500" value="' + esc(s.banner_url) + '" placeholder="https://…"></div>'
                 + '</div>'
+                + '<div class="row2">'
+                + '<div class="field"><label>Donat karta raqami</label><input name="donate_card" maxlength="24" value="' + esc(s.donate_card || '') + '" placeholder="8600 1234 5678 9012"></div>'
+                + '<div class="field"><label>Karta egasi</label><input name="donate_holder" maxlength="80" value="' + esc(s.donate_holder || '') + '" placeholder="ISM FAMILIYA"></div>'
+                + '</div>'
+                + '<div class="field"><label>Donat Telegram username</label><input name="donate_telegram" maxlength="32" value="' + esc(s.donate_telegram || '') + '" placeholder="bo‘sh = asosiy bot"></div>'
                 + '<label class="check" style="margin:6px 0 14px"><input type="checkbox" name="maintenance" value="1"' + (Number(s.maintenance) === 1 ? ' checked' : '') + '> Texnik ish rejimi (faqat admin ko‘radi)</label>'
                 + '<button class="btn" type="submit">Saqlash</button>'
                 + '</form></div>');

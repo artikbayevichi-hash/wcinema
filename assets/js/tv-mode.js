@@ -378,8 +378,55 @@
         return textFieldType(tag, t);
     }
 
+    /** Ko'rinadigan <video> ni topadi (reels/watch uchun). */
+    function activeVideo() {
+        var list = document.querySelectorAll('video');
+        for (var i = 0; i < list.length; i++) {
+            var v = list[i];
+            if (v.getClientRects && !v.getClientRects().length) continue;
+            if (v.closest && v.closest('[hidden]')) continue;
+            return v;
+        }
+        return null;
+    }
+
+    /** Pult media tugmalari: boshqa modullar (tv-watch.js) oldin ushlab oladi. */
+    function mediaKey(e) {
+        var k = e.key;
+        if (!/^(Media|Volume)/.test(k)) return false;
+        if (typing()) return false;
+        var v = activeVideo();
+        if (!v) return false;
+        try {
+            if (k === 'MediaPlayPause' || k === 'MediaPlay' || k === 'MediaPause') {
+                if (k === 'MediaPause' || (k === 'MediaPlayPause' && !v.paused)) v.pause();
+                else {
+                    var pr = v.play();
+                    if (pr && pr.catch) pr.catch(function () {});
+                }
+            } else if (k === 'MediaFastForward' || k === 'MediaRewind') {
+                var d = k === 'MediaRewind' ? -10 : 10;
+                var dur = isFinite(v.duration) ? v.duration : 0;
+                var t = (isFinite(v.currentTime) ? v.currentTime : 0) + d;
+                v.currentTime = Math.max(0, dur ? Math.min(dur, t) : t);
+            } else if (k === 'MediaTrackNext' || k === 'MediaTrackPrevious') {
+                var step = k === 'MediaTrackPrevious' ? -10 : 10;
+                var dd = isFinite(v.duration) ? v.duration : 0;
+                v.currentTime = Math.max(0, dd ? Math.min(dd, (v.currentTime || 0) + step) : (v.currentTime || 0));
+            } else if (k === 'VolumeUp' || k === 'VolumeDown' || k === 'VolumeMute') {
+                v.muted = k === 'VolumeMute' ? !v.muted : false;
+                if (k !== 'VolumeMute') v.volume = Math.max(0, Math.min(1, (v.volume || 1) + (k === 'VolumeUp' ? 0.1 : -0.1)));
+            } else {
+                return false;
+            }
+        } catch (err) { return false; }
+        e.preventDefault();
+        return true;
+    }
+
     function onKey(e) {
         if (!on) return;                                  // TV rejimi o'chiq
+        if (mediaKey(e)) return;
         // Reels sahifasi o'z vertikal swipe navigatsiyasiga ega.
         if (document.body.classList.contains('reels-body') && !e.altKey) return;
 

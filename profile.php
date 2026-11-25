@@ -8,11 +8,12 @@
 // Sahifa "karkas" — ma'lumotni api/profile.php yuklaydi (assets/js/profile.js).
 // Tarkiblar:
 //   * avatar + ism + @username + bio + maxfiylik belgisi
-//   * statistika: Reels | Ko'rishlar | Yoqtirishlar
+//   * statistika: 3 asosiy ko'rsatkich + alohida kichik analitika bloki
 //   * Highlight qator (eng mashhur kontent)
-//   * yorliqlar: Reels | Posts | Videos | Yoqqanlar | Saqlangan
+//   * yorliqlar: ikonkali Reels | Posts | Videos | Yoqqanlar | Saqlangan
 //   * profilni tahrirlash modal (bio, ism, username, avatar)
-//   * boshqa profil: Kuzatish | Xabar | Bloklash
+//   * ulashish modali: havola nusxalash + QR (mahalliy SVG/CSS, CDN yo'q)
+//   * boshqa profil: Kuzatish | Xabar | Ulashish; ⋯ menyuda blok/shikoyat/nusxalash
 // ============================================================================
 require_once __DIR__ . '/includes/bootstrap.php';
 
@@ -59,6 +60,14 @@ $meId       = $user ? (int) $user['id'] : null;
         <a class="pf-top-btn" href="settings.php" title="Sozlamalar" id="pfSettingsBtn" hidden><?php echo ig_svg('settings'); ?></a>
         <a class="pf-top-btn" href="reels-upload.php" title="Joylash" id="pfUploadBtn" hidden><?php echo ig_svg('plus'); ?></a>
         <a class="pf-top-btn" href="logout.php" title="Chiqish" id="pfLogoutBtn" hidden><?php echo ig_svg('logout'); ?></a>
+        <!-- Faqat BOSHQA profilda ko'rinadi: blok/shikoyat/havola bu yerga ko'chirildi. -->
+        <button type="button" class="pf-top-btn pf-more-btn" id="pfProfileMoreBtn"
+                aria-label="Ko'proq" aria-haspopup="true" aria-expanded="false" hidden>&#8943;</button>
+        <div class="pf-more-menu" id="pfProfileMoreMenu" role="menu" hidden>
+            <button type="button" role="menuitem" data-more="copy">Havolani nusxalash</button>
+            <button type="button" role="menuitem" data-more="block" id="pfMenuBlockBtn">Bloklash</button>
+            <button type="button" role="menuitem" data-more="report">Shikoyat qilish</button>
+        </div>
     </div>
 </header>
 
@@ -73,19 +82,25 @@ $meId       = $user ? (int) $user['id'] : null;
                 <span class="pf-username" id="pfUsername">@&hellip;</span>
                 <p class="pf-bio" id="pfBio"></p>
                 <span class="pf-private" id="pfPrivateBadge" hidden>&#128274; Maxfiy</span>
+                <span class="pf-private" id="pfBlockedBadge" hidden>Bloklangan</span>
             </div>
         </div>
 
+        <!-- Instagram uslubi: asosiy qatorda FAQAT 3 ko'rsatkich. -->
         <div class="pf-stats" id="pfStats">
-            <div class="pf-stat"><b data-k="reels">0</b><span>Reels</span></div>
+            <div class="pf-stat"><b data-k="reels">0</b><span>Reels / Postlar</span></div>
             <button type="button" class="pf-stat pf-stat-link" data-list="followers">
                 <b data-k="followers">0</b><span>Kuzatuvchilar</span>
             </button>
             <button type="button" class="pf-stat pf-stat-link" data-list="following">
                 <b data-k="following">0</b><span>Kuzatilayotgan</span>
             </button>
-            <div class="pf-stat"><b data-k="views">0</b><span>Ko'rishlar</span></div>
-            <div class="pf-stat"><b data-k="likes">0</b><span>Yoqtirishlar</span></div>
+        </div>
+
+        <!-- Analitika asosiy qatordan chiqarildi (yo'q qilinmadi). -->
+        <div class="pf-analytics" id="pfAnalytics" aria-label="Analitika">
+            <span class="pf-analytics-i">Ko'rishlar <b data-k="views">0</b></span>
+            <span class="pf-analytics-i">Yoqtirishlar <b data-k="likes">0</b></span>
         </div>
 
         <div class="pf-actions" id="pfActions"></div>
@@ -109,11 +124,11 @@ $meId       = $user ? (int) $user['id'] : null;
 
     <!-- Yorliqlar -->
     <nav class="pf-tabs" id="pfTabs" aria-label="Profil bo'limlari">
-        <button class="pf-tab active" data-tab="reels">Reels</button>
-        <button class="pf-tab" data-tab="posts">Posts</button>
-        <button class="pf-tab" data-tab="videos">Videos</button>
-        <button class="pf-tab" data-tab="liked" data-self hidden>Yoqqanlar</button>
-        <button class="pf-tab" data-tab="saved" data-self hidden>Saqlangan</button>
+        <button class="pf-tab active" data-tab="reels"><?php echo ig_svg('reels'); ?><span>Reels</span></button>
+        <button class="pf-tab" data-tab="posts"><?php echo ig_svg('image'); ?><span>Posts</span></button>
+        <button class="pf-tab" data-tab="videos"><?php echo ig_svg('film'); ?><span>Videos</span></button>
+        <button class="pf-tab" data-tab="liked" data-self hidden><?php echo ig_svg('heart'); ?><span>Yoqqanlar</span></button>
+        <button class="pf-tab" data-tab="saved" data-self hidden><?php echo ig_svg('bookmark'); ?><span>Saqlangan</span></button>
     </nav>
 
     <!-- Grid -->
@@ -177,6 +192,21 @@ $meId       = $user ? (int) $user['id'] : null;
         </div>
         <div class="pf-list-body" id="pfListBody"></div>
         <div class="pf-list-more" id="pfListMore" hidden><span class="spinner"></span></div>
+    </div>
+</div>
+
+<!-- Profilni ulashish: havola + mahalliy SVG QR (tashqi kutubxona yo'q) -->
+<div class="pf-modal" id="pfShareModal" role="dialog" aria-modal="true" aria-labelledby="pfShareTitle" hidden>
+    <div class="pf-modal-box pf-share-box">
+        <div class="pf-list-head">
+            <h3 id="pfShareTitle">Profilni ulashish</h3>
+            <button type="button" class="pf-list-x" id="pfShareX" aria-label="Yopish">&times;</button>
+        </div>
+        <div class="pf-share-body">
+            <div class="pf-share-qr" id="pfShareQr" aria-label="Profil havolasi QR kodi"></div>
+            <div class="pf-share-url" id="pfShareUrl"></div>
+            <button type="button" class="pf-btn prim" id="pfShareCopy">Havolani nusxalash</button>
+        </div>
     </div>
 </div>
 

@@ -2,9 +2,12 @@
  * W CINEMA — MAHALLIY KUTUBXONA (localStorage)
  * ============================================================================
  * Saytga Telegram (MTProto) orqali kiriladi va serverda alohida hisob
- * bo'lmasa, "Kutubxona" (Saqlanganlar / Yoqqanlar / Tarix) shu brauzerda
+ * bo'lsa, "Kutubxona" (Saqlanganlar / Yoqqanlar / Tarix) shu brauzerda
  * saqlanadi. Bo'limlar Telegram akkaunt id'siga bog'lanadi (bo'lmasa —
- * anonim brauzer id). Serverga hech narsa yuborilmaydi.
+ * anonim brauzer id). O'zgarishlar kichik navbat bilan serverga ham
+ * yoziladi (api/library-sync.php) va serverdagi holat qaytarib o'rnatiladi —
+ * kesh tozalansa yoki boshqa qurilmaga o'tilsa ham kutubxona yo'qolmaydi.
+ * Server javob bermasa (401 ham) mahalliy rejim jim davom etadi.
  *
  *   WCLib.add('saved', item)     -> saqlanganlarga qo'shish
  *   WCLib.toggle('liked', item)  -> yoqtirishga o'tkazish
@@ -96,6 +99,7 @@
     if (b.d[which].length > CAP) b.d[which] = b.d[which].slice(0, CAP);
     b.all[owner()] = b.d;
     writeAll(b.all);
+    schedulePush(which, id, Date.now(), false);
     return true;
   }
 
@@ -105,6 +109,7 @@
     b.d[which] = b.d[which].filter(function (x) { return String(x.id) !== id; });
     b.all[owner()] = b.d;
     writeAll(b.all);
+    schedulePush(which, id, Date.now(), true);
     return true;
   }
 
@@ -124,7 +129,215 @@
 
   function clear() {
     var all = readAll();
+    var d = all[owner()] || {};
+    // O'chirish niyatini serverga ham yetkazamiz, aks holda keyingi
+    // sinxronlashda kontent qaytadan paydo bo'lib qoladi.
+    ['saved', 'liked'].forEach(function (b) {
+      (Array.isArray(d[b]) ? d[b] : []).forEach(function (x) {
+        if (x && x.id != null) schedulePush(b, x.id, Date.now(), true);
+      });
+    });
     delete all[owner()];
+    writeAll(all);
+  }
+
+  // ---------------------------------------------------------------------------
+  // SERVER SINXRONIZATSIYASI
+  // ---------------------------------------------------------------------------
+  // Mahalliy yozuvlar oldin bajariladi (UI darhol javob beradi), keyin kichik
+  // navbat 700 ms ichida serverga yuboriladi. Server javobi bilan bucketlar
+  // ustiga yoziladi; shu orada yangi o'zgarish bo'lsa navbat saqlanib qoladi.
+  var SYNC_KEY = 'wc_lib_sync_v1';
+  var syncTimer = null;
+  var syncing = false;
+  var applying = false;
+
+  function syncRead() {
+    try { return JSON.parse(localStorage.getItem(SYNC_KEY) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  function syncWrite(s) {
+    try { localStorage.setItem(SYNC_KEY, JSON.stringify(s)); } catch (e) {}
+  }
+  function syncBase() {
+    try {
+      if (global.APP && global.APP.base) return String(global.APP.base).replace(/\/$/, '');
+    } catch (e) {}
+    try {
+      if (global.WC_BASE) return String(global.WC_BASE).replace(/\/$/, '');
+    } catch (e) {}
+    return '';
+  }
+  function pairsToArray(pairs) {
+    var out = [];
+    if (!pairs) return out;
+    Object.keys(pairs).forEach(function (id) {
+      out.push({ id: id, at: Number(pairs[id]) || Date.now() });
+    });
+    return out.slice(0, CAP);
+  }
+  function queueHas(s) {
+    return !!((s.pos && Object.keys(s.pos).some(function (b) {
+      return s.pos[b] && Object.keys(s.pos[b]).length;
+    })) || (s.rem && Object.keys(s.rem).some(function (b) {
+      return s.rem[b] && Object.keys(s.rem[b]).length;
+    })));
+  }
+
+  function schedulePush(which, id, at, removed) {
+    if (applying || which === 'later' || id == null || id === '') return;
+    var s = syncRead();
+    // Navbat boshqa akkauntga tegishli bo'lsa — uni tashlaymiz.
+    if (s.owner && s.owner !== owner()) s = {};
+    s.owner = owner();
+    s.pos = s.pos || {};
+    s.rem = s.rem || {};
+    var key = String(id);
+    var target = removed ? s.rem : s.pos;
+    var other = removed ? s.pos : s.rem;
+    if (other[which]) delete other[which][key];   // oxirgi niyat g'alaba qozonadi
+    target[which] = target[which] || {};
+    target[which][key] = Number(at) || Date.now();
+    syncWrite(s);
+    scheduleSync();
+  }
+
+  function clearSent(sent) {
+    var cur = syncRead();
+    if (!cur || cur.owner !== sent.owner) return;
+    ['liked', 'saved', 'history'].forEach(function (b) {
+      if (!sent.pos || !sent.pos[b] || !cur.pos || !cur.pos[b]) return;
+      Object.keys(sent.pos[b]).forEach(function (id) { delete cur.pos[b][id]; });
+    });
+    ['liked', 'saved'].forEach(function (b) {
+      if (!sent.rem || !sent.rem[b] || !cur.rem || !cur.rem[b]) return;
+      Object.keys(sent.rem[b]).forEach(function (id) { delete cur.rem[b][id]; });
+    });
+    syncWrite(cur);
+  }
+
+  function scheduleSync() {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () {
+      syncTimer = null;
+      syncNow();
+    }, 700);
+  }
+
+  function applyRemote(d) {
+    applying = true;
+    try {
+      var all = readAll();
+      var cur = owner();
+      if (!all[cur] || typeof all[cur] !== 'object') all[cur] = {};
+      ['liked', 'saved', 'history'].forEach(function (b) {
+        if (!Array.isArray(d[b])) return;
+        var out = [];
+        var seen = {};
+        // Server ma'lumoti asosiy: sarlavha/poster/toifa ham shu yerda.
+        d[b].forEach(function (x) {
+          if (!x || x.id == null) return;
+          var id = String(x.id);
+          if (seen[id]) return;
+          seen[id] = 1;
+          out.push({
+            id: id,
+            title: String(x.title || ''),
+            poster: String(x.poster || ''),
+            category: String(x.category || ''),
+            year: x.year || '',
+            at: Number(x.at) || Date.now()
+          });
+        });
+        // Serverda yo'q, lekin mahalliy mavjud yozuvlarni yo'q qilmaymiz.
+        (Array.isArray(all[cur][b]) ? all[cur][b] : []).forEach(function (x) {
+          if (!x || x.id == null) return;
+          var id = String(x.id);
+          if (seen[id]) return;
+          seen[id] = 1;
+          out.push(x);
+        });
+        all[cur][b] = out.slice(0, CAP);
+      });
+      writeAll(all);
+    } finally {
+      applying = false;
+    }
+    try { global.dispatchEvent(new Event('wc:library')); } catch (e) {}
+    try { document.dispatchEvent(new Event('wc:watchState')); } catch (e) {}
+  }
+
+  function syncNow() {
+    if (syncing) return;
+    syncing = true;
+    var sent = syncRead();
+    var usePost = queueHas(sent);
+    var url = syncBase() + '/api/library-sync.php';
+    var me = '';
+    try { me = localStorage.getItem('wc_tg_me_v1') || ''; } catch (e) {}
+    if (me) {
+      url += (url.indexOf('?') < 0 ? '?' : '&') + 'tg_me=' + encodeURIComponent(me);
+    }
+    var init = {
+      method: usePost ? 'POST' : 'GET',
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    };
+    if (usePost) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify({
+        liked: pairsToArray(sent.pos && sent.pos.liked),
+        saved: pairsToArray(sent.pos && sent.pos.saved),
+        history: pairsToArray(sent.pos && sent.pos.history),
+        removed: {
+          liked: pairsToArray(sent.rem && sent.rem.liked),
+          saved: pairsToArray(sent.rem && sent.rem.saved)
+        }
+      });
+    }
+
+    function finish(ok) {
+      if (ok) clearSent(sent);
+      syncing = false;
+      if (queueHas(syncRead())) scheduleSync();
+    }
+    if (typeof fetch !== 'function') { finish(false); return; }
+    fetch(url, init).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (d) {
+      if (!d || !d.success) { finish(false); return; }
+      applyRemote(d);
+      finish(true);
+    }).catch(function () { finish(false); });
+  }
+
+  // Anonim brauzerda yig'ilgan kutubxona Telegram akkauntiga kirganda
+  // o'tib ketmasligi uchun bir marta ko'chiramiz (faqat anon -> tg).
+  function migrateOwners() {
+    var all = readAll();
+    var cur = owner();
+    if (cur.indexOf('tg_') !== 0) return;
+    var keys = Object.keys(all).filter(function (k) { return k.indexOf('anon_') === 0; });
+    if (!keys.length) return;
+    if (!all[cur] || typeof all[cur] !== 'object') all[cur] = {};
+    ['saved', 'liked', 'history', 'later'].forEach(function (b) {
+      if (!Array.isArray(all[cur][b])) all[cur][b] = [];
+      var byId = {};
+      all[cur][b].forEach(function (x) {
+        if (x && x.id != null) byId[String(x.id)] = x;
+      });
+      keys.forEach(function (k) {
+        var src = all[k] && all[k][b];
+        if (!Array.isArray(src)) return;
+        src.forEach(function (x) {
+          if (!x || x.id == null) return;
+          var id = String(x.id);
+          if (!byId[id] || Number(x.at || 0) > Number(byId[id].at || 0)) byId[id] = x;
+        });
+      });
+      all[cur][b] = Object.keys(byId).map(function (id) { return byId[id]; }).slice(0, CAP);
+    });
+    keys.forEach(function (k) { delete all[k]; });
     writeAll(all);
   }
 
@@ -254,6 +467,7 @@
     toggle: toggle,
     counts: counts,
     clear: clear,
+    sync: syncNow,
     frames: {
       get: frameGet,
       save: frameSave,
@@ -261,4 +475,11 @@
       watch: frameWatch
     }
   };
+
+  // Sahifa ochilganda: avval eski anon yozuvlarni akkauntga ko'chirib,
+  // so'ng serverdagi holatni olib mahalliy kutubxonani yangilaymiz.
+  try {
+    migrateOwners();
+    syncNow();
+  } catch (e) {}
 })(window);

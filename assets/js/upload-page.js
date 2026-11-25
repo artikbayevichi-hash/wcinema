@@ -4,8 +4,11 @@
    Bosqichlar:
      1) Format + fayl      — format kartalari va fayl tanlash
      2) Ko'rish             — preview va muqova (cover) kadrini tanlash
-     3) Beschak             — sarlavha, izoh, film bilan bog'lash
-     4) Yayinlash           — ko'rib chiqish + nashr
+     3) Tavsif              — sarlavha, izoh, film bilan bog'lash
+     4) Joylashtirish       — ko'rib chiqish + nashr
+
+   QORALAMA: matn/meta localStorage'ga avtosaxlanadi; fayl va muqova
+   tiklanmaydi (brauzer ularni saqlay olmaydi) — UI da tushuntiriladi.
 
    TEZKOR YUKLASH (2 bosqichli server oqimi):
      · Fayl tanlanganda darhol `api/upload.php?stage=media` ga yuboriladi
@@ -35,7 +38,7 @@
         video: 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov',
         image: 'image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif'
     };
-    var STEP_TITLES = { 1: 'Keyingi', 2: 'Keyingi', 3: 'Keyingi', 4: 'Yayinlash' };
+    var STEP_TITLES = { 1: 'Keyingi', 2: 'Keyingi', 3: 'Keyingi', 4: 'Joylashtirish' };
 
     // ----------------------------------------------------------------- refs
     var drop    = document.getElementById('upDrop');
@@ -67,6 +70,9 @@
     var backBtn  = document.getElementById('upBack');
     var stepEls  = document.querySelectorAll('#upSteps .up-step');
     var panels   = document.querySelectorAll('.up-panel');
+    var draftNote = document.getElementById('upDraftNote');
+    var draftText = document.getElementById('upDraftText');
+    var suggest  = document.getElementById('upSuggest');
 
     var esc = function (s) {
         return String(s == null ? '' : s)
@@ -101,6 +107,80 @@
         msg.className = 'up-msg ' + (kind || '');
     }
     function clearMsg() { if (msg) { msg.hidden = true; msg.textContent = ''; } }
+
+    // =====================================================================
+    //  0a) QORALAMA (faqat matn / meta — fayl tiklanmaydi)
+    // =====================================================================
+    var DRAFT_KEY = 'wc_upload_draft_v1';
+    var draftTimer = null;
+    var published = false;
+
+    function draftKey() {
+        var owner = 'anon';
+        try {
+            if (window.WCLib && typeof WCLib.owner === 'function') owner = WCLib.owner();
+        } catch (e) {}
+        return DRAFT_KEY + ':' + owner;
+    }
+    function draftRead() {
+        try { return JSON.parse(localStorage.getItem(draftKey()) || 'null') || null; }
+        catch (e) { return null; }
+    }
+    function draftShow(text) {
+        if (!draftNote) return;
+        draftNote.hidden = false;
+        if (draftText && text) draftText.textContent = text;
+    }
+    function draftWrite() {
+        var d = {
+            format: state.format,
+            title: (title && title.value) || '',
+            desc: (desc && desc.value) || '',
+            contentId: (cidEl && cidEl.value) || '',
+            picked: state.picked ? {
+                id: state.picked.id,
+                title: state.picked.title || '',
+                category: state.picked.category || ''
+            } : null,
+            at: Date.now()
+        };
+        if (!d.title && !d.desc && !d.contentId && !d.picked) {
+            try { localStorage.removeItem(draftKey()); } catch (e) {}
+            return;
+        }
+        try { localStorage.setItem(draftKey(), JSON.stringify(d)); } catch (e) {}
+        draftShow('Qoralama saqlandi: matn va ma’lumotlar tiklanadi. Fayl hamda muqova saqlanmaydi — ularni qayta tanlash kerak.');
+    }
+    function draftSchedule() {
+        if (draftTimer) clearTimeout(draftTimer);
+        draftTimer = setTimeout(function () { draftTimer = null; draftWrite(); }, 350);
+    }
+    function draftClear() {
+        if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+        try { localStorage.removeItem(draftKey()); } catch (e) {}
+    }
+    function draftRestore() {
+        var d = draftRead();
+        if (!d) return;
+        if (FORMAT[d.format]) {
+            state.format = d.format;
+            document.querySelectorAll('.up-format').forEach(function (b) {
+                b.setAttribute('aria-pressed', b.dataset.format === state.format ? 'true' : 'false');
+            });
+            if (fileEl) {
+                fileEl.setAttribute('accept', ACCEPT[FORMAT[state.format].kind]);
+                fileEl.multiple = FORMAT[state.format].multiple;
+            }
+        }
+        if (title) title.value = d.title || '';
+        if (desc) desc.value = d.desc || '';
+        if (cidEl) cidEl.value = d.contentId || '';
+        if (d.picked && d.picked.id) {
+            state.picked = d.picked;
+            paintChip(d.picked);
+        }
+        draftShow('Qoralama tiklandi: sarlavha, izoh va bog‘langan film qaytarildi. Faylni qayta tanlang (fayl saqlanmaydi).');
+    }
 
     // =====================================================================
     //  0) BOSQICHLAR
@@ -144,6 +224,7 @@
             fileEl.multiple = FORMAT[id].multiple;
             resetMedia();
             paintDrop();
+            draftSchedule();
         });
     });
 
@@ -290,9 +371,20 @@
             var url = URL.createObjectURL(file);
             var item = document.createElement('div');
             item.className = 'up-strip-item' + (i === 0 ? ' is-main' : '');
+            // Galereya tartibi: birinchi rasm asosiy (preview) hisoblanadi.
+            // Tartib o'zgarganda fayllar qayta yuboriladi (mavjud mexanizm).
+            var move = state.files.length > 1
+                ? '<span class="up-strip-controls">'
+                    + '<button type="button" class="up-strip-move" data-dir="-1" title="Chapga surish"'
+                    + (i === 0 ? ' disabled' : '') + '>&#8249;</button>'
+                    + '<button type="button" class="up-strip-move" data-dir="1" title="O‘ngga surish"'
+                    + (i === state.files.length - 1 ? ' disabled' : '') + '>&#8250;</button>'
+                    + '</span>'
+                : '';
             item.innerHTML =
                 '<img src="' + esc(url) + '" alt="">' +
                 (i === 0 ? '<span class="up-strip-badge">ASOSIY</span>' : '') +
+                move +
                 (state.files.length > 1
                     ? '<button type="button" class="up-strip-x" title="Olib tashlash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
                     : '');
@@ -311,6 +403,18 @@
                     startUpload();          // fayl o'zgargani — qayta yuklaymiz
                 });
             }
+            item.querySelectorAll('.up-strip-move').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var from = state.files.indexOf(file);
+                    var to = from + (Number(btn.dataset.dir) || 0);
+                    if (from < 0 || to < 0 || to >= state.files.length) return;
+                    var moved = state.files.splice(from, 1)[0];
+                    state.files.splice(to, 0, moved);
+                    buildStrip();
+                    paintFiles();
+                    startUpload();          // yangi tartib serverga qayta yuboriladi
+                });
+            });
         });
     }
 
@@ -559,7 +663,7 @@
                 state.upload.done = true;
                 state.upload.size = d.size || total;
                 if (stageBar) stageBar.style.width = '100%';
-                stagePaint('✓ Fayl tayyor — endi sizga faqat "Yayinlash" qoladi', 'is-done');
+                stagePaint('✓ Fayl tayyor — endi sizga faqat "Joylashtirish" qoladi', 'is-done');
             } else {
                 state.upload.error = d.message || ('Xato ' + xhr.status);
                 stagePaint('✕ ' + state.upload.error, 'is-err');
@@ -654,12 +758,15 @@
                 if (progTxt) progTxt.textContent = '100%';
                 showMsg((d.carousel ? '✓ Galereya joylandi! ' : '✓ ')
                     + (d.message || 'Joylandi!'), 'ok');
+                published = true;
+                draftClear();
+                if (draftText) draftText.textContent = 'Joylashtirildi — qoralama o‘chirildi.';
                 if (nextBtn) { nextBtn.disabled = true; nextBtn.textContent = '✓ Yuborildi'; }
                 setTimeout(function () {
                     location.href = state.format === 'post' ? 'profile.php' : 'reels.php';
                 }, 1400);
             } else {
-                if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Yayinlash'; }
+                if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Joylashtirish'; }
                 var pb = prog && prog.querySelector('.up-progress-bar');
                 if (pb) pb.classList.remove('is-indeterminate');
                 if (prog) prog.hidden = true;
@@ -667,11 +774,11 @@
             }
         };
         xhr.onerror = function () {
-            if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Yayinlash'; }
+            if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Joylashtirish'; }
             showMsg('✕ Ulanish xatosi. Internetni tekshirib, qayta urinib ko‘ring.', 'err');
         };
         xhr.ontimeout = function () {
-            if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Yayinlash'; }
+            if (nextBtn) { nextBtn.disabled = false; nextBtn.textContent = 'Joylashtirish'; }
             showMsg('✕ Vaqt o‘tib ketdi. Qayta urinib ko‘ring.', 'err');
         };
 
@@ -687,24 +794,30 @@
         state.picked = null;
         if (cidEl) cidEl.value = '';
         if (chip) { chip.hidden = true; chip.innerHTML = ''; }
+        draftSchedule();
+    }
+    // Chip'ni alohida bo'yash — qoralama tiklaganda ham ishlatiladi.
+    function paintChip(item) {
+        if (!chip) return;
+        chip.hidden = false;
+        chip.innerHTML = '\u{1F3AC} ' + esc(item.title)
+            + (item.category ? ' · ' + esc(item.category) : '')
+            + ' <button type="button" title="Olib tashlash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
+        var b = chip.querySelector('button');
+        if (b) b.addEventListener('click', function () {
+            clearPick();
+            if (search) search.value = '';
+            if (search) search.focus();
+            draftSchedule();
+        });
     }
     function pick(item) {
         state.picked = item;
         if (cidEl) cidEl.value = item.id;
         if (results) results.hidden = true;
         if (title && !title.value.trim()) title.value = item.title || '';
-        if (chip) {
-            chip.hidden = false;
-            chip.innerHTML = '\u{1F3AC} ' + esc(item.title)
-                + (item.category ? ' · ' + esc(item.category) : '')
-                + ' <button type="button" title="Olib tashlash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
-            var b = chip.querySelector('button');
-            if (b) b.addEventListener('click', function () {
-                clearPick();
-                if (search) search.value = '';
-                if (search) search.focus();
-            });
-        }
+        paintChip(item);
+        draftSchedule();
     }
     async function doSearch(q) {
         if (!results) return;
@@ -752,6 +865,138 @@
     });
 
     // =====================================================================
+    //  5a) #TEG / @MENTION TAKLIFLARI
+    // =====================================================================
+    // Teglar oddiy matn; foydalanuvchi qidiruvi mavjud `api/search.php`
+    // (profiles) orqali. Hech qanday HTML server javobidan qo'yilmaydi —
+    // faqat textContent, username esa qat'iy whitelist bilan tekshiriladi.
+    var TAGS = ['#kino', '#anime', '#multfilm', '#reels', '#tavsiya',
+                '#trend', '#uzbekcha', '#dramma', '#komediya', '#fantastika'];
+    var sugItems = [], sugIndex = -1, sugTimer = null, sugSeq = 0;
+
+    function hideSuggest() {
+        if (suggest) { suggest.hidden = true; suggest.innerHTML = ''; }
+        sugItems = []; sugIndex = -1;
+    }
+    function sugHighlight(i) {
+        sugIndex = Math.max(0, Math.min(i, sugItems.length - 1));
+        if (!suggest) return;
+        Array.prototype.forEach.call(suggest.querySelectorAll('button'), function (b, n) {
+            b.classList.toggle('is-on', n === sugIndex);
+        });
+    }
+    function sugRender(kind) {
+        if (!suggest) return;
+        suggest.innerHTML = '';
+        if (!sugItems.length) {
+            var none = document.createElement('div');
+            none.className = 'up-suggest-hint';
+            none.textContent = kind === '@' ? 'Foydalanuvchi topilmadi' : 'Teg topilmadi';
+            suggest.appendChild(none);
+            suggest.hidden = false;
+            return;
+        }
+        sugItems.forEach(function (it, i) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.setAttribute('role', 'option');
+            var main = document.createElement('span');
+            main.className = 'us-tag';
+            main.textContent = it.label;
+            b.appendChild(main);
+            if (it.sub) {
+                var sub = document.createElement('span');
+                sub.className = 'us-sub';
+                sub.textContent = it.sub;
+                b.appendChild(sub);
+            }
+            // Klaviatura bilan tanlaganda karet o'rnini yo'qotmaymiz.
+            b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+            b.addEventListener('click', function () { sugApply(i); });
+            suggest.appendChild(b);
+        });
+        suggest.hidden = false;
+        sugHighlight(0);
+    }
+    function tokenAtCaret() {
+        if (!desc) return null;
+        var pos = desc.selectionStart;
+        var before = desc.value.slice(0, pos);
+        var m = /([#@])([^\s#@]{0,32})$/.exec(before);
+        if (!m) return null;
+        var q = m[2];
+        if (m[1] === '@' && !/^[\p{L}\p{N}_]*$/u.test(q)) return null;
+        return { kind: m[1], q: q, start: pos - m[0].length };
+    }
+    function sugApply(i) {
+        var it = sugItems[i];
+        if (!it || !desc) return;
+        var t = tokenAtCaret();
+        var start = t ? t.start : desc.selectionStart;
+        var v = desc.value;
+        var end = desc.selectionEnd;
+        var text = it.label + ' ';
+        desc.value = v.slice(0, start) + text + v.slice(end);
+        var pos = start + text.length;
+        try { desc.setSelectionRange(pos, pos); } catch (e) {}
+        hideSuggest();
+        desc.focus();
+        draftSchedule();
+    }
+    function sugUpdate() {
+        var t = tokenAtCaret();
+        if (!t) { hideSuggest(); return; }
+        var q = t.q.toLocaleLowerCase();
+        if (t.kind === '#') {
+            sugItems = TAGS.filter(function (tag) {
+                return tag.toLocaleLowerCase().indexOf(q) >= 0;
+            }).slice(0, 8).map(function (tag) { return { label: tag, sub: 'teg' }; });
+            sugRender('#');
+            return;
+        }
+        var bare = t.q;
+        if (bare.length < 2) { hideSuggest(); return; }
+        var seq = ++sugSeq;
+        if (sugTimer) clearTimeout(sugTimer);
+        sugTimer = setTimeout(function () {
+            fetch('api/search.php?q=' + encodeURIComponent(bare) + '&limit=8', {
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (d) {
+                  if (seq !== sugSeq) return;
+                  var rows = (d && d.profiles) || [];
+                  sugItems = [];
+                  rows.forEach(function (p) {
+                      var u = String(p.username || '').replace(/^@/, '');
+                      if (!/^[A-Za-z0-9_]{2,32}$/.test(u)) return;
+                      var name = [p.first_name, p.last_name].filter(Boolean).join(' ');
+                      sugItems.push({ label: '@' + u, sub: name.slice(0, 24) });
+                  });
+                  sugRender('@');
+              }).catch(function () { if (seq === sugSeq) { sugItems = []; sugRender('@'); } });
+        }, 220);
+    }
+    if (desc) {
+        desc.addEventListener('input', function () { draftSchedule(); sugUpdate(); });
+        desc.addEventListener('click', sugUpdate);
+        desc.addEventListener('keydown', function (e) {
+            if (!suggest || suggest.hidden) return;
+            if (e.key === 'Escape') { hideSuggest(); e.preventDefault(); }
+            else if (e.key === 'ArrowDown') { sugHighlight(sugIndex + 1); e.preventDefault(); }
+            else if (e.key === 'ArrowUp') { sugHighlight(sugIndex - 1); e.preventDefault(); }
+            else if (e.key === 'Enter' && sugItems.length) { sugApply(sugIndex >= 0 ? sugIndex : 0); e.preventDefault(); }
+        });
+    }
+    document.addEventListener('click', function (e) {
+        if (suggest && !e.target.closest('#upSuggest') && e.target !== desc) hideSuggest();
+    });
+    if (title) title.addEventListener('input', draftSchedule);
+    window.addEventListener('pagehide', function () {
+        if (!published && ((title && title.value) || (desc && desc.value) || (cidEl && cidEl.value))) draftWrite();
+    });
+
+    // =====================================================================
     //  6) AMAL TUGMASI (Keyingi / Orqaga)
     // =====================================================================
     if (nextBtn) {
@@ -780,6 +1025,7 @@
         });
     }
 
+    draftRestore();
     paintDrop();
     paintSteps();
 })();

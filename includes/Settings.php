@@ -1,9 +1,17 @@
 <?php
 // ============================================================================
-// Settings.php — Foydalanuvchi sozlamalari (Account Privacy)
+// Settings.php — Foydalanuvchi sozlamalari (Hisob maxfiyligi + profil)
 // ---------------------------------------------------------------------------
 // `users` jadvalidagi `is_private` va `show_activity` maydonlarini o'qiydi /
 // yozadi. Blok ro'yxati alohida `includes/Blocks.php` da.
+//
+// Avatar ikki xil manzil bilan keladi: tashqi http(s) havola (Telegram
+// photo_url) yoki `api/avatar.php` yaratgan `uploads/avatars/...` fayli.
+// Ikkalasi ham xavfsiz tarzda qabul qilinadi.
+//
+// Kuzatish so'rovlari uchun alohida jadval yo'q: `user_follows` da status
+// ustuni yo'q. `followRequestsTable()` faqat information_schema orqali
+// tekshiradi va jadval yaratmaydi.
 //
 // Barcha metodlar `Database` orqali ishlaydi, holat saqlamaydi.
 // ============================================================================
@@ -126,10 +134,10 @@ class Settings
                     $data['avatar'] = '';
                 }
             } else {
-                if (!preg_match('#^https?://#i', $v)) {
-                    return $this->err('Avatar manzili http(s) bilan boshlanishi kerak');
-                }
                 $v = mb_substr($v, 0, 500);
+                if (!self::validAvatar($v)) {
+                    return $this->err('Avatar manzili http(s) yoki uploads/avatars/... bo‘lishi kerak');
+                }
                 if ($v !== (string) $now['avatar']) $data['avatar'] = $v;
             }
         }
@@ -161,7 +169,79 @@ class Settings
         return $this->update($userId, $f);
     }
 
+    /**
+     * Kuzatish so'rovlari uchun mos jadval bormi? (FAQAT o'qish)
+     *
+     * Hozirgi bazada `user_follows` bor, lekin unda `status` ustuni yo'q,
+     * `follow_requests` jadvali esa umuman yo'q. Shuning uchun sozlamalar
+     * sahifasi bu metod null qaytarganda butun bo'limni yashiradi — bosilganda
+     * ishlamaydigan "Tasdiqlash/Rad etish" tugmalari chiqmaydi.
+     *
+     * Hech qanday jadval/ustun yaratilmaydi, migration qo'shilmaydi.
+     *
+     * @return string|null mos jadval nomi yoki null
+     */
+    public function followRequestsTable()
+    {
+        try {
+            $tables = $this->db->fetchAll(
+                "SELECT TABLE_NAME AS name FROM information_schema.TABLES
+                  WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ('follow_requests', 'user_follow_requests')"
+            );
+            foreach ($tables as $t) {
+                $name = (string) ($t['name'] ?? '');
+                if ($name === '') continue;
+
+                $cols = $this->db->fetchAll(
+                    "SELECT COLUMN_NAME AS name FROM information_schema.COLUMNS
+                      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+                    [$name]
+                );
+                $have = [];
+                foreach ($cols as $c) {
+                    $have[strtolower((string) ($c['name'] ?? ''))] = true;
+                }
+                $from = array_intersect(
+                    ['follower_id', 'user_id', 'requester_id', 'from_user_id'],
+                    array_keys($have)
+                );
+                $to = array_intersect(
+                    ['following_id', 'target_user_id', 'to_user_id', 'owner_id'],
+                    array_keys($have)
+                );
+                // Minimal moslik: kim so'ragani, kimga qaratilgani va holati.
+                if ($from && $to && isset($have['status'])) {
+                    return $name;
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[Settings] followRequestsTable: ' . $e->getMessage());
+        }
+        return null;
+    }
+
     // ------------------------------------------------------------ yordamchi
+    /**
+     * Avatar manzili xavfsizmi?
+     *
+     * Qabul: http(s) havola yoki `api/avatar.php` bergan nisbiy
+     * `uploads/avatars/<fayl>.<rasm kengaytmasi>` yo'li.
+     * Rad: `../`, `//host`, `javascript:` va boshqa ixtiyoriy nisbiy yo'llar.
+     */
+    private static function validAvatar($v)
+    {
+        $v = (string) $v;
+        if (preg_match('#^https?://#i', $v)) {
+            return true;
+        }
+        return strpos($v, '..') === false
+            && (bool) preg_match(
+                '#^uploads/avatars/[A-Za-z0-9][A-Za-z0-9._~%-]*\.(jpg|jpeg|png|webp|gif)$#i',
+                $v
+            );
+    }
+
     /** "1/true/on/ha" → true; "0/false/off/yo'q" → false; boshqa → null */
     private static function boolish($v)
     {

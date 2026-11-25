@@ -1,4 +1,4 @@
-/* W CINEMA donation UI — payment integration is intentionally disabled until a merchant is configured. */
+/* W CINEMA donation UI — karta nusxalanadi, Telegram havolasi doimo ishlaydi. */
 (function () {
     'use strict';
 
@@ -43,6 +43,40 @@
 
     dialog.querySelectorAll('[data-donate-close], [data-donate-close-button]').forEach(function (button) {
         button.addEventListener('click', closeDialog);
+    });
+
+    // Karta raqamini bir bosishda nusxalash (qora/oq uslub, hech qayerda
+    // karta ma'lumoti so'ralmaydi).
+    dialog.querySelectorAll('[data-donate-copy]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var text = button.getAttribute('data-donate-copy') || '';
+            var label = button.querySelector('.donate-copy-label');
+            function done() {
+                if (!label) return;
+                var old = label.textContent;
+                label.textContent = 'Nusxalandi';
+                window.setTimeout(function () { label.textContent = old; }, 1600);
+            }
+            function fallback() {
+                try {
+                    var ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.setAttribute('readonly', '');
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    done();
+                } catch (e) { /* jim */ }
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done, fallback);
+            } else {
+                fallback();
+            }
+        });
     });
 
     document.addEventListener('keydown', function (event) {

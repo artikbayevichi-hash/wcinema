@@ -3,7 +3,8 @@
 // api/admin-settings.php - sayt sozlamalari (admin, JSON)
 // ============================================================================
 //   GET  -> { success, settings }
-//   POST -> patch (site_name, notice, notice_link, banner_url, maintenance)
+//   POST -> patch (site_name, notice, notice_link, banner_url, maintenance,
+//                  donate_card, donate_holder, donate_telegram)
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/SiteSettings.php';
@@ -16,7 +17,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 }
 
 $patch = [];
-foreach (['site_name', 'notice', 'notice_link', 'banner_url'] as $k) {
+foreach (['site_name', 'notice', 'notice_link', 'banner_url',
+          'donate_card', 'donate_holder', 'donate_telegram'] as $k) {
     if (isset($_POST[$k])) {
         $patch[$k] = (string) $_POST[$k];
     }

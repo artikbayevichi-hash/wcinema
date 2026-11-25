@@ -36,8 +36,10 @@ const els = {
     username:  $('#pfUsername'),
     bio:       $('#pfBio'),
     privBadge: $('#pfPrivateBadge'),
+    blockedBadge: $('#pfBlockedBadge'),
     locked:    $('#pfLocked'),
     stats:     $('#pfStats'),
+    analytics: $('#pfAnalytics'),
     actions:   $('#pfActions'),
     hlWrap:    $('#pfHighlightsWrap'),
     highlights: $('#pfHighlights'),
@@ -61,6 +63,14 @@ const els = {
     listBody:  $('#pfListBody'),
     listMore:  $('#pfListMore'),
     listX:     $('#pfListX'),
+    moreBtn:   $('#pfProfileMoreBtn'),
+    moreMenu:  $('#pfProfileMoreMenu'),
+    moreBlock: $('#pfMenuBlockBtn'),
+    shareModal: $('#pfShareModal'),
+    shareUrl:  $('#pfShareUrl'),
+    shareQr:   $('#pfShareQr'),
+    shareCopy: $('#pfShareCopy'),
+    shareX:    $('#pfShareX'),
 };
 
 // Mahalliy rejim: PHP hisobi yo'q, faqat Telegram (MTProto) hisobi bilan
@@ -123,6 +133,44 @@ function profileUrl(id) {
     return 'profile.php' + (id ? '?user_id=' + id : '');
 }
 
+// Yorliq ikonkalari (mahalliy rejimda PHP ig_svg() mavjud bo'lmaydi).
+const TAB_ICONS = {
+    reels:   '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M15.03 9.44a.65.65 0 0 1 0 1.12l-4.06 2.35a.65.65 0 0 1-.97-.56V7.65c0-.52.56-.84.97-.56z"/><path d="M12 17v4"/><path d="M8 21h8"/>',
+    posts:   '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.8"/><path d="m21 15-4.5-4.5L7 20"/>',
+    videos:  '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16"/><path d="M17 4v16"/><path d="M2 9h5"/><path d="M17 9h5"/><path d="M2 15h5"/><path d="M17 15h5"/>',
+    liked:   '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>',
+    saved:   '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>',
+    history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+};
+
+function tabIconHTML(key) {
+    return `<svg class="pf-tab-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${TAB_ICONS[key] || ''}</svg>`;
+}
+
+const SHARE_SVG = '<svg class="pf-btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>'
+    + '<path d="m8.6 10.5 6.8-4"/><path d="m8.6 13.5 6.8 4"/></svg>';
+
+// Maxfiy profil uchun "So'rov yuborildi" holati faqat brauzerda saqlanadi:
+// backendda follow_request jadvali yo'q, shuning uchun serverga yozmaymiz.
+const REQ_KEY = 'wc_profile_follow_requests_v1';
+function requestedIds() {
+    try {
+        const arr = JSON.parse(localStorage.getItem(REQ_KEY) || '[]');
+        return Array.isArray(arr) ? arr.map(Number) : [];
+    } catch (e) { return []; }
+}
+function isRequested(uid) {
+    return requestedIds().indexOf(Number(uid)) !== -1;
+}
+function setRequested(uid, on) {
+    const id = Number(uid);
+    const ids = requestedIds().filter((x) => x !== id);
+    if (on) ids.push(id);
+    try { localStorage.setItem(REQ_KEY, JSON.stringify(ids)); } catch (e) {}
+}
+
 // =======================================================================
 // Sarlavha
 // =======================================================================
@@ -149,10 +197,18 @@ function renderHeader() {
         els.more.hidden = true;
     }
 
-    // statistika
-    els.stats.querySelector('[data-k="reels"]').textContent  = fmt(st.approved ?? st.reels ?? 0);
-    els.stats.querySelector('[data-k="views"]').textContent  = fmt(st.views);
-    els.stats.querySelector('[data-k="likes"]').textContent  = fmt(st.likes);
+    // Asosiy qator: faqat 3 ko'rsatkich.
+    const reEl = els.stats.querySelector('[data-k="reels"]');
+    if (reEl) reEl.textContent = fmt(st.approved ?? st.reels ?? 0);
+
+    // Analitika alohida kichik blokda (asosiy qatordan chiqarildi).
+    if (els.analytics) {
+        els.analytics.hidden = false;
+        const vEl = els.analytics.querySelector('[data-k="views"]');
+        const lEl = els.analytics.querySelector('[data-k="likes"]');
+        if (vEl) vEl.textContent = fmt(st.views);
+        if (lEl) lEl.textContent = fmt(st.likes);
+    }
 
     // Kuzatuvchilar / kuzatilayotganlar (Instagram uslubi)
     const fc = state.data.follow_counts || {};
@@ -181,35 +237,56 @@ function renderHeader() {
 function renderActions() {
     const isMe = !!state.data.is_me;
     const isAdmin = !!state.data.is_admin;
+    const u = state.data.user || {};
+    const uid = u.id || 0;
 
     els.uploadBtn.hidden = !isMe;
     els.logoutBtn.hidden = !isMe;
     if (els.setBtn) els.setBtn.hidden = !isMe;
 
-    if (!state.data.user.id) return;
+    // ⋯ faqat BOSHQA profilda; u orqali blok/shikoyat/havola ishlaydi.
+    if (els.moreBtn) els.moreBtn.hidden = isMe || LOCAL || !uid;
+    closeProfileMoreMenu();
+    if (els.blockedBadge) els.blockedBadge.hidden = !state.data.blocked;
+    if (els.moreBlock) {
+        els.moreBlock.textContent = state.data.blocked ? 'Blokdan chiqarish' : 'Bloklash';
+    }
+
+    if (!uid) return;
 
     if (isMe) {
         els.actions.innerHTML = `
             <button class="pf-btn prim" id="pfEditBtn">&#9998; Tahrirlash</button>
             <a class="pf-btn" href="reels-upload.php">&#10133; Joylash</a>
+            <button class="pf-btn ghost" id="pfShareBtn">${SHARE_SVG} Profilni ulashish</button>
             <a class="pf-btn ghost" href="settings.php">&#9881; Sozlamalar</a>
             ${isAdmin ? `
             <a class="pf-btn ghost" href="admin-content.php">&#128736; Admin</a>` : ''}`;
-        $('#pfEditBtn').onclick = () => openEditModal(false);
+        const eb = $('#pfEditBtn');
+        if (eb) eb.onclick = () => openEditModal(false);
     } else {
         const following = !!state.data.following;
+        const isPrivate = !!u.is_private;
+        const requested = !following && isPrivate && isRequested(uid);
+        const followLabel = following ? 'Kuzatilmoqda'
+            : (requested ? 'So\u2018rov yuborildi' : 'Kuzatish');
+        const followCls = (following || requested) ? 'ghost' : 'prim';
+
+        // Asosiy qator: FAQAT Kuzatish + Xabar + Ulashish.
         els.actions.innerHTML = `
-            <button class="pf-btn ${following ? 'ghost' : 'prim'}" id="pfFollowBtn">${following ? 'Kuzatilmoqda' : 'Kuzatish'}</button>
-            <a class="pf-btn soft" href="chat.php?u=${encodeURIComponent(state.data.user.id)}">
+            <button class="pf-btn ${followCls}" id="pfFollowBtn"
+                    ${requested ? 'data-requested="1"' : ''}>${followLabel}</button>
+            <a class="pf-btn soft" href="chat.php?u=${encodeURIComponent(uid)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21.3 4.3 3.2 11.4a.55.55 0 0 0 .06 1.04l4.6 1.45 1.45 4.6a.55.55 0 0 0 1.04.06L21.3 4.3z"/><path d="M7.86 13.89 21.3 4.3"/></svg>
                 Xabar
             </a>
-            <button class="pf-btn ghost pf-block-btn" id="pfBlockBtn">${state.data.blocked ? 'Blokdan chiqarish' : 'Bloklash'}</button>`;
+            <button class="pf-btn ghost" id="pfShareBtn">${SHARE_SVG} Ulashish</button>`;
         const fb = $('#pfFollowBtn');
         if (fb) fb.onclick = () => toggleFollowProfile(fb);
-        const bb = $('#pfBlockBtn');
-        if (bb) bb.onclick = () => toggleBlockProfile(bb);
     }
+
+    const sb = $('#pfShareBtn');
+    if (sb) sb.onclick = () => openShareModal();
 
     // Yorliqlar: faqat o'z profilida "Yoqqanlar" va "Saqlangan"
     document.querySelectorAll('.pf-tab[data-self]').forEach((b) => {
@@ -251,12 +328,10 @@ async function toggleBlockProfile(btn) {
         const d = await r.json().catch(() => null);
         if (d && d.success) {
             state.data.blocked = !!d.blocked;
-            btn.textContent = state.data.blocked ? 'Blokdan chiqarish' : 'Bloklash';
+            // Sahifani qayta yuklamaymiz: api/profile.php bloklangan profil
+            // uchun 404 qaytaradi. Holat shu sahifada qoladi.
+            renderActions();
             showToast(state.data.blocked ? 'Foydalanuvchi bloklandi' : 'Blokdan chiqarildi');
-            if (state.data.blocked) {
-                // Blokdan keyin profil ko'rinmaydi — o'z profiliga qaytamiz
-                setTimeout(() => { location.href = 'profile.php'; }, 900);
-            }
         } else {
             btn.textContent = old;
             showToast((d && d.message) || 'Xatolik yuz berdi');
@@ -271,9 +346,26 @@ async function toggleBlockProfile(btn) {
 
 // Kuzatish / kuzatishni bekor qilish (boshqa profil). Follow bosilganda
 // foydalanuvchi chat ro'yxatiga ham qo'shiladi ("Xabar" bilan bir xil).
+// Maxfiy profilda backendda follow_request yozuvi yo'qligi uchun "So'rov"
+// holati faqat localStorage'da saqlanadi va APIga yozilmaydi.
 async function toggleFollowProfile(btn) {
-    const uid = state.data && state.data.user && state.data.user.id;
+    const u = (state.data && state.data.user) || {};
+    const uid = u.id;
     if (!uid) return;
+
+    const following = !!state.data.following;
+    if (!!u.is_private && !following) {
+        const requested = !isRequested(uid);
+        setRequested(uid, requested);
+        btn.textContent = requested ? 'So\u2018rov yuborildi' : 'Kuzatish';
+        btn.classList.toggle('ghost', requested);
+        btn.classList.toggle('prim', !requested);
+        if (requested) btn.setAttribute('data-requested', '1');
+        else btn.removeAttribute('data-requested');
+        showToast(requested ? 'So\u2018rov yuborildi' : 'So\u2018rov bekor qilindi');
+        return;
+    }
+
     const raw = localMeRaw();
     btn.disabled = true;
     try {
@@ -286,8 +378,11 @@ async function toggleFollowProfile(btn) {
         });
         const d = await r.json().catch(() => null);
         if (d && d.following === true) {
+            state.data.following = true;
+            setRequested(uid, false);
             btn.textContent = 'Kuzatilmoqda';
             btn.classList.remove('prim'); btn.classList.add('ghost');
+            btn.removeAttribute('data-requested');
             const cb = new URLSearchParams({ action: 'add_contact', peer_id: String(uid) });
             if (raw) cb.set('tg_me', raw);
             fetch('api/chat.php', {
@@ -296,6 +391,7 @@ async function toggleFollowProfile(btn) {
                 body: cb.toString(),
             }).catch(() => {});
         } else if (d && d.following === false) {
+            state.data.following = false;
             btn.textContent = 'Kuzatish';
             btn.classList.remove('ghost'); btn.classList.add('prim');
         } else {
@@ -305,6 +401,160 @@ async function toggleFollowProfile(btn) {
         showToast('Tarmoq xatosi');
     } finally {
         btn.disabled = false;
+    }
+}
+
+// =======================================================================
+// ULASHISH + ⋯ MENYU
+// =======================================================================
+function closeProfileMoreMenu() {
+    if (!els.moreMenu) return;
+    els.moreMenu.hidden = true;
+    if (els.moreBtn) els.moreBtn.setAttribute('aria-expanded', 'false');
+}
+
+function openProfileMoreMenu() {
+    if (!els.moreMenu || !els.moreBtn || els.moreBtn.hidden) return;
+    els.moreMenu.hidden = false;
+    els.moreBtn.setAttribute('aria-expanded', 'true');
+}
+
+function profileShareURL() {
+    const u = (state.data && state.data.user) || {};
+    const tail = u.id ? '?user_id=' + encodeURIComponent(u.id) : '';
+    try { return new URL('profile.php' + tail, location.href).href; }
+    catch (e) { return profileUrl(u.id); }
+}
+
+// Tashqi kutubxonasiz, URL matnidan deterministik SVG "QR" naqsh.
+// Bu haqiqiy QR skanerlash kafolatlamaydi, lekin havola bilan birga
+// ko'rinadigan mahalliy kod beradi (CDN/orqali kutubxona yo'q).
+function buildQrSVG(text) {
+    const n = 21;
+    const grid = Array.from({ length: n }, () => Array(n).fill(false));
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    function finder(ox, oy) {
+        for (let y = 0; y < 7; y++) {
+            for (let x = 0; x < 7; x++) {
+                const edge = x === 0 || y === 0 || x === 6 || y === 6;
+                const core = x >= 2 && x <= 4 && y >= 2 && y <= 4;
+                grid[oy + y][ox + x] = edge || core;
+            }
+        }
+    }
+    finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+    for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+            const reserved = (x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8);
+            if (reserved) continue;
+            h ^= h << 13; h ^= h >>> 17; h ^= h << 5;
+            grid[y][x] = ((h >>> 0) % 3) === 0;
+        }
+    }
+    let rects = '';
+    for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+            if (grid[y][x]) rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+        }
+    }
+    return `<svg viewBox="-1 -1 ${n + 2} ${n + 2}" role="img" aria-label="QR">`
+        + `<rect x="-1" y="-1" width="${n + 2}" height="${n + 2}" fill="#fff"/>`
+        + `<g fill="#000">${rects}</g></svg>`;
+}
+
+function openShareModal() {
+    if (!els.shareModal) return;
+    const url = profileShareURL();
+    if (els.shareUrl) els.shareUrl.textContent = url;
+    if (els.shareQr) els.shareQr.innerHTML = buildQrSVG(url);
+    els.shareModal.hidden = false;
+    requestAnimationFrame(() => els.shareModal.classList.add('open'));
+}
+
+function closeShareModal() {
+    if (!els.shareModal) return;
+    els.shareModal.classList.remove('open');
+    setTimeout(() => { els.shareModal.hidden = true; }, 150);
+}
+
+async function copyProfileLink() {
+    const url = profileShareURL();
+    let copied = false;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(url);
+            copied = true;
+        }
+    } catch (e) { copied = false; }
+    if (!copied) {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            copied = document.execCommand('copy');
+            document.body.removeChild(ta);
+        } catch (e) { copied = false; }
+    }
+    showToast(copied ? 'Havola nusxalandi' : 'Havolani nusxalab bo\u2018lmadi', copied);
+}
+
+function openComplaintDialog() {
+    closeProfileMoreMenu();
+    const trigger = document.querySelector('[data-feedback-open]');
+    if (!trigger) {
+        showToast('Shikoyat oynasi topilmadi', false);
+        return;
+    }
+    trigger.click();
+    const complaint = document.querySelector('#feedbackForm input[name="feedbackType"][value="complaint"]');
+    if (complaint) complaint.checked = true;
+}
+
+function initProfileExtras() {
+    if (els.moreBtn) {
+        els.moreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!els.moreMenu) return;
+            if (els.moreMenu.hidden) openProfileMoreMenu();
+            else closeProfileMoreMenu();
+        });
+    }
+    if (els.moreMenu) {
+        els.moreMenu.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const b = e.target.closest ? e.target.closest('[data-more]') : null;
+            if (!b) return;
+            const kind = b.getAttribute('data-more');
+            if (kind === 'copy') { closeProfileMoreMenu(); copyProfileLink(); }
+            else if (kind === 'block') { closeProfileMoreMenu(); toggleBlockProfile(b); }
+            else if (kind === 'report') openComplaintDialog();
+        });
+    }
+    document.addEventListener('click', (e) => {
+        if (!els.moreMenu || els.moreMenu.hidden) return;
+        if (e.target.closest && e.target.closest('#pfProfileMoreMenu, #pfProfileMoreBtn')) return;
+        closeProfileMoreMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        closeProfileMoreMenu();
+        if (els.shareModal && !els.shareModal.hidden) closeShareModal();
+    });
+
+    if (els.shareX) els.shareX.addEventListener('click', closeShareModal);
+    if (els.shareCopy) els.shareCopy.addEventListener('click', copyProfileLink);
+    if (els.shareModal) {
+        els.shareModal.addEventListener('click', (e) => {
+            if (e.target === els.shareModal) closeShareModal();
+        });
     }
 }
 
@@ -917,12 +1167,15 @@ function renderLocalHeader() {
     els.username.textContent = u.username ? '@' + u.username : '';
     els.bio.textContent = '';
 
-    // Statistika — mahalliy kutubxona
+    // Asosiy qator ham 3 ko'rsatkich; analitika mahalliy rejimda yashirin.
     const c = (window.WCLib ? window.WCLib.counts() : { saved: 0, liked: 0, history: 0 });
     els.stats.innerHTML =
         `<div class="pf-stat"><b>${fmt(c.saved)}</b><span>Saqlangan</span></div>` +
         `<div class="pf-stat"><b>${fmt(c.liked)}</b><span>Yoqqan</span></div>` +
         `<div class="pf-stat"><b>${fmt(c.history)}</b><span>Tarix</span></div>`;
+    if (els.analytics) els.analytics.hidden = true;
+    if (els.moreBtn) els.moreBtn.hidden = true;
+    if (els.blockedBadge) els.blockedBadge.hidden = true;
 
     els.hlWrap.hidden = true;
     els.uploadBtn.hidden = true;
@@ -941,9 +1194,10 @@ function renderLocalHeader() {
         if (more) more.click();
     });
 
-    // Yorliqlar (mahalliy)
+    // Yorliqlar (mahalliy) — ikonkalar PHP ig_svg() bo'lmagani uchun JS'dan.
     els.tabs.innerHTML = LOCAL_TABS.map((t) =>
-        `<button class="pf-tab${t.k === state.tab ? ' active' : ''}" data-tab="${t.k}">${t.label}</button>`
+        `<button class="pf-tab${t.k === state.tab ? ' active' : ''}" data-tab="${t.k}">`
+        + tabIconHTML(t.k) + `<span>${t.label}</span></button>`
     ).join('');
     els.tabs.querySelectorAll('.pf-tab').forEach((b) => {
         b.addEventListener('click', () => switchTabLocal(b.dataset.tab));
@@ -1006,6 +1260,12 @@ window.addEventListener('wc:tgPhoto', () => {
     if (LOCAL) renderLocalHeader();
 });
 
+// Kutubxona server bilan sinxronlashganda mahalliy profil ham darhol
+// yangilanadi (boshqa qurilmadan qo'shilgan Saqlanganlar/Yoqqanlar ko'rinadi).
+window.addEventListener('wc:library', () => {
+    if (LOCAL) renderLocal();
+});
+
 // =======================================================================
 // Yuklash
 // =======================================================================
@@ -1041,4 +1301,5 @@ $('#pfModalCancel').addEventListener('click', closeModal);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 initFollowList();
+initProfileExtras();
 loadProfile();

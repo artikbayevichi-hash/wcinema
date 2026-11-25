@@ -36,6 +36,7 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
     <?php require __DIR__ . '/includes/perf-head.php'; ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/css/tg-stream.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-stream.css') ?: 1; ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base, ENT_QUOTES); ?>/assets/css/tg-login.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/tg-login.css') ?: 1; ?>">
+    <?php $tvBase = $base . '/assets/css/tv.css'; require __DIR__ . '/includes/tv-head.php'; ?>
     <script>
         // Mavzuni birinchi kadrdanoq qo'llaymiz (miltillashsiz). Standart — tun.
         try {

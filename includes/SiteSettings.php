@@ -15,6 +15,11 @@ class SiteSettings
         'notice_link'  => '',        // e'lon havolasi
         'maintenance'  => 0,         // 1 = texnik ish (faqat admin ko'radi)
         'banner_url'   => '',        // ixtiyoriy banner rasm
+        // Donat: admin to'ldirgacha tugma o'chiq turmaydi — bot orqali
+        // bog'lanish doimo ishlaydi, karta faqat kiritilganda ko'rinadi.
+        'donate_card'     => '',     // masalan 8600 1234 5678 9012
+        'donate_holder'   => '',     // karta egasi
+        'donate_telegram' => '',     // @username (bo'sh = asosiy bot)
     ];
 
     private static $cache = null;
@@ -88,6 +93,23 @@ class SiteSettings
         }
         if (array_key_exists('maintenance', $patch)) {
             $cur['maintenance'] = (int) $patch['maintenance'] === 1 ? 1 : 0;
+        }
+        if (array_key_exists('donate_card', $patch)) {
+            $v = preg_replace('/[^\d]/', '', (string) $patch['donate_card']);
+            if ($v !== '' && (mb_strlen($v) < 12 || mb_strlen($v) > 20)) {
+                return ['ok' => false, 'error' => 'Karta raqami 12–20 ta raqamdan iborat bo‘lishi kerak'];
+            }
+            $cur['donate_card'] = mb_substr((string) $v, 0, 20);
+        }
+        if (array_key_exists('donate_holder', $patch)) {
+            $cur['donate_holder'] = mb_substr(trim(strip_tags((string) $patch['donate_holder'])), 0, 80);
+        }
+        if (array_key_exists('donate_telegram', $patch)) {
+            $v = ltrim(trim(strip_tags((string) $patch['donate_telegram'])), '@');
+            if ($v !== '' && !preg_match('/^[A-Za-z0-9_]{3,32}$/', $v)) {
+                return ['ok' => false, 'error' => 'Telegram username noto‘g‘ri'];
+            }
+            $cur['donate_telegram'] = $v;
         }
 
         $f = self::path();
