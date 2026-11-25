@@ -135,6 +135,36 @@
     function platformName() { return platform; }
 
     // ==================================================================
+    //  2b) Yig'iladigan yon panel (TV). Faqat vizual holat; media elementlari
+    //      va oqim sozlamalari butunlay o'zgarishsiz qoladi.
+    (function initSideCollapse() {
+        var KEY = 'wc_tv_side_collapsed';
+        var btn = document.getElementById('igSideCollapse');
+        var root = document.documentElement;
+        function paint() {
+            var collapsed = root.classList.contains('tv-side-collapsed');
+            if (!btn) return;
+            btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+            var label = collapsed ? 'Yon panelni ochish' : 'Yon panelni yig‘ish';
+            btn.setAttribute('aria-label', label);
+            btn.title = label;
+            var lbl = btn.querySelector('.ig-txt');
+            if (lbl) lbl.textContent = collapsed ? 'Ochish' : 'Yig‘ish';
+        }
+        try { if (localStorage.getItem(KEY) === '1') root.classList.add('tv-side-collapsed'); } catch (e) {}
+        paint();
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            var collapsed = root.classList.toggle('tv-side-collapsed');
+            try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch (e) {}
+            paint();
+            if (typeof TvSpatial !== 'undefined' && TvSpatial.refresh) {
+                setTimeout(function () { TvSpatial.refresh(); }, 30);
+            }
+        });
+    })();
+
+    // ==================================================================
     //  3) SPATIAL NAVIGATSIYA (D-Pad)
     // ==================================================================
     var SEL = [

@@ -24,6 +24,9 @@
 .tv-mode *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .tv-mode * { scrollbar-width: none; }
 
+/* Yon panelni yig'ish tugmasi faqat TV rejimida ko'rinadi. */
+.ig-side-collapse { display: none !important; }
+
 /* Yon panel va pastki panel (mobil) katta ekranda kerak emas */
 @media (min-width: 1000px) {
     .tv-mode .ig-mobar,
@@ -51,6 +54,20 @@
     .tv-mode .profile-main,
     .tv-mode .history-main,
     .tv-mode .saved-main { padding-inline: 56px; }
+
+    /* Yig'ilgan yon panel: faqat ikonkalar qoladi, kontent kengayadi. */
+    .tv-mode .ig-side-collapse { display: flex !important; }
+    html.tv-mode.tv-side-collapsed .ig-side { width: 76px !important; }
+    html.tv-mode.tv-side-collapsed.ig-shell { padding-left: 76px; }
+    html.tv-mode.tv-side-collapsed.reels-body .reels-top { left: 76px; }
+    html.tv-mode.tv-side-collapsed .ig-side .ig-txt,
+    html.tv-mode.tv-side-collapsed .ig-side .ig-caret,
+    html.tv-mode.tv-side-collapsed .ig-side .ig-brand-text,
+    html.tv-mode.tv-side-collapsed .ig-side .ig-tg-status,
+    html.tv-mode.tv-side-collapsed .ig-side .ig-side-foot { display: none !important; }
+    html.tv-mode.tv-side-collapsed .ig-side .ig-item,
+    html.tv-mode.tv-side-collapsed .ig-side .ig-brand { justify-content: center !important; }
+    html.tv-mode.tv-side-collapsed .ig-side-collapse .ig-svg { transform: rotate(180deg); }
 
     /* TV da telefon panellari va suzib yuruvchi Donat kerak emas.
        --wc-donate-* ofsetlari saqlanadi (boshqa rejimlarga ta'sir qilmaydi). */

@@ -2261,6 +2261,11 @@
     love: 'Sevgi', sad: 'Qayg‘u', food: 'Taom', work: 'Ish',
     nature: 'Tabiat', fun: 'Zavq', all: 'Hammasi'
   };
+  // Telegram pickeridagi kayfiyat bo'limlari: matn yonida ikonka.
+  var MOOD_ICONS = {
+    recent: '🕘', frequent: '🔥', happy: '😊', love: '❤️', sad: '😢',
+    food: '🍕', work: '💻', nature: '🌿', fun: '🎉', all: '▦'
+  };
 
   // ------------------------------------------------------ IndexedDB keshi
   // Faqat emoji/stiker META ma'lumotlari saqlanadi (session/token yo'q).
@@ -2474,7 +2479,8 @@
       '.wc-c-search input:focus{border-color:#555}',
       '.wc-c-moods{display:flex;align-items:center;gap:4px;padding:6px 8px;overflow-x:auto;border-bottom:1px solid #262626;scrollbar-width:none}',
       '.wc-c-moods::-webkit-scrollbar{display:none}',
-      '.wc-c-mood{flex:0 0 auto;height:26px;padding:0 10px;border:1px solid #262626;border-radius:13px;background:#000;color:#aaa;cursor:pointer;font:inherit;font-size:11.5px;white-space:nowrap}',
+      '.wc-c-mood{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid #262626;border-radius:15px;background:#000;color:#aaa;cursor:pointer;font:inherit;font-size:11.5px;white-space:nowrap}',
+      '.wc-c-mood-ico{font-size:14px;line-height:1}',
       '.wc-c-mood:hover{color:#fff;border-color:#444}',
       '.wc-c-mood.on{background:#fff;color:#000;border-color:#fff}',
       '#cPicker .wc-c-emoji-body{display:block;max-height:none;flex:1 1 auto;min-height:0;padding-bottom:8px}',
@@ -2707,7 +2713,9 @@
   function moodButtons() {
     return Object.keys(MOOD_LABELS).map(function (k) {
       return '<button type="button" class="wc-c-mood' + (k === 'recent' ? ' on' : '') + '"'
-        + ' data-mood="' + k + '">' + esc(MOOD_LABELS[k]) + '</button>';
+        + ' data-mood="' + k + '" title="' + esc(MOOD_LABELS[k]) + '">'
+        + '<span class="wc-c-mood-ico" aria-hidden="true">' + (MOOD_ICONS[k] || '') + '</span>'
+        + '<span class="wc-c-mood-lbl">' + esc(MOOD_LABELS[k]) + '</span></button>';
     }).join('');
   }
 

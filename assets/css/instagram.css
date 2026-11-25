@@ -855,6 +855,14 @@ html.tv .ig-ico { width: 30px; height: 30px; }
     text-decoration: none; text-align: left; cursor: pointer;
 }
 .ig-set-row:hover { background: var(--card-2); }
+/* Yagona sozlamalar kirish nuqtasi — Instagram'dagi kabi birinchi qatorda. */
+.ig-set-row-main {
+    background: var(--card-2);
+    border: 1px solid var(--line);
+    font-weight: 700;
+    min-height: 48px;
+}
+.ig-set-row-main:hover { background: var(--card-2); border-color: var(--muted); }
 .ig-set-ico { display: flex; flex: 0 0 auto; color: var(--text); }
 .ig-set-ico .ig-svg { width: 22px; height: 22px; }
 .ig-set-txt { flex: 1; min-width: 0; }
@@ -1399,7 +1407,7 @@ button.ig-set-row {
 }
 
 /* Klaviatura ochilganda: pastki panel yashirinadi, faol kompozitor
-   klaviatura ustiga suriladi (`--kb-shift` ni tv-mode.js hisoblaydi). */
+   klaviatura ustiga suriladi (`--kb-shift` ni includes/tv-head.php hisoblaydi). */
 html.kb-open .ig-tabbar,
 html.kb-open .ig-mobar { display: none !important; }
 html.kb-open body.ig-shell { padding-bottom: var(--kb, 0px); }
@@ -1408,4 +1416,36 @@ html.kb-open .reels-comments,
 html.kb-open .chat-composer {
     transform: translateY(calc(-1 * var(--kb-shift, 0px)));
     transition: transform .12s ease-out;
+}
+
+/* ============================================================================
+   SILLIQ MOSLASHUV (additiv): qattiq px o'rniga clamp().
+   320px telefon -> 999px planshet orasida matn/iconka/tugma kattaligi
+   asta-sekin o'zgaradi; ranglar va video oqimi butunlay o'zgarishsiz.
+   ============================================================================ */
+@media (max-width: 999px) {
+    :root {
+        --ig-pad-x: clamp(10px, 3.2vw, 20px);
+        --ig-font: clamp(11px, 3.3vw, 14px);
+        --ig-icon: clamp(20px, 5.4vw, 24px);
+        --ig-tap: clamp(40px, 11vw, 48px);
+    }
+    .ig-tabbar a {
+        font-size: var(--ig-font);
+        padding-inline: var(--ig-pad-x);
+        min-height: var(--ig-tap);
+    }
+    .ig-tabbar a .ig-svg { width: var(--ig-icon); height: var(--ig-icon); }
+    .ig-search-cards { gap: clamp(6px, 2vw, 12px); }
+}
+
+/* Barmoq bilan ishlatiladigan barcha ikonka tugmalari kamida 44×44. */
+@media (pointer: coarse) and (max-width: 999px) {
+    .ig-create, .ig-search-close, .feedback-x,
+    .reels-back, .reels-modal-x, .reels-c-tool,
+    .pf-back, .pf-top-btn, .share-close,
+    #cAttachBtn, #cEmojiBtn, .ig-set-close {
+        min-width: 44px;
+        min-height: 44px;
+    }
 }

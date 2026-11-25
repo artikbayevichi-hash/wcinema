@@ -109,6 +109,10 @@ $compute = function () use ($q, $limit, $catalog, $userId, $viewerId) {
                     'last_name'  => $u['last_name'] ?: '',
                     'avatar'     => $u['avatar'] ?: null,
                     'premium'    => (int) ($u['is_premium'] ?? 0),
+                    // `verified` — klient uchun premium bilan bir xil belgi.
+                    // Bazada alohida verified ustuni yo'q, shuning uchun
+                    // SQL o'zgartirilmasdan faqat JSON javobida alias qilinadi.
+                    'verified'   => (int) ($u['is_premium'] ?? 0),
                     'following'  => false, // quyida bitta so'rovda to'ldiriladi
                 ];
             }

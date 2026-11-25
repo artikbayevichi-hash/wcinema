@@ -264,6 +264,12 @@ function wc_logo_img($alt = '', $attrs = '') {
 <!-- ============================== Desktop: yon panel ============================== -->
 <aside class="ig-side" id="igSide">
     <nav class="ig-nav">
+        <!-- TV rejimida yon panelni yig'ish/ochish (faqat ko'rinish; oqimga ta'sir qilmaydi) -->
+        <button class="ig-item ig-side-collapse" id="igSideCollapse" type="button"
+                aria-expanded="true" aria-label="Yon panelni yig‘ish" title="Yon panelni yig‘ish">
+            <span class="ig-ico"><?php echo ig_svg('back'); ?></span>
+            <span class="ig-txt">Yig‘ish</span>
+        </button>
         <!-- YouTube tartibi: Bosh sahifa · Reels · Chat · kategoriyalar · Siz · sozlamalar -->
         <?php echo ig_item('index.php', 'home', 'home', 'Bosh sahifa', $NAV_ACTIVE); ?>
         <?php echo ig_item('reels.php', 'reels', 'reels', 'Reels', $NAV_ACTIVE); ?>
@@ -522,6 +528,13 @@ function wc_logo_img($alt = '', $attrs = '') {
 
             <div class="ig-set-group">
                 <div class="ig-set-label">Hisob</div>
+                <!-- Instagram'dagi "Settings and activity": bitta kirish nuqtasi.
+                     Ichida profil, bildirishnoma, maxfiylik, bloklar, tarix. -->
+                <a class="ig-set-row ig-set-row-main" href="settings.php">
+                    <span class="ig-set-ico"><?php echo ig_svg('settings'); ?></span>
+                    <span class="ig-set-txt">Sozlamalar va faoliyat</span>
+                    <span class="ig-set-arrow">&rsaquo;</span>
+                </a>
                 <a class="ig-set-row" href="profile.php">
                     <span class="ig-set-ico"><?php echo ig_svg('user'); ?></span>
                     <span class="ig-set-txt">Profil</span>
@@ -535,6 +548,11 @@ function wc_logo_img($alt = '', $attrs = '') {
                 <a class="ig-set-row" href="history.php">
                     <span class="ig-set-ico"><?php echo ig_svg('history'); ?></span>
                     <span class="ig-set-txt">Tarix</span>
+                    <span class="ig-set-arrow">&rsaquo;</span>
+                </a>
+                <a class="ig-set-row" href="watch-later.php">
+                    <span class="ig-set-ico"><?php echo ig_svg('later'); ?></span>
+                    <span class="ig-set-txt">Keyinroq ko‘rish</span>
                     <span class="ig-set-arrow">&rsaquo;</span>
                 </a>
                 <a class="ig-set-row" href="reels-upload.php">
@@ -1150,7 +1168,8 @@ window.addEventListener('DOMContentLoaded', function () {
             // Faqat asosiy oynada tur filtri ishlaydi; TV natijalari o'zgarishsiz.
             // Barcha ma'lumotlar BITTA so'rovdan olingan — qo'shimcha so'rov yo'q.
             if (token === igTokenSearch && igTypeFilter) {
-                if (igTypeFilter === 'profiles') { content = []; reels = []; }
+                // `accounts` — "Profillar" filtri uchun klient/server aliasi.
+                if (igTypeFilter === 'profiles' || igTypeFilter === 'accounts') { content = []; reels = []; }
                 else if (igTypeFilter === 'reels') { profiles = []; content = []; }
                 else if (igTypeFilter === 'content') { profiles = []; reels = []; }
             }

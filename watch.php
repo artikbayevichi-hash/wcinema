@@ -618,8 +618,10 @@ $NAV_ACTIVE = 'home';
                          tg-comments.js shu id'larni kutadi. */ ?>
                 <div class="reels-c-picker" id="cPicker" hidden>
                     <div class="reels-c-picker-tabs" id="cPickerTabs">
+                        <!-- Telegram tartibi: Emoji | Stiker | GIF. data-mode o'zgarmaydi,
+                             shuning uchun tg-comments.js switchTab() ishlashda davom etadi. -->
+                        <button type="button" class="reels-c-picker-tab" data-mode="emoji" title="Emoji">Emoji</button>
                         <button type="button" class="reels-c-picker-tab on" data-mode="sticker" title="Stiker">Stiker</button>
-                        <button type="button" class="reels-c-picker-tab" data-mode="emoji" title="Emoji">😀</button>
                         <button type="button" class="reels-c-picker-tab" data-mode="gif" title="GIF">GIF</button>
                         <button type="button" class="reels-c-picker-tab" data-mode="photo" title="Rasm">Rasm</button>
                         <button type="button" class="reels-c-picker-tab" data-mode="mention" title="Belgilash">@</button>
