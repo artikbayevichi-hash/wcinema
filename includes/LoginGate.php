@@ -52,25 +52,38 @@ final class LoginGate
         return $p;
     }
 
+    /** Admin kirish nuqtalari — ular `wc_adm` ni O'ZI tekshiradi. */
+    private static $admin = [
+        'admin.php', 'admin-login.php', 'admin-panel.php', 'admin-content.php',
+        'admin-notify.php', 'admin-feedback.php', 'admin-users.php', 'admin-reels.php',
+    ];
+
     /** Bu so'rovni to'sish kerakmi? */
     public static function isAllowed()
     {
         $p = self::script();
         if ($p === '') {
-            return true;   // aniqlanmadi — to'smaymiz (saytni buzib qo'ymaylik)
+            // HTTP so'rovda manzil noma'lum bo'lsa, ochiq qoldirmaymiz.
+            return PHP_SAPI === 'cli';
         }
 
-        // Ichki qatlam: API o'z ichida avtorizatsiya qiladi, CLI — konsol.
-        if (preg_match('#/(api|cli|includes)/#i', $p)) {
-            return true;
+        // Ichki qatlam: FAQAT BU saytning api/cli/includes papkalari.
+        // Ilgari `preg_match('#/(api|cli)/#')` butun yo'ldagi ixtiyoriy
+        // '/api/' bo'lagini topib, begona skriptlarni ham o'tkazib yuborardi.
+        $appRoot = realpath(__DIR__ . '/..');
+        $real = realpath($p);
+        if ($appRoot && $real) {
+            $rel = str_replace('\\', '/', substr($real, strlen($appRoot)));
+            if (preg_match('#^/(api|cli|includes)/#i', $rel)) {
+                return true;
+            }
         }
 
         $f = strtolower(basename($p));
         if (in_array($f, self::$allow, true)) {
             return true;
         }
-        // Admin panel PHP sessiyasi (wc_adm) bilan ishlaydi.
-        if ($f === 'admin.php' || strpos($f, 'admin-') === 0) {
+        if (in_array($f, self::$admin, true)) {
             return true;
         }
         return false;

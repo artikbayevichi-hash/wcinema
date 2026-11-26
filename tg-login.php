@@ -79,18 +79,42 @@ if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
     document.addEventListener('DOMContentLoaded', function () {
         var node = document.getElementById('tgLogin');
         if (!node || !window.TgLogin) return;
-        window.TgLogin.mount(node, {
-            next: window.TG_LOGIN_NEXT || (window.APP.base + '/index.php'),
-            onSuccess: function (to) {
-                // Avval server sessiyasini olamiz, keyin sahifaga o'tamiz:
-                // cookie bo'lmasa LoginGate yana shu yerga qaytaradi.
-                var go = function () {
-                    location.replace(to || (window.APP.base + '/index.php'));
-                };
-                if (window.WcSession) window.WcSession.issue().then(go, go);
-                else go();
-            }
-        });
+        var errNode = node.querySelector('.tgl-err');
+        function fail(text) {
+            if (errNode) { errNode.textContent = text; errNode.hidden = false; }
+        }
+        try {
+            window.TgLogin.mount(node, {
+                next: window.TG_LOGIN_NEXT || (window.APP.base + '/index.php'),
+                onSuccess: function (to) {
+                    // Avval server sessiyasini olamiz, keyin sahifaga o'tamiz:
+                    // cookie bo'lmasa LoginGate yana shu yerga qaytaradi.
+                    // MUHIM: muvaffaqiyatsiz javobdaHAM yo'naltirish eski
+                    // versiyada bo'lgan — natijada cheksiz qayta kirish
+                    // aylanishi yuz berardi. Faqat ok===true da o'tamiz.
+                    var done = false;
+                    function go() {
+                        if (done) return; done = true;
+                        location.replace(to || (window.APP.base + '/index.php'));
+                    }
+                    function noSession() {
+                        if (done) return; done = true;
+                        fail('Server sessiyasi olinmadi. Qayta urinib ko‘ring.');
+                    }
+                    if (!window.WcSession) { noSession(); return; }
+                    var timer = setTimeout(noSession, 12000);
+                    window.WcSession.issue().then(function (ok) {
+                        clearTimeout(timer);
+                        if (ok === true) go(); else noSession();
+                    }, function () {
+                        clearTimeout(timer);
+                        noSession();
+                    });
+                }
+            });
+        } catch (e) {
+            fail('Kirish interfeysi yuklanmadi: ' + (e && e.message ? e.message : e));
+        }
     });
 </script>
 

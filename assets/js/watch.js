@@ -1985,12 +1985,18 @@
         if (!isLoggedIn()) { needLogin(); return; }
         b.classList.add('busy');
         b.setAttribute('aria-busy', 'true');
+        // ANIQ holat yuboramiz: server idempotent bo'ladi, ikki marta bosish
+        // yoki qayta yuborish tasodifan bahoni bekor qilmaydi.
+        var vote = (type === 'like')
+          ? (D.has_liked ? 'none' : 'like')
+          : (D.has_disliked ? 'none' : 'dislike');
         fetch(withMeQS(base + '/api/like.php'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           credentials: 'same-origin',
           body: 'id=' + encodeURIComponent(D.id)
                 + '&type=' + encodeURIComponent(type)
+                + '&vote=' + encodeURIComponent(vote)
         }).then(function (raw) {
           // 401: PHP sessiyasi ham, server tan oladigan `tg_me` ham yo'q.
           // Login oynasiga aylantirmasdan amalni mahalliy bajaramiz.
@@ -2040,7 +2046,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         credentials: 'same-origin',
-        body: 'id=' + encodeURIComponent(D.id)
+        body: 'id=' + encodeURIComponent(D.id) + '&in_watchlist=1'
       }).then(function (raw) {
         // 401: server tanimadi - mahalliy kutubxonaga qo'shib qo'yamiz.
         if (raw.status === 401) { return localSave(); }
@@ -3186,17 +3192,18 @@
     try { document.dispatchEvent(new CustomEvent('wc:watchState')); } catch (e) {}
   }
 
-  /** Saqlanganlarga qo'shish / olib tashlash (toggle). */
+  /** Saqlanganlarga qo'shish / olib tashlash (aniq holat bilan). */
   function tvToggleSaved() {
     if (!isLoggedIn()) { needLogin(); return Promise.resolve(!!D.in_watchlist); }
+    var want = !D.in_watchlist;
     return fetch(withMeQS(base + '/api/watchlist.php'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       credentials: 'same-origin',
-      body: 'id=' + encodeURIComponent(D.id)
+      body: 'id=' + encodeURIComponent(D.id) + '&in_watchlist=' + (want ? '1' : '0')
     }).then(function (raw) {
       // 401: server tanimadi - amal mahalliy bajariladi.
-      if (raw.status === 401) return { success: true, in_watchlist: !D.in_watchlist };
+      if (raw.status === 401) return { success: true, in_watchlist: want };
       return raw.json();
     }).then(function (r) {
       if (r.success === false) throw new Error(r.message || 'Xato');

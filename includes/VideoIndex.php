@@ -116,8 +116,13 @@ final class VideoIndex
                 [$ch, $post]
             );
             if ($row) {
-                if (!empty($row['doc_id']) && (string) $row['doc_id'] !== $doc) return false;
-                if ((int) ($row['size'] ?? 0) > 0 && (int) $row['size'] !== $size) return false;
+                // Kutilayotgan/xato qatorida doc_id bo'sh, size=0 bo'ladi.
+                // Bunday qator ixtiyoriy doc/size uchun "tasdiqlangan" deb
+                // qabul qilinmasligi kerak — aks holda har kim indeks keshnini
+                // buzadi.
+                if (empty($row['doc_id']) || (int) ($row['size'] ?? 0) <= 0) return false;
+                if ((string) $row['doc_id'] !== $doc) return false;
+                if ((int) $row['size'] !== $size) return false;
                 return true;
             }
         } catch (Throwable $e) {

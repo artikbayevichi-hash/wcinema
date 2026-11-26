@@ -24,6 +24,7 @@ function load_env_file($path) {
         return;
     }
     $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    $pairs = array();
     foreach ($lines as $line) {
         $line = trim($line);
         if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) {
@@ -43,12 +44,34 @@ function load_env_file($path) {
         }
         // Atrofdagi bo'sh joylarni olib tashlaymiz (vergulli ro'yxat uchun)
         $v = trim($v);
-        // .env har so'rovda qayta o'qiladi. Windows/Apache (mod_php) da
-        // putenv() tizim env'ini jarayon (worker) uchun saqlab qoladi — keyingi
-        // so'rovda eski putenv qiymati getenv() dan qaytadi. Shuning uchun .env
-        // qiymatini har safar yangilab yozamiz (putenv + $_ENV) va o'qishda
-        // $_ENV (har so'rovda yangilanadi) ustun turadi. .env da BO'LMAGAN
-        // kalitlar uchun haqiqiy tizim o'zgaruvchisi ishlatiladi.
+        $pairs[$k] = $v;
+    }
+
+    // Haqiqiy tizim o'zgaruvchilari .env USTIDA turishi shart (rotatsiya/
+    // production inject qilingan secretlar .env dagi eski qiymat bilan
+    // yeb qo'yilmasin). $_ENV so'rov boshida tizimdan to'ldiriladi va
+    // putenv() bilan ifloslanmaydi; getenv() dan faqat .env da yo'q
+    // kalitlarni olamiz (qayta ishga tushganda eski putenv qolishi mumkin).
+    if (!isset($GLOBALS['__wcSystemEnv']) || !is_array($GLOBALS['__wcSystemEnv'])) {
+        $sys = array();
+        if (isset($_ENV) && is_array($_ENV)) {
+            foreach ($_ENV as $k => $vv) {
+                if ($vv !== '') $sys[$k] = $vv;
+            }
+        }
+        $raw = getenv();
+        if (is_array($raw)) {
+            foreach ($raw as $k => $vv) {
+                if ($vv !== '' && !isset($pairs[$k])) $sys[$k] = $vv;
+            }
+        }
+        $GLOBALS['__wcSystemEnv'] = $sys;
+    }
+
+    // .env har so'rovda qayta o'qiladi (Windows/Apache'da putenv jarayonda
+    // qoladi). Faqat tizimda YO'Q kalitlarni yozamiz.
+    foreach ($pairs as $k => $v) {
+        if (array_key_exists($k, $GLOBALS['__wcSystemEnv'])) continue;
         putenv($k . '=' . $v);
         $_ENV[$k] = $v;
     }
@@ -60,8 +83,11 @@ load_env_file(__DIR__ . '/.env');
  * Manba tartibi: haqiqiy tizim o'zgaruvchisi -> .env -> standart qiymat.
  */
 function env_value($key, $default = null) {
-    // $_ENV har so'rovda .env dan yangilanadi — birinchi navbatda shundan
-    // o'qiymiz (getenv() eski putenv qiymatini saqlab qolishi mumkin).
+    // 1) haqiqiy tizim env (config yuklanishidan oldin olingan snapshot),
+    // 2) .env qiymati, 3) getenv(), 4) standart qiymat.
+    if (isset($GLOBALS['__wcSystemEnv'][$key]) && $GLOBALS['__wcSystemEnv'][$key] !== '') {
+        return $GLOBALS['__wcSystemEnv'][$key];
+    }
     if (isset($_ENV[$key]) && $_ENV[$key] !== '') {
         return $_ENV[$key];
     }
@@ -515,12 +541,27 @@ define('SESSION_TTL_DAYS', 30);
 // avval shu tokenni tekshiradi.
 define('CLIENT_SESSION_DAYS', max(1, (int) env_value('CLIENT_SESSION_DAYS', '30')));
 
-// MOSLIK REJIMI. 1 = eski `tg_me` usuli ham qabul qilinadi (sayt buzilmasligi
-// uchun), 0 = faqat imzolangan sessiya (qat'iy, tavsiya etiladi).
-// Ishlab chiqish/tunnelda 1, production'da 0 qiling.
-$__trust = strtolower(trim((string) env_value('TG_TRUST_CLIENT_ID', '1')));
-define('TG_TRUST_CLIENT_ID', in_array($__trust, ['1', 'true', 'yes', 'on'], true));
-unset($__trust);
+// MOSLIK REJIMI. 1 = eski `tg_me` usuli ham qabul qilinadi (faqat LOCAL
+// ishlab chiqish/QA uchun), 0 = faqat imzolangan sessiya (production).
+//
+// XAVFSIZLIK: ilgari default 1 edi — `.env` ni unutgan har qanday deployment
+// ixtiyoriy Telegram ID bilan boshqa foydalanuvchi nomiga kirishga ruxsat
+// berardi. Endi default FAQAT localhost/127.0.0.1 da yoqiq; production'da
+// aniq `TG_TRUST_CLIENT_ID=1` berilmasa yoqilmaydi.
+$__host = strtolower((string) ($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? ''));
+$__host = preg_replace('/:\d+$/', '', $__host);
+$__addr = strtolower((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+$__localHost = in_array($__host, ['localhost', '127.0.0.1', '::1'], true)
+    || substr($__host, -9) === '.localhost';
+// HTTP_HOST mijoz tomonidan yuboriladi: `Host: localhost` bilan production
+// rejimini aldab bo'lmaydi — IP ham mahalliy bo'lishi SHART.
+$__localAddr = in_array($__addr, ['127.0.0.1', '::1', '::ffff:127.0.0.1'], true)
+    || substr($__addr, 0, 4) === '127.';
+$__local = $__localHost && $__localAddr;
+$__trustDefault = $__local ? '1' : '0';
+$__trust = strtolower(trim((string) env_value('TG_TRUST_CLIENT_ID', $__trustDefault)));
+define('TG_TRUST_CLIENT_ID', $__local && in_array($__trust, ['1', 'true', 'yes', 'on'], true));
+unset($__trust, $__host, $__addr, $__localHost, $__localAddr, $__local, $__trustDefault);
 
 // ---------------------------------------------------------------------------
 // Reels - qisqa vertikal videolar
@@ -789,7 +830,7 @@ if (!headers_sent()) {
 // DIQQAT: (bool)'0' === true - ya'ni '0' yozilsa ham xato bo'lib,
 // xatolar foydalanuvchiga ko'rinib turadi. Shuning uchun satrni
 // aniq "ha/yo'q" ga aylantiramiz.
-$_dbg = strtolower(trim((string) env_value('APP_DEBUG', '1')));
+$_dbg = strtolower(trim((string) env_value('APP_DEBUG', '0')));
 define('APP_DEBUG', in_array($_dbg, ['1', 'true', 'yes', 'on'], true));
 
 if (APP_DEBUG) {

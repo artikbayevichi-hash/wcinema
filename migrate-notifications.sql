@@ -29,7 +29,7 @@ ALTER TABLE `notifications`
 -- `type` ni kengaytiramiz. Eski qiymatlar saqlanib qoladi.
 ALTER TABLE `notifications`
     MODIFY COLUMN `type`
-    ENUM('system','like','comment','reply','mention','follow','repost','status','video')
+    ENUM('system','login','like','comment','reply','mention','follow','repost','status','video')
     NOT NULL;
 
 -- Tez o'qish uchun qo'shma indeks: "foydalanuvchining o'qilmaganlari, eng

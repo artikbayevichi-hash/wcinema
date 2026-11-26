@@ -46,6 +46,12 @@ switch ($action) {
         if ($peerId <= 0) {
             fail('peer_id kerak');
         }
+        // Bloklangan/maxfiy profil ma'lumotlari `peer` orqali oqmasligi kerak.
+        $blocks = new Blocks();
+        $access = $blocks->canViewProfileSafe($peerId, $uid);
+        if (is_array($access) && empty($access['ok'])) {
+            fail('Foydalanuvchi topilmadi', 404);
+        }
         $p = $chat->peer($peerId, $uid);
         if (!$p) {
             fail('Foydalanuvchi topilmadi', 404);

@@ -429,6 +429,10 @@
       if (opts.signal.aborted) ctrl.abort();
       else opts.signal.addEventListener('abort', function () { ctrl.abort(); });
     }
+    // Server javob bermay qolsa, SPA doimiy "navigating" holatida qotib
+    // qolmasligi kerak: 12 s dan keyin abort qilamiz va caller to'liq
+    // sahifa yuklashga o'tadi.
+    var timeoutId = global.setTimeout(function () { ctrl.abort(); }, 12000);
     var p = fetch(url, {
       method: 'GET',
       credentials: 'same-origin',
@@ -453,9 +457,11 @@
         return { html: html, url: res.url || url, cached: false };
       });
     }).then(function (out) {
+      global.clearTimeout(timeoutId);
       delete prefetching[url];
       return out;
     }, function (err) {
+      global.clearTimeout(timeoutId);
       delete prefetching[url];
       throw err;
     });

@@ -11,9 +11,19 @@ if ($auth->isLoggedIn()) {
 
 // Bot ro'yxatdan o'tgan foydalanuvchilarni tekshirish
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $initData = $_POST['initData'] ?? '';
+    // Bot token / Widget hash tekshiruvi arzon emas: IP bo'yicha cheklaymiz.
+    RateLimit::enforce('login-post-' . ($_SERVER['REMOTE_ADDR'] ?? ''), 30, 60);
+    // Massiv kelib qolsa (soxtalashtirilgan forma) (string)/(int) cast'lari
+    // PHP warning beradi va HTML chiqishini buzadi — oldindan filtrlaymiz.
+    $str = static function ($key, $max = 2048) {
+        $v = $_POST[$key] ?? '';
+        if (!is_string($v)) return '';
+        $v = trim($v);
+        return function_exists('mb_substr') ? mb_substr($v, 0, $max) : substr($v, 0, $max);
+    };
+    $initData = $str('initData');
 
-    if (!empty($initData)) {
+    if ($initData !== '') {
         $result = $auth->loginWithTelegram($initData);
 
         if ($result['success']) {
@@ -24,17 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } else {
         // Telegram Login Widget (oauth.telegram.org) - oddiy brauzer
-        $tgId = (int) ($_POST['tg_id'] ?? 0);
-        $tgHash = $_POST['tg_hash'] ?? '';
+        $tgIdRaw = $_POST['tg_id'] ?? 0;
+        $tgId = is_scalar($tgIdRaw) && is_numeric($tgIdRaw) ? (int) $tgIdRaw : 0;
+        $tgHash = $str('tg_hash', 128);
 
         if ($tgId > 0 && $tgHash !== '') {
             $result = $auth->loginWithTelegramWidget([
                 'id'         => $tgId,
-                'first_name' => $_POST['tg_first_name'] ?? '',
-                'last_name'  => $_POST['tg_last_name'] ?? '',
-                'username'   => $_POST['tg_username'] ?? '',
-                'photo_url'  => $_POST['tg_photo_url'] ?? '',
-                'auth_date'  => $_POST['tg_auth_date'] ?? '',
+                'first_name' => $str('tg_first_name', 128),
+                'last_name'  => $str('tg_last_name', 128),
+                'username'   => $str('tg_username', 128),
+                'photo_url'  => $str('tg_photo_url', 512),
+                'auth_date'  => $str('tg_auth_date', 32),
                 'hash'       => $tgHash,
             ]);
 
@@ -299,6 +310,7 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         const BOT_URL = 'https://t.me/' + BOT_USERNAME;
         const LOGIN_TOKEN = <?php echo json_encode($loginToken); ?>;
         const BOT_AUTH_URL = <?php echo json_encode($botAuthUrl); ?>;
+        const LOGIN_HAD_ERROR = <?php echo json_encode(!empty($error)); ?>;
         const webApp = window.Telegram?.WebApp;
 
         const telegramBtn = document.getElementById('telegramBtn');
@@ -318,11 +330,27 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
         const initData = webApp?.initData || '';
 
         if (initData) {
-            // Telegram WebApp ichida - tasdiqlangan imzo bilan avtomatik kirish
-            document.getElementById('initData').value = initData;
-            btnText.innerHTML = '<span class="loading"></span> Avtorizatsiya...';
-            telegramBtn.disabled = true;
-            document.getElementById('loginForm').submit();
+            // Telegram WebApp ichida - tasdiqlangan imzo bilan avtomatik kirish.
+            // MUHIM: bitta urinish. Agar server xato qaytarsa, sahifa yana
+            // initData bilan ochiladi va eski kod cheksiz submit qilaverardi.
+            var AUTO_KEY = 'wc_login_auto_v1';
+            var autoDone = false;
+            try { autoDone = sessionStorage.getItem(AUTO_KEY) === '1'; } catch (e) {}
+            if (!LOGIN_HAD_ERROR && !autoDone) {
+                try { sessionStorage.setItem(AUTO_KEY, '1'); } catch (e) {}
+                document.getElementById('initData').value = initData;
+                btnText.innerHTML = '<span class="loading"></span> Avtorizatsiya...';
+                telegramBtn.disabled = true;
+                document.getElementById('loginForm').submit();
+            } else {
+                telegramBtn.disabled = false;
+                btnText.textContent = '🔒 Qayta kirish';
+                telegramBtn.onclick = function () {
+                    try { sessionStorage.removeItem(AUTO_KEY); } catch (e) {}
+                    document.getElementById('initData').value = initData;
+                    document.getElementById('loginForm').submit();
+                };
+            }
         } else {
             // Oddiy brauzer - bot orqali tasdiqlash oqimi
             telegramBtn.style.display = 'none';
@@ -337,8 +365,21 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
             const botLoginBtn = document.getElementById('botLoginBtn');
             let stopped = false;
 
+            const startedAt = Date.now();
+            let retries = 0;
+
             function startFlow() {
-                window.open(BOT_AUTH_URL, '_blank');
+                const w = window.open(BOT_AUTH_URL, '_blank');
+                if (!w) {
+                    // Popup bloklangan — foydalanuvchini yo'qotib qo'ymaymiz.
+                    statusHint.textContent = '';
+                    const a = document.createElement('a');
+                    a.href = BOT_AUTH_URL;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.textContent = 'Botni ochish uchun bosing';
+                    statusHint.appendChild(a);
+                }
                 botLoginBtn.disabled = true;
                 botBtn.style.display = 'none';
                 telegramBtn.style.display = 'none';
@@ -346,16 +387,37 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
                 poll();
             }
 
-            function stop(msg) {
+            function stop(msg, allowRetry) {
                 stopped = true;
                 if (msg) statusHint.textContent = msg;
+                if (allowRetry) {
+                    botLoginBtn.disabled = false;
+                    botBtn.style.display = '';
+                    botLoginBtn.textContent = '🔄 Qayta boshlash';
+                    botLoginBtn.onclick = function () { location.reload(); };
+                }
             }
 
             async function poll() {
                 if (stopped) return;
+                // 10 daqiqadan keyin navbatchi so'rovlarni to'xtatamiz: eski
+                // token eskirganda sahifa butunlay "kutmoqda" holatida qolmasin.
+                if (Date.now() - startedAt > 10 * 60 * 1000) {
+                    stop('Vaqt tugadi. Qayta boshlash uchun tugmani bosing.', true);
+                    return;
+                }
+                if (document.hidden) {
+                    setTimeout(poll, 5000);   // yashirin tabda tez so'rov yo'q
+                    return;
+                }
                 try {
-                    const r = await fetch('check_login.php?token=' + LOGIN_TOKEN + '&t=' + Date.now());
+                    const r = await fetch('check_login.php?token=' + encodeURIComponent(LOGIN_TOKEN)
+                        + '&t=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' });
                     const d = await r.json();
+                    // Hisoblagich faqat KETMA-KET tarmoq xatolarini sanaydi.
+                    // Ilgari har so'rovda oshib, keyin catch da yana oshardi —
+                    // bitta uzilish 50 s dan keyin "Aloqa uzildi" berardi.
+                    retries = 0;
                     if (d.done) {
                         stop();
                         statusHint.textContent = 'Tasdiqlandi! Saytga o\'tkazilmoqda...';
@@ -363,11 +425,12 @@ $botAuthUrl = 'https://t.me/' . TELEGRAM_BOT_USERNAME . '?start=auth_' . $loginT
                         return;
                     }
                     if (!d.pending) {
-                        stop(d.message || 'Xatolik yuz berdi. Sahifani yangilang va qayta urining.');
-                        botLoginBtn.disabled = false;
+                        stop(d.message || 'Xatolik yuz berdi.', true);
                     }
                 } catch (e) {
-                    // Tarmoq uzilgan - keyingi qadamda qayta urinamiz
+                    if (++retries > 20) {
+                        stop('Aloqa uzildi. Qayta boshlash uchun tugmani bosing.', true);
+                    }
                 }
                 if (!stopped) setTimeout(poll, 2500);
             }

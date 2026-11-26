@@ -4,11 +4,12 @@
 //
 // DIQQAT: GET va POST turli vazifani bajaradi:
 //   GET  ?id=N             -> hozirgi holatni O'QISH (hech narsa o'zgartirmaydi)
-//   POST id=N [&type=...]  -> BAHOLASH / BEKOR QILISH (holatni o'zgartiradi)
+//   POST id=N &vote=...    -> BAHOLASH / BEKOR QILISH (holatni o'zgartiradi)
 //
-// `type` = `like` (yoqdi) | `dislike` (yoqmadi). Berilmasa `like`.
+// `vote` = `like` | `dislike` | `none` (ANIQ holat, idempotent). Eski
+// keshdagi JS uchun `type=like|dislike` bilan toggle ham qabul qilinadi.
 //
-// YouTube qoidasi (Catalog::toggleVote ham shunday):
+// YouTube qoidasi (eski toggle oqimi ham shunday):
 //   · xuddi shu tugma yana bosilsa  -> bekor qilinadi (qator o'chadi);
 //   · qarama-qarshi tugma bosilsa -> almashtiriladi (bitta qator qoladi).
 // Demak bitta odam bitta videoni ham yoqib ham yoqmay qolmaydi.
@@ -54,7 +55,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // --- O'zgartirish (POST)
-$result = $catalog->toggleVote($contentId, $userId, $type);
+// Yangi klientlar ANIQ holatni yuboradi: vote=like|dislike|none. Bu holda
+// qayta yuborish yoki parallel so'rov natijani o'zgartirmaydi (idempotent).
+// `vote` kelmasa, eski keshdagi JS uchun toggle qoidasi saqlanadi.
+$vote = strtolower((string) input('vote', '', 10));
+if (in_array($vote, ['like', 'dislike', 'none'], true)) {
+    $result = $catalog->setVote($contentId, $userId, $vote);
+} else {
+    $result = $catalog->toggleVote($contentId, $userId, $type);
+}
 if (!$result['success']) {
     fail($result['message'] ?? 'Baho muvaffaqiyatsiz');
 }

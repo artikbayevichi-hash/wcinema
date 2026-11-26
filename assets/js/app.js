@@ -1057,7 +1057,8 @@
                 // POST, chunki bu holatni O'ZGARTIRADI. GET da yuborilsa,
                 // brauzer "prefetch" qilib yuborib, tasodifiy yoqish bosishi
                 // mumkin (va CSRF hujjumga ochiq bo'lardi).
-                const r = await api('like.php?id=' + c.id, { method: 'POST' });
+                const vote = likeBtn.classList.contains('on') ? 'none' : 'like';
+                const r = await api('like.php?id=' + c.id + '&vote=' + vote, { method: 'POST' });
                 likeBtn.classList.toggle('on', r.liked);
                 likeBtn.innerHTML = (r.liked ? ICON.heart : ICON.heartOutline) + ' <span>' +
                     (r.likes ? fmtViews(r.likes) : '') + '</span>';
@@ -1084,7 +1085,8 @@
             wBtn.classList.add('busy');
             try {
                 // Xudusi shu sababdan POST (holatni o'zgartiradi)
-                const r = await api('watchlist.php?id=' + c.id, { method: 'POST' });
+                const want = wBtn.classList.contains('on') ? '0' : '1';
+                const r = await api('watchlist.php?id=' + c.id + '&in_watchlist=' + want, { method: 'POST' });
                 wBtn.classList.toggle('on', r.in_watchlist);
                 wBtn.innerHTML = (r.in_watchlist ? ICON.bookmarkOn : ICON.bookmark) + ' Kutubxona';
                 toast(r.in_watchlist ? 'Kutubxonaga qo\'shildi' : 'Kutubxonadan olib tashlandi', 'ok');

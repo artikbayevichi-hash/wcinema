@@ -16,9 +16,12 @@ require_once __DIR__ . '/includes/bootstrap.php';
 $base = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/\\');
 
 // `next` — FAQAT shu sayt ichidagi manzil (ochiq yo'naltirishni oldini olamiz).
+// Kirish sahifalarini `next` qilib berish cheksiz aylanishga olib keladi
+// (`?next=/1stlogin.php?next=...`), shuning uchun ular ham rad etiladi.
 $next = (string) ($_GET['next'] ?? '');
 if ($next === '' || $next[0] !== '/' || strpos($next, '//') === 0
-    || strpos($next, '\\') !== false || strpos($next, $base) !== 0) {
+    || strpos($next, '\\') !== false || strpos($next, $base) !== 0
+    || preg_match('#/(1stlogin|tg-login|logout)\.php(\?|$)#', $next)) {
     $next = $base . '/index.php';
 }
 

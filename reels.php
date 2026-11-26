@@ -306,14 +306,14 @@ if (is_array($initialFeed) && !empty($initialFeed['items'])) {
     window.APP.tgLottie = <?php echo json_encode('assets/vendor/lottie.min.js?v=' . (@filemtime(__DIR__ . '/assets/vendor/lottie.min.js') ?: 1)); ?>;
     // tg-stream.js uni O'ZI o'qiydi (seedInlineMeta) — faqat source='gram'.
     // Kesh bo'lmasa eski api/tg-doc.php yo'li ishveradi.
-    window.__WCDOCMETA = <?php echo json_encode($__inlineDocMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    window.__WCDOCMETA = <?php echo json_encode($__inlineDocMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     window.REELS = {
         userId: <?php echo $userId ? (int) $userId : 'null'; ?>,
-        userName: <?php echo json_encode($user['first_name'] ?? null); ?>,
+        userName: <?php echo json_encode($user['first_name'] ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>,
         openReel: <?php echo $openReel; ?>,
         // 0-RTT oqim: birinchi sahifa API so'rovisiz chiziladi (yuqoriga qarang).
         feedSeed: <?php echo (int) $feedSeed; ?>,
-        initialFeed: <?php echo json_encode($initialFeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>,
+        initialFeed: <?php echo json_encode($initialFeed, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>,
         myStats: <?php echo json_encode($myStats); ?>,
         siteName: <?php echo json_encode(SITE_NAME); ?>,
         maxUploadMb: <?php echo (int) REEL_MAX_UPLOAD_MB; ?>,

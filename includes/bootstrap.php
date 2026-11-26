@@ -126,6 +126,7 @@ $_wcKeepSession = in_array(strtolower(basename((string) ($_SERVER['SCRIPT_FILENA
     'client-session.php',   // logout()/ensureUserFromClient() -> session_destroy()
     'mediaflow-url.php',    // $_SESSION['mediaflow_url_issues'] tezlik cheklovi
     'login.php',            // $_SESSION['login_token']
+    'check_login.php',      // loginWithBotToken() -> session_regenerate_id()
     'logout.php',           // Auth::logout() -> session_destroy()
     'admin-login.php',      // Auth::adminKeyLogin() -> $_SESSION['wc_admin_ok']
     'bot.php',              // Auth::ensureUserFromClient() -> $_SESSION['user_id']

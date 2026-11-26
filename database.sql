@@ -163,6 +163,10 @@ CREATE TABLE IF NOT EXISTS users (
     ban_reason VARCHAR(255) NULL,
     banned_at DATETIME NULL,
     ban_until DATETIME NULL,
+    -- includes/Auth.php kirishda yozadi, migrate-posts.sql esa undan keyin
+    -- is_private ustunini qo'yadi. Bazaga yangidan o'rnatishda yo'q bo'lsa,
+    -- Telegram orqali kirish INSERT'i fail bo'lardi.
+    is_registered TINYINT(1) NOT NULL DEFAULT 0,
     last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -167,26 +167,32 @@ class ClientSessions
         $days  = defined('CLIENT_SESSION_DAYS') ? (int) CLIENT_SESSION_DAYS : self::TTL_DAYS;
         $expTs = $now + (max(1, $days) * 86400);
 
-        if (self::ensure()) {
-            try {
-                self::db()->insert('client_sessions', [
-                    'user_id'      => $userId,
-                    'token_hash'   => hash('sha256', $token),
-                    'created_at'   => date('Y-m-d H:i:s', $now),
-                    'last_used_at' => date('Y-m-d H:i:s', $now),
-                    'expires_at'   => date('Y-m-d H:i:s', $expTs),
-                    'ip'           => substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
-                    'user_agent'   => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
-                ]);
-            } catch (Throwable $e) {
-                error_log('[ClientSessions] issue: ' . $e->getMessage());
-                return '';
-            }
+        // Jadval tayyor bo'lmasa yoki INSERT muvaffaqiyatsiz bo'lsa, cookie
+        // BERMAYMIZ: aks holda API "success" qaytaradi, lekin clientUserId()
+        // bu tokenni hech qachon topolmaydi va foydalanuvchi tizimga kirmaydi.
+        if (!self::ensure()) {
+            error_log('[ClientSessions] issue: jadval yaratilmadi, cookie berilmadi');
+            return '';
+        }
 
-            // Eski (muddati o'tgan) yozuvlarni seyrek tozalaymiz (1%).
-            if (random_int(1, 100) === 1) {
-                self::db()->query("DELETE FROM client_sessions WHERE expires_at < NOW()");
-            }
+        try {
+            self::db()->insert('client_sessions', [
+                'user_id'      => $userId,
+                'token_hash'   => hash('sha256', $token),
+                'created_at'   => date('Y-m-d H:i:s', $now),
+                'last_used_at' => date('Y-m-d H:i:s', $now),
+                'expires_at'   => date('Y-m-d H:i:s', $expTs),
+                'ip'           => substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
+                'user_agent'   => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+            ]);
+        } catch (Throwable $e) {
+            error_log('[ClientSessions] issue: ' . $e->getMessage());
+            return '';
+        }
+
+        // Eski (muddati o'tgan) yozuvlarni seyrek tozalaymiz (1%).
+        if (random_int(1, 100) === 1) {
+            self::db()->query("DELETE FROM client_sessions WHERE expires_at < NOW()");
         }
 
         self::setCookie($token, $expTs);
@@ -196,9 +202,12 @@ class ClientSessions
     /** Cookie'ni o'rnatadi (HttpOnly + SameSite=Lax + HTTPS'da Secure). */
     private static function setCookie($token, $expires)
     {
+        // X-Forwarded-Proto ni ishonchli hisoblay olmaymiz: mijoz uni
+        // soxtalashtirib, oddiy HTTP da Secure cookie qo'yishga majburlashi
+        // yoki teskari holatda HTTPS'da Secure'ni o'chirib qo'yishi mumkin.
         $secure = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
-            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
-            || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+            || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
+            || strpos(SITE_URL, 'https://') === 0;
 
         if (headers_sent()) {
             return;

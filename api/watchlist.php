@@ -42,7 +42,21 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // --- O'zgartirish (POST)
-$result = $catalog->toggleWatchlist($contentId, $userId);
+// Yangi klientlar ANIQ holat yuboradi: in_watchlist=1 yoki 0 (action=add|
+// remove ham qabul qilinadi). Bu qayta yuborishda tasodifan o'chib ketishning
+// oldini oladi. Qiymat kelmasa - eski JS uchun toggle saqlanadi.
+$want = null;
+$in = (string) input('in_watchlist', '', 2);
+if ($in === '1' || $in === '0') {
+    $want = ($in === '1');
+} else {
+    $action = strtolower((string) input('action', '', 8));
+    if ($action === 'add') $want = true;
+    elseif ($action === 'remove') $want = false;
+}
+$result = $want === null
+    ? $catalog->toggleWatchlist($contentId, $userId)
+    : $catalog->setWatchlist($contentId, $userId, $want);
 if (!$result['success']) {
     fail('Watchlistni yangilab bo\'lmadi');
 }

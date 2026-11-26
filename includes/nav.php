@@ -40,7 +40,7 @@ $igIsAdmin  = $auth->isAdmin();
 // Admin panel sahifalarida admin KALITI bilan kirgan bo'lsa, Telegram (MTProto)
 // guard'ini o'tkazib yuboramiz — panel kalit bilan ishlaydi. Oddiy sayt
 // sahifalarida esa guard avvalgidek qoladi.
-$igAdminPage = in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), ['admin-content.php'], true);
+$igAdminPage = in_array(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')), ['admin-content.php', 'admin-reels.php'], true);
 $igLogged   = (bool) $user;
 $igProfileH = 'profile.php';
 $igCreateH  = 'reels-upload.php';

@@ -18,6 +18,9 @@ require_once 'includes/ClientSessions.php';
 $auth = new Auth();
 $auth->logout();
 ClientSessions::revokeCurrent();
+// 30 kunlik admin "qurilma" cookie'si ham bekor qilinishi shart — aks holda
+// chiqishdan keyin Auth::isAdmin() yana admin huquqini qaytaradi.
+$auth->adminCookieClear();
 
 header('Cache-Control: no-store');
 header('Content-Type: text/html; charset=utf-8');
@@ -41,7 +44,8 @@ header('Content-Type: text/html; charset=utf-8');
             'wc_tg_photo_v1',      // avatar (data-URL)
             'wc_tg_dckey_v1',      // DC kalitlari
             'wc_tgweb_v1',
-            'wc_tg_mode_v1'
+            'wc_tg_mode_v1',
+            'wc_avatar_url_v1'     // eski avatar URL keshi
         ];
         try {
             for (var i = 0; i < keys.length; i++) localStorage.removeItem(keys[i]);

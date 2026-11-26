@@ -342,7 +342,29 @@ class Auth {
         $fields['telegram_chat_id'] = $telegramChatId;
         $fields['avatar']    = null;
 
-        $newId = $this->db->insert('users', $fields);
+        // Parallel kirishda ikki so'rov bir xil @username ni tanlashi mumkin:
+        // `username_taken()` tekshiruvi bilan INSERT o'rtasida blok yo'q, DB
+        // UNIQUE esa ikkinchisini rad etadi (insert -> 0). Boshqa jarayon shu
+        // Telegram ID ni yozib ulgurgan bo'lsa — uning foydalanuvchisini olamiz,
+        // aks holdaUsername'ga tasodifiy qo'shimcha bilan qayta urinamiz.
+        $newId = 0;
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            if ($attempt > 0) {
+                $raced = $this->db->fetchOne(
+                    "SELECT id FROM users WHERE telegram_user_id = ? LIMIT 1",
+                    [$telegramId]
+                );
+                if ($raced) {
+                    return (int) $raced['id'];
+                }
+                $fields['username'] = substr($fields['username'], 0, 30)
+                    . '_' . bin2hex(random_bytes(3));
+            }
+            $newId = $this->db->insert('users', $fields);
+            if ($newId) {
+                break;
+            }
+        }
         if (!$newId) {
             error_log('[Auth] users ga yozilmadi');
             return 0;

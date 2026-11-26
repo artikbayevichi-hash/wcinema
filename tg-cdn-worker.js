@@ -1585,13 +1585,15 @@ async function r2Range(doc, start, end, size, known) {
   // `known` bo'lsa — kutmaymiz (birinchi bayt yo'li). Aks holda 500 ms.
   const info = known || await r2InfoSoon(500);
   const di = r2DocInfo(info, doc);
-  if (!di || !di.head) return null;
+  // Faqat dum (moov) oynasi bo'lgan hujjatlar ham foydali: ular qidirish
+  // so'rovlarida Telegram'ga bormaydi. Ikkalasi ham bo'lmasagina chiqamiz.
+  if (!di || (!di.head && !di.tail)) return null;
 
   size = Math.max(0, Number(size) || 0);
   if (size && start >= size) return null;
 
   let last;
-  if (start < di.head) {
+  if (di.head && start < di.head) {
     // Bosh prefiks ichida boshlanadi: davomi Telegram'da.
     last = Math.min(end, di.head, size || end) - 1;
   } else {
@@ -1618,10 +1620,15 @@ async function r2Range(doc, start, end, size, known) {
     clearTimeout(timer);
     if (res.status === 404) { r2MarkMiss(doc); return null; }
     if (res.status === 416) return null;          // prefiks tugadi — Telegram
-    if (!res.ok) return null;
+    // Faqat 206 qabul qilinadi: 200 (to'liq obyekt yoki eski kesh) baytlari
+    // `start` ofsetidan deb qabul qilinsa, qidirish noto'g'ri joydan o'qiladi.
+    if (res.status !== 206) return null;
+    const cr = res.headers.get('Content-Range') || '';
+    const crStart = /^bytes\s+(\d+)-/.exec(cr.trim());
+    if (!crStart || Number(crStart[1]) !== start) return null;
     const buf = await res.arrayBuffer();
     const u8 = new Uint8Array(buf);
-    if (!u8.length) return null;
+    if (!u8.length || u8.length > last - start + 1) return null;
     return u8;
   } catch (e) {
     // Tarmoq xatosi / kutish tugadi — 30 soniya R2 ni chetlab o'tamiz.
@@ -2408,7 +2415,10 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
   let seedBytes = 0;
   let seedSent = false;
   function collectSeed(u8) {
-    if (!seedTarget || seedSent || !u8 || !u8.length) return;
+    // R2/mahalliy prefiks O'QILGAN bo'lsa, bu oqimdagi keyingi baytlar
+    // `off` ofsetidan boshlanadi — ularni `part=head` deb yozish keshni
+    // buzardi. Shuning uchun usedR2 > 0 bo'lganda yig'ish butunlay o'chik.
+    if (r2Seeded || !seedTarget || seedSent || !u8 || !u8.length) return;
     const room = seedTarget - seedBytes;
     if (room <= 0) return;
     const take = u8.length <= room ? u8 : u8.subarray(0, room);
@@ -2435,6 +2445,7 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
   async function produce() {
     try {
       let usedR2 = 0;
+      let r2Seeded = false;
 
       // ---- 0-BOSQICH: R2 prefiksi (bo'lsa) ------------------------------
       // Bu eng katta yutuq: birinchi bayt Telegram DC dan emas, Cloudflare
@@ -2466,6 +2477,9 @@ async function progressiveResponse(size, mime, baseHeaders, t0, duration, docId,
       if (dead) return;
 
       if (usedR2 > 0) {
+        r2Seeded = true;
+        seedTarget = 0;                 // R2 allaqachon bosh oynani bergan
+        seedParts = []; seedBytes = 0;
         STATS.r2++;
         STATS.requests++;
         say('⚡ prefiks ' + (usedR2 / 1048576).toFixed(1) + ' MB — Telegram kutishisiz');

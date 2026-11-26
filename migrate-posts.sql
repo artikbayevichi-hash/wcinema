@@ -74,6 +74,19 @@ CREATE TABLE IF NOT EXISTS `reel_media` (
       REFERENCES `reels` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- --------------------------------------- 3) users.is_registered (zaxira)
+-- Eski o'rnatishlarda bu ustun database.sql da yo'q edi, lekin Auth.php
+-- uni yozadi va pastdagi is_private ALTER undan keyin qo'yiladi. Yangi
+-- bazalarda database.sql allaqachon qo'shgan — bu blok hech narsa qilmaydi.
+SET @has := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'is_registered'
+);
+SET @sql := IF(@has = 0,
+  "ALTER TABLE `users` ADD COLUMN `is_registered` TINYINT(1) NOT NULL DEFAULT 0 AFTER `ban_until`",
+  'DO 0');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
 -- ------------------------------------------------- 3) users.is_private
 SET @has := (
   SELECT COUNT(*) FROM information_schema.COLUMNS

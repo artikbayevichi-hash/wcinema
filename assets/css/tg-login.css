@@ -104,8 +104,8 @@ html.tgl-day .tgl-blob.b3 { background: #f2f2f2; }
 /* ---- mavzu tugmasi (Web K: o'ng yuqori burchak) --------------------------- */
 .tgl-theme {
   position: fixed;
-  top: 24px;
-  right: 24px;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
   z-index: 10;
   width: 44px;
   height: 44px;

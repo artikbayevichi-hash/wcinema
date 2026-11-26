@@ -30,6 +30,7 @@
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/ServerTiming.php';
 require_once __DIR__ . '/../includes/PrefixStore.php';
+require_once __DIR__ . '/../includes/PrefixSecret.php';
 ServerTiming::init('wc-r2', 'r2 info resolve');
 
 // ------------------------------------------------------------------ sozlama
@@ -64,13 +65,9 @@ $pxTail    = max(0, min(64 * 1024 * 1024, $pxTail));
 $pxHead   -= $pxHead % 4096;
 $pxTail   -= $pxTail % 4096;
 
-$pxSecret = r2_env('PREFIX_SECRET', '');
-if ($pxSecret === '') {
-    $pxSecret = $r2Secret;
-}
-if ($pxSecret === '' && defined('ADMIN_PANEL_KEY')) {
-    $pxSecret = (string) ADMIN_PANEL_KEY;
-}
+// ADMIN_PANEL_KEY admin cookie'larini imzolaydi — ochiq `info=1` javobidagi
+// HMAC orqali uni tiklash mumkin edi. Alohida kalit ishlatamiz.
+$pxSecret = PrefixSecret::get();
 
 /** storage/prefix/manifest.json — muddati tugaganlar ko'rsatilmaydi. */
 function px_manifest()

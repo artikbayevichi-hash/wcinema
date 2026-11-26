@@ -113,10 +113,12 @@ if ($item) {
     // keyin birinchi mavjud qism yoki butun film (kontentning o'zida
     // video_url bo'lishi mumkin).
     $eMatched = false;
+    $byId     = false;
     foreach ($episodes as $e) {
         if ((int) $e['id'] === $eId) {
             $selected = $e;
             $eMatched = true;
+            $byId     = true;
             break;
         }
     }
@@ -139,12 +141,16 @@ if ($item) {
        yo'naltiramiz. Shu bilan "Ulashish", "orqaga" va qism
        almashgandagi `pushState` bitta xil ko'rinishga ega bo'ladi
        (hamda `?e=`/`?ep=` chalkashligi butun sayt bo'ylab yo'qoladi). */
-    if ($selected && $eReq > 0 && !$eMatched) {
+    if ($selected && $eReq > 0 && (!$byId || (int) $selected['id'] !== $eReq)) {
         // Skript yo'li (`watch.php`) yoki atribut/proksi (`/watch.php`) -
-        // nima bo'lsa ham o'shandan foydalanamiz.
+        // nima bo'lsa ham o'shandan foydalanamiz. Qolgan parametrlar
+        // (`boot`, UTM, klip) saqlanadi, faqat `ep` o'rniga `e` qo'yiladi.
         $self = explode('?', (string) ($_SERVER['REQUEST_URI'] ?? '/watch.php'), 2)[0];
-        $qs   = 'c=' . (int) $item['id'] . '&e=' . (int) $selected['id'];
-        header('Location: ' . $self . '?' . $qs, true, 302);
+        $qs   = $_GET;
+        unset($qs['ep']);
+        $qs['c'] = (int) $item['id'];
+        $qs['e'] = (int) $selected['id'];
+        header('Location: ' . $self . '?' . http_build_query($qs), true, 302);
         exit;
     }
     // Oqim HAQIQIY episodes qatoridan olinadi (`is_premium`, 1080p/720p

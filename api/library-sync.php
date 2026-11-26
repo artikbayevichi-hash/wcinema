@@ -11,9 +11,9 @@
 //   GET  -> serverdagi holat (liked / saved / history)
 //   POST -> mahalliy o'zgarishlarni QO'SHIB yozish + kanonik holatni qaytarish
 //
-// Muhim: toggleVote() / toggleWatchlist() ishlatilmaydi — ular "allaqachon
-// bor" qatorni O'CHIRADI va like uchun muallifga bildirishnoma yuboradi.
-// Bu yerda faqat idempotent union yozuvlar bor.
+// Muhim: bu endpoint toggleVote()/toggleWatchlist() ni chaqirmaydi — ular
+// eski keshdagi JS uchun saqlangan. Bu yerda faqat idempotent union yozuvlar
+// bor (qayta yuborish holatni teskarisiga o'zgartirmaydi).
 // ============================================================================
 require_once __DIR__ . '/../includes/bootstrap.php';
 

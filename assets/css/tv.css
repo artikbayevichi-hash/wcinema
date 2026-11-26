@@ -58,8 +58,8 @@
     /* Yig'ilgan yon panel: faqat ikonkalar qoladi, kontent kengayadi. */
     .tv-mode .ig-side-collapse { display: flex !important; }
     html.tv-mode.tv-side-collapsed .ig-side { width: 76px !important; }
-    html.tv-mode.tv-side-collapsed.ig-shell { padding-left: 76px; }
-    html.tv-mode.tv-side-collapsed.reels-body .reels-top { left: 76px; }
+    html.tv-mode.tv-side-collapsed body.ig-shell { padding-left: 76px; }
+    html.tv-mode.tv-side-collapsed body.reels-body .reels-top { left: 76px; }
     html.tv-mode.tv-side-collapsed .ig-side .ig-txt,
     html.tv-mode.tv-side-collapsed .ig-side .ig-caret,
     html.tv-mode.tv-side-collapsed .ig-side .ig-brand-text,

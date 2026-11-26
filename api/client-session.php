@@ -51,6 +51,23 @@ if ($method !== 'POST') {
     fail('GET yoki POST kerak', 405);
 }
 
+// LOGIN CSRF: brauzer POST so'rovida `Origin` bo'lsa, u faqat O'Z origin
+// bo'lishi shart. Aks holda begona saytdan yuborilgan forma sessiya cookie'sini
+// jabrlanuvchiga "qo'lda" qo'yib qo'yishi (login CSRF) mumkin.
+// `Origin` yo'q bo'lsa (server-to-server / eski klient) rad etmaymiz.
+$__origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+if ($__origin !== '') {
+    $__oh = parse_url($__origin, PHP_URL_HOST);
+    $__ph = parse_url(SITE_URL, PHP_URL_HOST);
+    $__hh = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    $__hh = preg_replace('/:\d+$/', '', $__hh);
+    if (!$__oh || (strtolower($__oh) !== strtolower((string) $__ph)
+            && strtolower($__oh) !== strtolower($__hh))) {
+        fail('Noto\'g\'ri so\'rov manbai', 403);
+    }
+}
+unset($__origin, $__oh, $__ph, $__hh);
+
 // ------------------------------------------------------------------ LOGOUT
 if ($action === 'logout') {
     ClientSessions::revokeCurrent();
@@ -67,8 +84,14 @@ if ($action !== 'issue') {
 $uid = 0;
 $how = '';
 
+// Imzolangan/bir martalik ma'lumotlar FAQAT POST body'dan o'qiladi. URL orqali
+// yuborilsa, ular brauzer tarixi, server log'lari va referer'da qoladi.
+if (isset($_GET['initData']) || isset($_GET['login_token']) || isset($_GET['tg_me'])) {
+    fail('Ma\'lumotlar POST body da yuborilishi shart', 400);
+}
+
 // 1) Telegram Mini App initData (imzolangan) -------------------------------
-$initData = (string) ($_POST['initData'] ?? $_GET['initData'] ?? '');
+$initData = (string) ($_POST['initData'] ?? '');
 if ($initData !== '' && strlen($initData) <= 8192) {
     $tg = new TelegramBot();
     if ($tg->validateInitData($initData) === true) {
@@ -83,16 +106,27 @@ if ($initData !== '' && strlen($initData) <= 8192) {
 
 // 2) Bot tasdiqlagan bir martalik token ------------------------------------
 if ($uid <= 0) {
-    $loginToken = preg_replace('/[^a-f0-9]/', '', strtolower((string) input('login_token', '', 128)));
+    $loginToken = preg_replace('/[^a-f0-9]/', '', strtolower((string) ($_POST['login_token'] ?? '')));
+    $loginToken = substr($loginToken, 0, 128);
     if (strlen($loginToken) >= 32) {
         $db  = Database::getInstance();
-        $row = $db->fetchOne(
-            "SELECT * FROM telegram_login_tokens
-              WHERE token = ? AND consumed = 0 AND expires_at > NOW() LIMIT 1",
+        // ATOMIK: avval SELECT qilib, keyin UPDATE qilsak, ikki parallel so'rov
+        // bir tokenni ikki marta ishlatishi mumkin edi. Shartli UPDATE faqat
+        // bitta so'rovga "consumed=1" qaytaradi (rowCount === 1).
+        $claimed = $db->query(
+            "UPDATE telegram_login_tokens SET consumed = 1
+              WHERE token = ? AND consumed = 0 AND expires_at > NOW()",
             [$loginToken]
         );
+        if ($claimed && $claimed->rowCount() === 1) {
+            $row = $db->fetchOne(
+                "SELECT * FROM telegram_login_tokens WHERE token = ? LIMIT 1",
+                [$loginToken]
+            );
+        } else {
+            $row = null;
+        }
         if ($row && !empty($row['telegram_id'])) {
-            $db->update('telegram_login_tokens', ['consumed' => 1], 'token = ?', [$loginToken]);
             $uid = (int) $auth->ensureUserFromClient([
                 'id'         => (string) $row['telegram_id'],
                 'first_name' => $row['first_name'] ?? 'User',
@@ -106,7 +140,7 @@ if ($uid <= 0) {
 
 // 3) Vaqtinchalik moslik rejimi (faqat TG_TRUST_CLIENT_ID=1) ---------------
 if ($uid <= 0 && TG_TRUST_CLIENT_ID) {
-    $raw = (string) ($_POST['tg_me'] ?? $_GET['tg_me'] ?? '');
+    $raw = (string) ($_POST['tg_me'] ?? '');
     if ($raw !== '' && $raw[0] === '{') {
         $tg = json_decode($raw, true);
         if (is_array($tg) && !empty($tg['id']) && ctype_digit((string) $tg['id'])) {
@@ -131,9 +165,16 @@ if ($token === '') {
     fail('Sessiya yaratilmadi', 500);
 }
 
+// Tokenni O'ZIDA loglamaymiz. Oddiy ish jarayoni xato log'iga yozilmasin:
+// faqat APP_DEBUG yoqilganda kuzatish uchun qoldiramiz.
+if (defined('APP_DEBUG') && APP_DEBUG) {
+    error_log('[client-session] issue uid=' . $uid . ' method=' . $how
+        . ' ip=' . substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45));
+}
+
 ok([
     'user_id'      => $uid,
     'reused'       => false,
     'method'       => $how,
-    'expires_days' => ClientSessions::TTL_DAYS,
+    'expires_days' => defined('CLIENT_SESSION_DAYS') ? CLIENT_SESSION_DAYS : ClientSessions::TTL_DAYS,
 ]);

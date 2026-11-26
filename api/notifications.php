@@ -63,6 +63,16 @@ if ($method !== 'POST') {
     fail('POST so‘raladi', 405);
 }
 
+// Boshqa saytdan yuborilgan POST (CSRF) bildirishnoma yozmasligi kerak.
+$__origin = strtolower(trim((string) ($_SERVER['HTTP_ORIGIN'] ?? '')));
+if ($__origin !== '') {
+    $__oh = strtolower((string) parse_url($__origin, PHP_URL_HOST));
+    $__rh = strtolower(preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? '')));
+    if ($__oh === '' || $__oh !== $__rh) {
+        fail('Noto\'g\'ri Origin', 403);
+    }
+}
+
 $action = input('action', '', 20);
 
 // ---------------------------------------------------------------------------
@@ -107,6 +117,7 @@ if ($action === 'report') {
     if ($userId <= 0) {
         fail('Avval tizimga kiring', 401);
     }
+    RateLimit::enforce('ntf-report-' . $userId, 30, 60);
 
     $reelId = inputInt('reel_id');
     if ($reelId <= 0) {

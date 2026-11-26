@@ -1178,6 +1178,23 @@ class Catalog {
      */
     public function toggleVote($contentId, $userId, $type = 'like') {
         $type = ((string) $type === 'dislike') ? 'dislike' : 'like';
+        $existing = $this->voteRow($userId, $contentId);
+        // Eski chaqiruvchilar uchun: xuddi shu tugma yana bosilsa -> none.
+        $vote = ($existing && (string) $existing['type'] === $type) ? 'none' : $type;
+        return $this->setVote($contentId, $userId, $vote);
+    }
+
+    /**
+     * Idempotent baho: `vote` = like | dislike | none.
+     * Bir xil so'rov qayta yuborilsa yoki ikki so'rov parallel kelsa ham
+     * natija bir xil bo'ladi (eskisicha toggle qilsa holat teskarisiga
+     * o'zgarib ketardi).
+     */
+    public function setVote($contentId, $userId, $vote) {
+        $vote = (string) $vote;
+        if (!in_array($vote, ['like', 'dislike', 'none'], true)) {
+            return ['success' => false, 'message' => 'Noto\'g\'ri baho'];
+        }
 
         $item = $this->getContent($contentId);
         if (!$item) {
@@ -1185,35 +1202,37 @@ class Catalog {
         }
 
         $existing = $this->voteRow($userId, $contentId);
+        $changedToLike = false;
 
-        // --- xuddi shu tugma yana bosildi -> bekor qilish ---------------
-        if ($existing && (string) $existing['type'] === $type) {
-            $this->db()->query("DELETE FROM likes WHERE id = ?", [$existing['id']]);
+        if ($vote === 'none') {
+            if ($existing) {
+                $this->db()->query("DELETE FROM likes WHERE id = ?", [$existing['id']]);
+            }
             return $this->voteResult($contentId, $userId);
         }
 
-        // --- qarama-qarshi tugma -> qatorni ALMASHISH --------------------
-        // (INSERT yo'q, UPDATE bor - shuning uchun bildirishnoma ham bir marta
-        //  chiqadi va eski turi bilan emas, YANGI turi bilan yuboriladi.)
         if ($existing) {
-            $this->db()->query(
-                "UPDATE likes SET type = ? WHERE id = ?",
-                [$type, $existing['id']]
-            );
+            $changedToLike = ((string) $existing['type'] !== $vote) && $vote === 'like';
+            if ((string) $existing['type'] !== $vote) {
+                $this->db()->query(
+                    "UPDATE likes SET type = ? WHERE id = ?",
+                    [$vote, $existing['id']]
+                );
+            }
         } else {
             $ok = $this->db()->insert('likes', [
                 'user_id'    => (int) $userId,
                 'content_id' => (int) $contentId,
-                'type'       => $type,
+                'type'       => $vote,
             ]);
             if (!$ok) {
                 return ['success' => false, 'message' => 'Baho saqlanmadi'];
             }
+            $changedToLike = ($vote === 'like');
         }
 
-        // Muallifga xabar. Faqat YOQISH haqida - "yoqmadi" xabarsiz qoladi,
-        // aks holda har bir manfiy baho muallifga yozish yuborardi.
-        if ($type === 'like' && !empty($item['user_id'])
+        // Muallifga faqat YANGI like haqida xabar (qayta yuborishda yo'q).
+        if ($changedToLike && !empty($item['user_id'])
             && (int) $item['user_id'] !== (int) $userId) {
             $this->db()->insert('notifications', [
                 'user_id'    => (int) $item['user_id'],
@@ -1297,16 +1316,22 @@ class Catalog {
     }
 
     public function toggleWatchlist($contentId, $userId) {
-        $existing = $this->db()->fetchOne(
-            "SELECT id FROM watchlist WHERE user_id = ? AND content_id = ? LIMIT 1",
-            [(int) $userId, (int) $contentId]
-        );
+        return $this->setWatchlist($contentId, $userId, !$this->inWatchlist($userId, $contentId));
+    }
 
-        if ($existing) {
-            $this->db()->query("DELETE FROM watchlist WHERE id = ?", [$existing['id']]);
+    /** Idempotent saqlash: `on`=true qo'shadi (agar yo'q bo'lsa), false o'chiradi. */
+    public function setWatchlist($contentId, $userId, $on) {
+        $on = (bool) $on;
+        if (!$on) {
+            $this->db()->query(
+                "DELETE FROM watchlist WHERE user_id = ? AND content_id = ?",
+                [(int) $userId, (int) $contentId]
+            );
             return ['success' => true, 'in_watchlist' => false];
         }
-
+        if ($this->inWatchlist($userId, $contentId)) {
+            return ['success' => true, 'in_watchlist' => true];
+        }
         $ok = $this->db()->insert('watchlist', [
             'user_id'    => (int) $userId,
             'content_id' => (int) $contentId,
@@ -1564,7 +1589,10 @@ class Catalog {
             return $items;
         }
         $ids  = array_values($ids);
-        $in   = implode(',', $ids);
+        // `$args` da viewerId + barcha ID'lar bor: SQL da shuncha `?` bo'lishi
+        // shart. Ilgari literal ID'lar yozilardi — PDO HY093 berib, barcha
+        // like/dislike/watchlist belgilarini jimora o'chirardi.
+        $in   = implode(',', array_fill(0, count($ids), '?'));
         $args = array_merge([$viewerId], $ids);
 
         $liked = $disliked = $saved = [];

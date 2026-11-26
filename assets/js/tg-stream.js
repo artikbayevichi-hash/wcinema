@@ -449,6 +449,12 @@
   var siteActive = true;
 
   function fastClient() {
+    // GramJS tirik bo'lsa yoki ulanish jarayonida bo'lsa, bir xil auth_key
+    // ustida ikkinchi sessiya ochish AUTH_KEY_DUPLICATED beradi va butun
+    // sessiya o'chadi. fastFallback() ham eski klientni yopib qo'yadi —
+    // undan keyin qayta yaratish ham xavfli. Barcha chaqiruvchilarning
+    // (metadata, doc refresh, bfcache) GramJS zaxira yo'li bor.
+    if (S.client || S.connecting || S.fastBroken) return null;
     if (fastClientPromise !== null) return fastClientPromise;
     fastClientPromise = (function () {
       try {
@@ -486,6 +492,10 @@
   // parse qilinishi bilan PARALLEL ketadi. Video bosilganda ulanish allaqachon
   // tayyor bo'ladi (~150–300 ms tejaladi).
   function warmFast() {
+    // Sahifadan chiqilgan bo'lsa yoki tez yo'l allaqachon GramJS'ga
+    // o'tkazib yuborilgan bo'lsa, yangi socket ochmaymiz (ikki parallel
+    // sessiya AUTH_KEY_DUPLICATED xavfi).
+    if (!siteActive || S.fastBroken) return;
     var f = fastClient();
     if (!f) return;
     try { f.warm().catch(function () {}); } catch (e) {}
@@ -1477,7 +1487,7 @@
   function kaTick(force) {
     try {
       if (!siteActive) return;              // sahifadan chiqilgan — ping YO'Q
-      if (!force && document.hidden) return;
+      if (document.hidden) return;          // yashirin tab — 60–90 s ping YO'Q
       if (kaBusy) return;
       kaBusy = true;
       kaPingGram();

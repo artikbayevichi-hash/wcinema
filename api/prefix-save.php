@@ -19,6 +19,7 @@ define('WC_NO_SESSION', 1);
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../includes/PrefixStore.php';
+require_once __DIR__ . '/../includes/PrefixSecret.php';
 
 @set_time_limit(0);
 header('Content-Type: application/json; charset=utf-8');
@@ -53,13 +54,7 @@ if ($doc === '' || strlen($doc) > 20 || $size < 1024 * 1024
     pxsv_fail(400, 'Noto\'g\'ri doc/size/part');
 }
 
-$secret = (string) env_value('PREFIX_SECRET', '');
-if ($secret === '') {
-    $secret = (string) env_value('R2_SIGN_SECRET', '');
-}
-if ($secret === '' && defined('ADMIN_PANEL_KEY')) {
-    $secret = (string) ADMIN_PANEL_KEY;
-}
+$secret = PrefixSecret::get();
 if ($secret === '') {
     pxsv_fail(503, 'prefiks imzosi sozlanmagan');
 }

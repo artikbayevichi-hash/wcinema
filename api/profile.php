@@ -52,7 +52,11 @@ if ($userId && !$isMe && $blocks->isBlockedBetween($userId, $profileId)) {
 // Maxfiylik: `is_private` profil — faqat kuzatuvchilar ko'radi.
 $canView = true;
 if (!$isMe) {
-    $canView = $blocks->canViewProfileSafe($profileId, $userId ?: null);
+    // `canViewProfileSafe()` massiv qaytaradi: ['ok'=>bool,'reason'=>string].
+    // Massivni to'g'ridan-to'g'ri truthy deb olish maxfiy profillarni ochib
+    // qo'yardi — faqat `ok` maydoniga qaraymiz.
+    $access = $blocks->canViewProfileSafe($profileId, $userId ?: null);
+    $canView = is_array($access) ? !empty($access['ok']) : (bool) $access;
 }
 
 // ===========================================================================
