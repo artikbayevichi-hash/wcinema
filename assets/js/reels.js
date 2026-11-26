@@ -54,6 +54,20 @@
         return params;
     }
 
+    // Ovoz afzalligi player.js / tg-stream.js bilan umumiy. Faqat aniq
+    // foydalanuvchi harakati yozadi; autoplay rad etishi hech qachon yozilmaydi.
+    function audioMuted() {
+        if (window.WcAudio && window.WcAudio.isMuted) return window.WcAudio.isMuted();
+        try { return localStorage.getItem('udp_muted_user') === '1'; } catch (e) { return false; }
+    }
+    function rememberAudioMuted(muted) {
+        if (window.WcAudio && window.WcAudio.setMuted) return window.WcAudio.setMuted(muted);
+        try {
+            localStorage.setItem('udp_muted_user', muted ? '1' : '0');
+            localStorage.setItem('udp_muted', muted ? '1' : '0');
+        } catch (e) {}
+    }
+
     // ------------------------------------------------ SVG ikonkalar (kontur)
     // Instagram'ning joriy reels to'plami: heart, bubble, repost, plane,
     // bookmark, 3 nuqta + audio/volume/more amallari uchun qo'shimchalar.
@@ -970,6 +984,7 @@
                 const b = el.querySelector('.reels-speed');
                 if (b) b.textContent = rate + '×';
             } else if (holdWasPlaying) {
+                if (!audioMuted()) v.muted = false;
                 v.play().catch(() => {});
             }
         }
@@ -995,7 +1010,12 @@
                 tapTimer = null;
                 const v = media.querySelector('video');
                 if (!v) return;
-                if (v.paused) v.play().catch(() => {}); else v.pause();
+                if (v.paused) {
+                    // Foydalanuvchi bosdi — bu "user gesture". Autoplay uchun
+                    // vaqtincha o'chirilgan ovozni faqat o'zi o'chirmagan bo'lsa qaytaramiz.
+                    if (!audioMuted()) v.muted = false;
+                    v.play().catch(() => {});
+                } else v.pause();
             }, 260);
         });
 
@@ -1036,10 +1056,13 @@
 
         // ---- mute
         const mute = el.querySelector('.reels-mute');
-        if (mute) mute.onclick = () => {
+        if (mute) mute.onclick = (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
             const v = el.querySelector('video');
             if (!v) return;
-            v.muted = !v.muted;
+            const next = !v.muted;
+            v.muted = next;
+            rememberAudioMuted(next);
             syncMute(el);
         };
         syncMute(el);

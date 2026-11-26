@@ -50,6 +50,20 @@
     memKey: 'wc_mtproto_auth_v1'
   };
 
+  // Ovoz holatining yagona manbai. `udp_muted` eski kalit bo'lib, avtomatik
+  // o'ynash xatosida ham yozilgani uchun ishonchsiz — faqat shu yangi kalit
+  // foydalanuvchining aniq tanlovini saqlaydi.
+  function audioPrefMuted() {
+    try { return global.localStorage.getItem('udp_muted_user') === '1'; } catch (e) { return false; }
+  }
+  function setAudioPrefMuted(muted) {
+    try {
+      global.localStorage.setItem('udp_muted_user', muted ? '1' : '0');
+      global.localStorage.setItem('udp_muted', muted ? '1' : '0');
+    } catch (e) {}
+  }
+  global.WcAudio = { isMuted: audioPrefMuted, setMuted: setAudioPrefMuted };
+
   // DIQQAT: `window.APP` ni SKRIPT YUKLANISHI VAQTIDA emas, har chaqirganda
   // jonli o'qib turamiz. Aks holda skript `window.APP` dan KEYIN yuklansa,
   // barcha manzillar bo'sh qoladi ('/tgfile/' -> 'tgfile/') va API kalitlari
@@ -4551,27 +4565,38 @@
   // sahifalar uchun: avtomatik o'ynatish (avval jim, keyin ovozni ochish)
   // va bosilganda pauza/play. Index.php'da UDP bor — u yerda chaqirilmaydi.
   function attachNativeFallback(v) {
-    if (!v) return;
-    v.style.cursor = 'pointer';
-    v.addEventListener('click', function () {
-      if (v.paused) {
-        // Foydalanuvchi bosdi — bu "user gesture", ovozni ochib o'ynatamiz.
-        v.muted = false;
-        var rp = v.play();
-        if (rp && rp.catch) rp.catch(function () { /* jim */ });
-      } else {
-        v.pause();
-      }
-    });
+    if (!v || v.dataset.wcFallback === '1') return;
+    v.dataset.wcFallback = '1';
+    // Reels sahifasida bosish/ikki bosish/us hlab turish reels.js da bog'langan.
+    // Bu yerdagi ikkinchi click handler ularni bir-biriga qarshi o'zgartirib,
+    // ovozni qayta-qayta o'chirib qo'yardi.
+    var inReels = !!(v.closest && v.closest('.reels-media'));
+    if (!inReels) {
+      v.style.cursor = 'pointer';
+      v.addEventListener('click', function () {
+        if (v.paused) {
+          // Foydalanuvchi bosdi — bu "user gesture", ovozni ochib o'ynatamiz
+          // (agar u o'zi o'chirmagan bo'lsa).
+          if (!audioPrefMuted()) { try { v.muted = false; } catch (e) {} }
+          var rp = v.play();
+          if (rp && rp.catch) rp.catch(function () { /* jim */ });
+        } else {
+          v.pause();
+        }
+      });
+    }
     var kick = function () {
       if (!v.paused) return;
       // Avval JIM o'ynatamiz — ovozli avtomatik o'ynash ko'p brauzerlarda
-      // bloklanadi. Boshlangach ovozni ochamiz.
+      // bloklanadi. Boshlangach ovozni ochamiz. Rad etilsa ham "doimiy jim"
+      // deb saqlamaymiz: keyingi video yoki bosish ovozni qaytaradi.
+      var prefMuted = audioPrefMuted();
       v.muted = true;
       var p = v.play();
       if (p && p.then) {
-        p.then(function () { try { v.muted = false; } catch (e) {} })
-         .catch(function () { /* jim qoladi — bosilganda ochiladi */ });
+        p.then(function () {
+          if (!prefMuted) { try { v.muted = false; } catch (e) {} }
+        }).catch(function () { /* faqat bu urinish jim qoladi */ });
       }
     };
     kick();

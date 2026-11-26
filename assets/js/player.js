@@ -23,6 +23,19 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         cc: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" aria-hidden="true" viewBox="0 0 18 18" class="media-icon media-icon--captions-off"><rect width="16" height="12" x="1" y="3" stroke="currentColor" stroke-width="2" rx="3"></rect><rect width="3" height="2" x="3" y="8" fill="currentColor" rx="1"></rect><rect width="2" height="2" x="13" y="8" fill="currentColor" rx="1"></rect><rect width="4" height="2" x="11" y="11" fill="currentColor" rx="1"></rect><rect width="5" height="2" x="7" y="8" fill="currentColor" rx="1"></rect><rect width="7" height="2" x="3" y="11" fill="currentColor" rx="1"></rect></svg>'
     };
 
+    // Ovoz afzalligi FAQAT foydalanuvchi tugma/slider orqali o'zgartiriladi.
+    // Eski `udp_muted` avtomatik o'ynash bloklanganda ham yozilgani uchun
+    // ishonchsiz: bir marta bloklansa keyingi barcha videolar jim qolardi.
+    function audioPrefMuted() {
+        try { return localStorage.getItem('udp_muted_user') === '1'; } catch (e) { return false; }
+    }
+    function rememberAudioPref(muted) {
+        try {
+            localStorage.setItem('udp_muted_user', muted ? '1' : '0');
+            localStorage.setItem('udp_muted', muted ? '1' : '0'); // eski o'quvchilar uchun
+        } catch (e) {}
+    }
+
     function parseConfig(root) {
         try {
             return JSON.parse(root.dataset.udpConfig || '{}');
@@ -435,14 +448,14 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
 
         /* ================= Video controls ================= */
         var lastSavedVolume = 1;
-        var isMuted = false;
+        var isMuted = audioPrefMuted();   // faqat foydalanuvchi tanlagan holat
         var isDraggingSeek = false;
         var isDraggingVol = false;
+        var soundGestureArmed = false;
 
         try {
             var savedVol = parseFloat(localStorage.getItem('udp_volume') || '1');
             if (!isNaN(savedVol)) { lastSavedVolume = Math.max(0, Math.min(1, savedVol)); }
-            isMuted = localStorage.getItem('udp_muted') === '1';
         } catch (e) {}
 
         video.volume = lastSavedVolume;
@@ -482,16 +495,38 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             var v = video.muted ? 0 : video.volume;
             volFill.style.width = (v * 100) + '%';
         }
+        // Avtomatik o'ynash uchun vaqtinchalik o'chirilgan ovozni qaytaramiz.
+        // Foydalanuvchi o'zi o'chirgan bo'lsa — tegmaimiz.
+        function restoreSound() {
+            if (isMuted) return false;
+            try { video.muted = false; } catch (e) {}
+            isMuted = false;
+            updateVolumeUI();
+            return !video.muted;
+        }
+        // Ba'zi brauzerlar gesture'siz unmute qilganda ovozni yana o'chiradi.
+        // Birinchi real bosish/klavishda qayta urinamiz (faqat tanlov yo'q bo'lsa).
+        function armSoundGesture() {
+            if (isMuted || soundGestureArmed || !document.addEventListener) return;
+            soundGestureArmed = true;
+            var wake = function () {
+                document.removeEventListener('pointerdown', wake, true);
+                document.removeEventListener('keydown', wake, true);
+                soundGestureArmed = false;
+                if (!isMuted && video.muted) restoreSound();
+            };
+            document.addEventListener('pointerdown', wake, true);
+            document.addEventListener('keydown', wake, true);
+        }
         function setVolume(v) {
             v = Math.max(0, Math.min(1, v));
             video.volume = v;
             if (v > 0) { video.muted = false; }
             if (v > 0) lastSavedVolume = v;
+            isMuted = !!video.muted;
             updateVolumeUI();
-            try {
-                localStorage.setItem('udp_volume', String(lastSavedVolume));
-                localStorage.setItem('udp_muted', video.muted ? '1' : '0');
-            } catch (e) {}
+            try { localStorage.setItem('udp_volume', String(lastSavedVolume)); } catch (e) {}
+            rememberAudioPref(isMuted);
         }
         function toggleMute() {
             if (video.volume === 0) {
@@ -500,8 +535,9 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             } else {
                 video.muted = !video.muted;
             }
+            isMuted = !!video.muted;
             updateVolumeUI();
-            try { localStorage.setItem('udp_muted', video.muted ? '1' : '0'); } catch (e) {}
+            rememberAudioPref(isMuted);
         }
 
         function togglePlay() {
@@ -715,7 +751,10 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
         video.addEventListener('timeupdate', function () { updateTime(); updateSeek(); updateSkip(); });
         video.addEventListener('progress', updateBuffer);
         video.addEventListener('durationchange', function () { updateTime(); updateSeek(); });
-        video.addEventListener('volumechange', updateVolumeUI);
+        video.addEventListener('volumechange', function () {
+            updateVolumeUI();
+            if (!isMuted && video.muted) armSoundGesture();
+        });
 
         /* ================= Buffering ================= */
         var loadingT = null;
@@ -1192,28 +1231,25 @@ window.ROOT_URL = window.ROOT_URL || (window.APP && window.APP.base) || '/tele_u
             video.removeEventListener('canplay', onCanPlay);
             if (resumeAt > 5) return;
             if (!video.paused) return;
-            // Brauzer autoplay cheklovi ovozli videoni avtomatik boshlashni bloklaydi.
-            // Shu sabab avval MUTED holda boshlaymiz, keyin ovozni ochishga urinamiz.
-            var userMuted = false;
-            try { userMuted = localStorage.getItem('udp_muted') === '1'; } catch (e) {}
+            // Brauzer autoplay cheklovi ovozli videoni bloklaydi: avval JIM
+            // boshlaymiz. Bu faqat vaqtinchalik holat — foydalanuvchi tanlovi
+            // (`isMuted`) o'zgarmaydi va hech qayeriga "doimiy jim" deb yozilmaydi.
             video.muted = true;
+            updateVolumeUI();
             var p = video.play();
             if (p && p.then) {
                 p.then(function () {
-                    // Muted holda muvaffaqiyatli boshlandi — ovozni ochamiz
-                    if (!userMuted) {
-                        video.muted = false;
-                        isMuted = false;
-                        if (muteBtn) muteBtn.innerHTML = ICONS.volOn;
-                    }
+                    // Muted holda boshlandi — ovozni ochamiz. Brauzer yana
+                    // o'chirib qo'ysa, birinchi bosishda qayta urinadi.
+                    if (!restoreSound()) armSoundGesture();
                 }).catch(function () {
-                    // Hali ham bloklandi — muted tursin, foydalanuvchi bosganda ochiladi
-                    if (!userMuted) {
-                        try { localStorage.setItem('udp_muted', '1'); } catch (e2) {}
-                    }
+                    // Bu safar autoplay rad etildi. Video jim qoladi, LEKIN
+                    // bu foydalanuvchi afzalligi emas — keyingi videoga ta'sir qilmaydi.
+                    updateVolumeUI();
+                    armSoundGesture();
                 });
             } else if (p !== undefined) {
-                if (!userMuted) { video.muted = false; isMuted = false; if (muteBtn) muteBtn.innerHTML = ICONS.volOn; }
+                if (!restoreSound()) armSoundGesture();
             }
         });
 
