@@ -22,9 +22,10 @@
  *                     tez, sifat yo'qotilmaydi. MKV/AVI/TS/MOV uchun.
  *   3) QAYTA KODLASH (transcode) — konteyner ham, kodek ham begona.
  *                     WebCodecs orqali (apparat tezligida).
- *   4) FALLBACK — hech qanday kodlash mumkin bo'lmasa, ffmpeg.wasm
- *                    (dasturiy). Sekin, lekin HECH QACHON "ochilmaydi"
- *                    degan javob qolmaydi.
+ *   4) FALLBACK — video YOKI ovoz kodlanishga yaramasa, ffmpeg.wasm
+ *                    (dasturiy). Sekin, lekin ovoz hech qachon jimgina
+ *                    tashlab yuborilmaydi va "ochilmaydi" degan javob
+ *                    qolmaydi.
  *
  * MUHIM: butun oqim BRAUZER ichida. Video baytlari Telegram CDN dan
  * to'g'ridan-to'g'ri foydalanuvchi brauzeriga oqadi. Sayt serveri
@@ -470,14 +471,17 @@ export async function openWithMediabunny(o) {
           aOpts = { codec: encA[0] };
           outAudioStr = AUDIO_CODEC_STRING[encA[0]] || outAudioStr;
         } else {
-          aOpts = { discard: true };
-          outAudioStr = '';
+          // WebCodecs bu ovozni MP4 ga kodlay olmaydi. Ovozni tashlab
+          // yuborish — "vaqti-vaqti bilan jim qolish" ning ikkinchi sababi
+          // edi. Buning o'rniga ffmpeg.wasm fallback'iga o'tamiz (u AAC ga
+          // qayta kodlaydi). Xato kodi `UNSUPPORTED_CODEC` bilan boshlanishi
+          // shart — tg-stream shu prefix bo'yicha fallback tanlaydi.
+          throw new Error('UNSUPPORTED_CODEC:AUDIO_ENCODE:' + aCodec);
         }
       } else {
-        // Hali ham dekod qilinmaydi — jimgina chiqaramiz. Film ko'rinadi,
-        // ovozi bo'lmaydi. Butun faylni rad qilgandan yaxshiroq.
-        aOpts = { discard: true };
-        outAudioStr = '';
+        // Brauzer audio kodekni dekod qila olmaydi. Jimgina qoldirish
+        // noto'g'ri: foydalanuvchi filmni ko'radi, lekin ovoz yo'q.
+        throw new Error('UNSUPPORTED_CODEC:AUDIO_DECODE:' + aCodec);
       }
     } else {
       outAudioStr = aStr;
