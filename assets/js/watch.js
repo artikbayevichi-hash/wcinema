@@ -62,8 +62,6 @@
     userPickedOwn: false,   // foydalanuvchi "Bizning pleyer" ni o'zi tanladimi
     embedRetry: false,      // "Tez pleyer" bosildi -> tekshiruv natijasini aytamiz
     durSaved: {},
-    instantDoneFor: '',     // 1 s lik instant kadr ko'rsatilgan channel/post
-    introDoneFor: '',       // 19 MB intro allaqachon ko'rsatilgan channel/post
     gwTriedFor: ''          // server gateway urinilgan channel/post (loop himoyasi)
   };
 
@@ -778,30 +776,11 @@
     m.className = 'watch-tg';
     host.appendChild(m);
     var e2 = curEp();
-    var key = (pb.channel || '') + '/' + (Number(pb.post) || 0);
 
-    // 3 BOSQICHLI TEZ KADR: 1 s instant (~150 KB) -> 19 MB intro -> asl video.
-    // Sekin internetda 19 MB ham 2 s ichida yetib bormaydi, shuning uchun
-    // avval eng kichigi ko'rsatiladi. HAMMASI brauzer <- Telegram CDN'idan
-    // keladi — sayt origin'i video baytlarini KO'RMAYDI.
-    // `S.instantDoneFor` / `S.introDoneFor` loop'ning oldini oladi: handoff
-    // qayta mount qilganda o'tgan bosqich o'tkazib yuboriladi.
-    var instant = null;
-    var intro = null;
-    try {
-      var allPv = global.__WCPREVIEW || {};
-      var pv = allPv[key];
-      if (pv) {
-        var ip = pv.instant;
-        if (ip && ip.ch && Number(ip.p) && S.instantDoneFor !== key) {
-          instant = { ch: ip.ch, p: Number(ip.p), dur: Number(ip.dur) || 1 };
-        }
-        if (pv.ch && Number(pv.p) && S.introDoneFor !== key) {
-          intro = { ch: pv.ch, p: Number(pv.p), dur: Number(pv.dur) || 20 };
-        }
-      }
-    } catch (e) {}
-
+    // 3 BOSQICHLI TEZ KADR (1 s instant -> 20 s intro -> asl video) olib
+    // tashlandi: u 20+ s kutishga va player qayta-qayta qurilishiga sabab
+    // bo'lardi. Endi ASL video BIR Mount'da darhol ochiladi.
+    // `__WCPREVIEW` ma'lumoti hover/preview va prefetch uchun saqlanadi.
     global.TgStream.mount(m, {
       channel: pb.channel || '',
       post: Number(pb.post) || 0,
@@ -810,22 +789,6 @@
       poster: pb.poster || '',
       cfg: global.UzPlayer ? undefined : udpConfig(),
       epLabel: e2 ? (e2.season + '-fasl ' + e2.number + '-qism') : '',
-      instant: instant,
-      onInstantEnd: function () {
-        S.instantDoneFor = key;
-        // Qayta mount: endi intro (yoki intro yo'q bo'lsa to'g'ridan-to'g'ri
-        // asl video) tanlanadi — instant ikkinchi marta ko'rsatilmaydi.
-        if (generation === S.streamGeneration) {
-          mountTelegramFallback(host, pb, generation);
-        }
-      },
-      intro: intro,
-      onIntroEnd: function () {
-        S.introDoneFor = key;
-        if (generation === S.streamGeneration) {
-          mountTelegramFallback(host, pb, generation);   // endi ASL video
-        }
-      },
       onReady: function () {
         var tv = m.querySelector('video');
         if (tv && global.UzPlayer && typeof global.UzPlayer.attach === 'function') {

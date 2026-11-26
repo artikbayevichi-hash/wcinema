@@ -159,6 +159,7 @@
     authEpoch: 0,          // rejim almashsa eski oqimni bekor qilish uchun
     play: null,            // tg-play.js oqimi (MKV/HEVC uchun), null = tabiiy
     playAbort: null,       // joriy oqimni to'xtatish uchun AbortController
+    nativeRetry: 0,        // MP4 dekoder xatosida tabiiy player qayta urinishlari
     playLib: null,         // tg-play.js moduli (bir marta import qilinadi)
     me: null,              // joriy Telegram akkaunti (getMe natijasi)
     pvCache: null,         // { "kanal/post": {t, doc, size, loc, probe} } kesh
@@ -3970,6 +3971,7 @@
     // qaytaramiz. `data-tgs-dead` esa oldingi xato belgisi: u qolib ketsa
     // yangi oqimdagi xatoni "allaqachon ko'rsatilgan" deb yutib yuborardi.
     S.frAuto = 0;
+    S.nativeRetry = 0;
     try { node.removeAttribute('data-tgs-dead'); } catch (e) {}
 
     node.classList.add('tgs');
@@ -4464,21 +4466,65 @@
     return /^video\//.test(d.type);
   }
 
-  // <video> xato berdi. Sabah, avval haqiqiy sababni aniqlaymiz.
+  // MP4/H.264 ba'zan 60-soniyada `PIPELINE_ERROR_DECODE` beradi — bu FORMAT
+  // rad etish emas, brauzer dekoderining vaqtinchalik xatoligi (fayl shu
+  // paytgacha normal o'ynagan). Bunday hollarda "bu formatni brauzer ochmaydi"
+  // degan CTA noto'g'ri va foydalanuvchini Telegram'ga haydaydi.
+  function decoderGlitch(v) {
+    if (!v || !v.error) return false;
+    var msg = String(v.error.message || '');
+    return /PIPELINE_ERROR_DECODE|Failed to send audio packet|Failed to decode audio|Failed to decode video/i.test(msg);
+  }
+
+  // Ba'zi MP4'larda 60–99 s oralig'idagi audio paketlar doimiy ravishda
+  // dekoder xatosi beradi (shu fayl boshidan va 100 s dan keyin toza o'ynaydi).
+  // Shuning uchun oldinga OSTARA-BORIB sakrash: kichik vaqtinchalik glitch 2 s
+  // bilan tuzaladi, uzoq davom etadigan buzilgan hudud esa kattaroq sakrash
+  // bilan atlab o'tiladi. Eski <video> `error` holatida qoladi — unga seek
+  // qilish yordam bermaydi, har urinishda YANGI element quriladi.
+  var NATIVE_RETRY_SKIPS = [2, 10, 42];
+  function retryNativeDecoder(node, opts, probe, v) {
+    if (S.nativeRetry >= NATIVE_RETRY_SKIPS.length) return false;
+    var skip = NATIVE_RETRY_SKIPS[S.nativeRetry];
+    S.nativeRetry++;
+    var dur = Number(v.duration) || Number(videoInfo(S.doc).duration) || 0;
+    var at = Math.floor(v.currentTime || 0) + skip;
+    if (dur > 10) at = Math.min(at, Math.floor(dur - 5));
+    if (at < 0) at = 0;
+    delete node.dataset.tgsDead;               // renderPlayer yangi xatoni kutsa oladi
+    S.cfg = S.cfg || {};
+    S.cfg.resumeAt = at;
+    // UzPlayer global CFG.resumeAt dan foydalanadi (video `data-udp-config`ni
+    // emas). Yangi <video> xato joyiga qaytib qolmasligi uchun uni ham
+    // yangilaymiz; lokal progress keyinchalik o'zi yangilanadi.
+    if (global.UzPlayer && typeof global.UzPlayer.configure === 'function') {
+      try { global.UzPlayer.configure({ resumeAt: at }); } catch (e) {}
+    }
+    renderPlayer(node, opts, S.size || 0, probe || S.probe || quickPlaybackProbe(S.doc));
+    return true;
+  }
+
+  // <video> xato berdi. Avval dekoder xatoligini ajratamiz, keyin haqiqiy
+  // sababni (transport/format) aniqlaymiz.
   function onVideoError(node, opts, probe, v) {
     if (node.dataset.tgsDead) return;          // allaqach ko'rsatilgan
     node.dataset.tgsDead = '1';
+    var glitch = decoderGlitch(v);
+    // Bu MP4 allaqachon o'ynagan — demak format YAROQLI. Yangi elementda
+    // davom etamiz; CTA faqat barcha qayta urinishlar ishlamaganda chiqadi.
+    if (glitch && !isPreview() && retryNativeDecoder(node, opts, probe, v)) return;
     var code = v.error ? v.error.code : 0;
     try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
 
     probeTransport(S.size || 0).then(function (d) {
       if (isVideoBytes(d)) {
-        // Transport ISHLADI. Demak bu haqiqatan format muammosi —
-        // va uning yechimi bor: faylni shu yerda, brauzer ichida
-        // qayta o'ramish / qayta kodlash.
+        // Transport ISHLADI. Dekoder xatoligi bo'lsa — "format" deb aytdik
+        // degan so'z yolg'on bo'ladi; faqat qayta urinish taklif qilamiz.
         renderAdaptivePlayer(node, opts, S.size, probe,
-          'Brauzer Telegram’dan kelgan faylni demuxladi — '
-          + 'qayta tayyorlanmoqda.');
+          glitch
+            ? 'MP4 dekoderi vaqtinchalik xatolik berdi — qayta urinish kerak.'
+            : 'Brauzer Telegram’dan kelgan faylni demuxladi — '
+              + 'qayta tayyorlanmoqda.', glitch);
         return;
       }
       // Transport YO'Q. Bu boshqa xato — uni "kodek" deb aytish XATO bo'lardi.
@@ -4702,13 +4748,25 @@
   // "Tabiiy ochiladimi?" deb qayta tekshirish ham shu yerda: `probe`
   // faqat MP4 indeksini o'qiy olsa aniq natija beradi, aks holda
   // haqiqiy sinov — shu oqimning o'zi.
-  function renderAdaptivePlayer(node, opts, size, probe, why) {
+  function renderAdaptivePlayer(node, opts, size, probe, why, glitch) {
     if (S.play || S.playAbort) return;          // allaqach boshlandi
     // Telegram Web K kabi: brauzer o'zi o'ynay olmaydigan fayl (MKV/HEVC/AVI...) uchun
     // minutlab konvertatsiya kutish o'rniga darhol "Telegram'da oching" ekrani.
     // Eski xatti-harakat uchun sahifada `window.__WC_CONVERT = 'on'` qo'ying.
     if (global.__WC_CONVERT !== 'on') {
       if (isPreview()) return;
+      if (glitch) {
+        // MP4 allaqachon o'ynagan: bu format muammosi emas, dekoder xatoligi.
+        renderCta(node, opts, {
+          containerName: probe.containerName,
+          videoCodecs: probe.videoCodecs,
+          reason: 'Video vaqtincha to‘xtadi',
+          sub: 'Fayl MP4 va Telegram’dan to‘g‘ri oqmoqda — brauzer dekoderi xatolik berdi. '
+            + 'Qayta urinish tugmasi videoni xato joyidan davom ettiradi.',
+          channel: opts.channel, post: opts.post
+        }, { retry: true });
+        return;
+      }
       renderCta(node, opts, {
         containerName: probe.containerName,
         videoCodecs: probe.videoCodecs,
@@ -5167,6 +5225,7 @@
     var v = document.getElementById('playerVideo');
     if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {} }
     S.doc = null; S.loc = null; S.size = 0; S.totalRead = 0;
+    S.nativeRetry = 0;
     S.mount = null; S.probe = null;
     if (S.chan) { try { S.chan.port1.close(); } catch (e) {} S.chan = null; }
   }
